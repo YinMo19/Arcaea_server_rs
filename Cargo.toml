@@ -8,3 +8,9 @@ lazy_static = "1.5.0"
 rocket = {version = "0.5.1",features = ["json"]}
 serde_urlencoded = "0.7.1"
 url = "2.5.4"
+
+sqlx = { version = "0.7.4", features = ["sqlite", "runtime-tokio-rustls","macros"] }
+
+[dependencies.rocket_db_pools]
+version = "0.2.0"
+features = ["sqlx_sqlite"]

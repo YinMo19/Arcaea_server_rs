@@ -1,1 +1,4 @@
 /target
+
+database/songs/
+database/*.db

@@ -86,11 +86,16 @@ pub const WORLD_MAP_FOLDER_PATH: &str = "./database/map/";
 pub const SONG_FILE_FOLDER_PATH: &str = "./database/songs/";
 pub const SONGLIST_FILE_PATH: &str = "./database/songs/songlist";
 pub const CONTENT_BUNDLE_FOLDER_PATH: &str = "./database/bundle/";
-pub const SQLITE_DATABASE_PATH: &str = "./database/arcaea_database.db";
-pub const SQLITE_DATABASE_BACKUP_FOLDER_PATH: &str = "./database/backup/";
+pub const CORE_DATABASE_PATH: &str = "./database/core.db";
+pub const CORE_DATABASE_DELETED_PATH: &str = "./database/core_deleted.db";
+
+pub const USER_DATABASE_PATH: &str = "./database/user.db";
+pub const USER_DATABASE_DELETED_PATH: &str = "./database/user_deleted.db";
+
+
 pub const DATABASE_INIT_PATH: &str = "./database/init/";
+pub const SQLITE_DATABASE_BACKUP_FOLDER_PATH: &str = "./database/backup/";
 pub const SQLITE_LOG_DATABASE_PATH: &str = "./database/arcaea_log.db";
-pub const SQLITE_DATABASE_DELETED_PATH: &str = "./database/arcaea_database_deleted.db";
 
 pub const GAME_LOGIN_RATE_LIMIT: &str = "30/5 minutes";
 pub const API_LOGIN_RATE_LIMIT: &str = "10/5 minutes";
