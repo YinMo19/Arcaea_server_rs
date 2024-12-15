@@ -29,8 +29,19 @@ fn success_return(value: Option<Value>) -> Value {
     response
 }
 
-/// Get Game info.
-fn game_info() -> Result<Value, ArcError<'static>> {
+#[get("/finale/progress")]
+pub fn finale_progress() -> Value {
+    success_return(Some(json!({"percentage": 100000})))
+}
+
+/// get game info. (request)
+#[get("/game/info")]
+pub fn game_info() -> Value {
+    get_game_info().expect("Error get game info.")
+}
+
+/// Get Game info. (inline)
+fn get_game_info() -> Result<Value, ArcError<'static>> {
     let level_steps: Vec<LevelStep> = constants::LEVEL_STEPS
         .iter()
         .map(|&(level, level_exp)| LevelStep { level, level_exp })
@@ -61,7 +72,7 @@ fn handle_endpoint(path: &str) -> Result<Value, ArcError> {
         "/user/me" => user_me(),
         "/purchase/bundle/pack" => bundle_pack(),
         "/serve/download/me/song" => bundle_pack(),
-        "/game/info" => game_info(),
+        "/game/info" => get_game_info(),
         "/present/me" => bundle_pack(),
         "/world/map/me" => bundle_pack(),
         "/score/song/friend" => bundle_pack(),
