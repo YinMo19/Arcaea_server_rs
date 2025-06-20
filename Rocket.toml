@@ -1,0 +1,5 @@
+[default.databases.core_db]
+url = "sqlite://database/core.db"
+
+[default]
+port = 8090

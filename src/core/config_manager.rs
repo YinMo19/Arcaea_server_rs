@@ -9,7 +9,7 @@ pub const USE_CORS: bool = false;
 
 pub const SONG_FILE_HASH_PRE_CALCULATE: bool = true;
 
-pub const GAME_API_PREFIX: &str = "/natsugakuru/30";
+pub const GAME_API_PREFIX: &str = "/yinmo/30";
 pub const OLD_GAME_API_PREFIX: [&str; 0] = [];
 
 pub const ALLOW_APPVERSION: [&str; 0] = [];
@@ -91,7 +91,6 @@ pub const CORE_DATABASE_DELETED_PATH: &str = "./database/core_deleted.db";
 
 pub const USER_DATABASE_PATH: &str = "./database/user.db";
 pub const USER_DATABASE_DELETED_PATH: &str = "./database/user_deleted.db";
-
 
 pub const DATABASE_INIT_PATH: &str = "./database/init/";
 pub const SQLITE_DATABASE_BACKUP_FOLDER_PATH: &str = "./database/backup/";
