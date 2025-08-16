@@ -1,4 +1,6 @@
 pub mod character;
+pub mod download;
+pub mod score;
 pub mod user;
 
 // Re-export commonly used types for convenience
@@ -10,3 +12,11 @@ pub use user::{
 pub use character::{
     Character, CharacterInfo, CharacterItem, NewUserCharacter, UserCharacter, UserCharacterFull,
 };
+
+pub use download::{
+    BestScore, Chart, CourseTokenRequest, CourseTokenResponse, DownloadAudio, DownloadFile,
+    DownloadSong, DownloadToken, RankEntry, Recent30, ScoreResponse, ScoreSubmission,
+    SongplayToken, WorldTokenRequest, WorldTokenResponse,
+};
+
+pub use score::{Potential, Recent30Tuple, Score, UserPlay, UserScore};

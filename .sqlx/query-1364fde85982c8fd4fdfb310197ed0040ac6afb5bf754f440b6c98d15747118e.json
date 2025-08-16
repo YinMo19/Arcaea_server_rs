@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM login WHERE login_device = ? AND user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "1364fde85982c8fd4fdfb310197ed0040ac6afb5bf754f440b6c98d15747118e"
+}

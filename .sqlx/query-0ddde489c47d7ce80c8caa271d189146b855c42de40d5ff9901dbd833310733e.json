@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT login_device FROM login WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "login_device",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "char_set": 224,
+          "max_size": 262140
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "0ddde489c47d7ce80c8caa271d189146b855c42de40d5ff9901dbd833310733e"
+}

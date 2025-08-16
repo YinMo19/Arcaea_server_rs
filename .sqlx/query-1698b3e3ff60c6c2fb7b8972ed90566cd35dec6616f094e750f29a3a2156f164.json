@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT user_id FROM login WHERE access_token = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "char_set": 63,
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1698b3e3ff60c6c2fb7b8972ed90566cd35dec6616f094e750f29a3a2156f164"
+}

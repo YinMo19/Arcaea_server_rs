@@ -40,19 +40,6 @@ pub struct BundleItem {
     pub size: u64,
 }
 
-/// Song download request structure
-#[derive(Debug, Deserialize)]
-pub struct SongDownloadQuery {
-    pub sid: Vec<String>,
-    pub url: Option<bool>,
-}
-
-/// Finale progress response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FinaleProgress {
-    pub percentage: i32,
-}
-
 /// Insight complete response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InsightCompleteResponse {
@@ -160,31 +147,6 @@ pub async fn download_song(
     // For now, return empty URLs based on requested song IDs
     let urls: Vec<String> = sid.into_iter().map(|_| String::new()).collect();
     Ok(success_return(urls))
-}
-
-/// Finale progress endpoint
-///
-/// Returns the world boss health bar percentage.
-/// Always returns 100% (boss defeated).
-#[get("/finale/progress")]
-pub async fn finale_progress() -> RouteResult<FinaleProgress> {
-    let progress = FinaleProgress { percentage: 100000 };
-    Ok(success_return(progress))
-}
-
-/// Finale start endpoint
-///
-/// Handles testify start event, grants Hikari (Fatalis) character.
-/// This is related to the Testify storyline in Arcaea.
-#[post("/finale/finale_start")]
-pub async fn finale_start(
-    _user_service: &State<UserService>,
-    _auth: AuthGuard,
-) -> RouteResult<EmptyResponse> {
-    // TODO: Implement character item system
-    // Grant Hikari (Fatalis) character (ID: 55) to user
-
-    Ok(success_return(EmptyResponse::default()))
 }
 
 /// Finale end endpoint
@@ -304,9 +266,6 @@ pub fn routes() -> Vec<Route> {
         game_info,
         notification_me,
         game_content_bundle,
-        download_song,
-        finale_progress,
-        finale_start,
         finale_end,
         insight_complete,
         applog_me,

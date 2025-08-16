@@ -1,5 +1,7 @@
 pub mod common;
+pub mod download;
 pub mod others;
+pub mod score;
 pub mod user;
 
 // Re-export commonly used route types for convenience

@@ -25,6 +25,7 @@ uuid = { version = "1.0", features = ["v4"] }
 anyhow = "1.0"
 thiserror = "1.0"
 rand = "0.8"
+md5 = "0.7"
 openssl = { version = "0.10", features = ["vendored"], optional = true }
 rustls = { version = "0.22", optional = true }
 dotenv = "0.15.0"

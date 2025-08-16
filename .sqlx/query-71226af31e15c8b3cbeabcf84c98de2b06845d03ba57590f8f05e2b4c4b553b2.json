@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO login (access_token, user_id, login_time, login_ip, login_device) VALUES (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "71226af31e15c8b3cbeabcf84c98de2b06845d03ba57590f8f05e2b4c4b553b2"
+}

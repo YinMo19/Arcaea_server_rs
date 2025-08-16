@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM login WHERE user_id = ? ORDER BY login_time ASC LIMIT ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "2bde3276a2d1981226139d4e5c545ed5b4f258f7b8015d4ee5e570487decc093"
+}

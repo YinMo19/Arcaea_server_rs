@@ -8,13 +8,15 @@ use rocket::serde::json::Value;
 use rocket::{launch, routes, Build, Rocket};
 
 use Arcaea_server_rs::route::CORS;
-use Arcaea_server_rs::service::UserService;
+use Arcaea_server_rs::service::{DownloadService, ScoreService, UserService};
 use Arcaea_server_rs::{Database, DbPool};
 
 /// Initialize application services with database connection
-async fn init_services(pool: DbPool) -> (UserService,) {
+async fn init_services(pool: DbPool) -> (UserService, DownloadService, ScoreService) {
     let user_service = UserService::new(pool.clone());
-    (user_service,)
+    let download_service = DownloadService::with_defaults(pool.clone());
+    let score_service = ScoreService::new(pool.clone());
+    (user_service, download_service, score_service)
 }
 
 /// Health check endpoint
@@ -44,10 +46,13 @@ fn configure_rocket() -> Rocket<Build> {
         }))
         .attach(AdHoc::on_ignite("Services", |rocket| async {
             let pool = rocket.state::<DbPool>().unwrap().clone();
-            let (user_service,) = init_services(pool).await;
+            let (user_service, download_service, score_service) = init_services(pool).await;
 
             println!("✅ Services initialized");
-            rocket.manage(user_service)
+            rocket
+                .manage(user_service)
+                .manage(download_service)
+                .manage(score_service)
         }))
         .mount("/health", routes![health_check])
         .mount(
@@ -68,13 +73,26 @@ fn configure_rocket() -> Rocket<Build> {
                 Arcaea_server_rs::route::others::game_info,
                 Arcaea_server_rs::route::others::notification_me,
                 Arcaea_server_rs::route::others::game_content_bundle,
-                Arcaea_server_rs::route::others::download_song,
-                Arcaea_server_rs::route::others::finale_progress,
-                Arcaea_server_rs::route::others::finale_start,
                 Arcaea_server_rs::route::others::finale_end,
                 Arcaea_server_rs::route::others::insight_complete,
                 Arcaea_server_rs::route::others::applog_me,
                 Arcaea_server_rs::route::others::aggregate,
+                Arcaea_server_rs::route::download::download_song,
+                Arcaea_server_rs::route::download::serve_download_file,
+                Arcaea_server_rs::route::download::finale_progress,
+                Arcaea_server_rs::route::download::finale_start,
+            ],
+        )
+        .mount(
+            "/",
+            rocket::routes![
+                Arcaea_server_rs::route::score::score_token,
+                Arcaea_server_rs::route::score::score_token_world,
+                Arcaea_server_rs::route::score::score_token_course,
+                Arcaea_server_rs::route::score::song_score_post,
+                Arcaea_server_rs::route::score::song_score_top,
+                Arcaea_server_rs::route::score::song_score_me,
+                Arcaea_server_rs::route::score::song_score_friend,
             ],
         )
         .register(

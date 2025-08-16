@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT MAX(user_id) as max_id FROM user",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "max_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "BINARY",
+          "char_set": 63,
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "5052ede443c73970e57f0c8a4f8825da8dc94c0c14d96bc4a21a29ee975a17f0"
+}

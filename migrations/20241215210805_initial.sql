@@ -353,3 +353,12 @@ CREATE TABLE IF NOT EXISTS user_custom_course (
   custom_course TEXT,
   PRIMARY KEY (user_id)
 );
+
+CREATE TABLE IF NOT EXISTS download_token (
+  user_id INT,
+  song_id VARCHAR(255),
+  file_name VARCHAR(255),
+  token VARCHAR(255),
+  time BIGINT,
+  PRIMARY KEY (user_id, song_id, file_name)
+);
