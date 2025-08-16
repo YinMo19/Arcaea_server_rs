@@ -1,5 +1,6 @@
 pub mod character;
 pub mod download;
+pub mod notification;
 pub mod score;
 pub mod user;
 
@@ -20,3 +21,7 @@ pub use download::{
 };
 
 pub use score::{Potential, Recent30Tuple, Score, UserPlay, UserScore};
+
+pub use notification::{
+    NewNotification, Notification, NotificationResponse, RoomInviteNotification,
+};

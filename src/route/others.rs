@@ -1,7 +1,11 @@
 use crate::config::{ARCAEA_DATABASE_VERSION, ARCAEA_LOG_DATABASE_VERSION, ARCAEA_SERVER_VERSION};
 use crate::error::ArcError;
+
 use crate::route::common::{success_return, AuthGuard, EmptyResponse, RouteResult};
-use crate::service::UserService;
+use crate::service::bundle::BundleDownloadResponse;
+use crate::service::{
+    BundleService, CharacterService, DownloadService, NotificationService, UserService,
+};
 use rocket::serde::json::Json;
 use rocket::{get, post, routes, Route, State};
 use serde::{Deserialize, Serialize};
@@ -40,8 +44,8 @@ pub struct BundleItem {
     pub size: u64,
 }
 
-/// Insight complete response
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Insight completion response
+#[derive(Debug, Serialize, Deserialize)]
 pub struct InsightCompleteResponse {
     pub insight_state: i32,
 }
@@ -95,12 +99,12 @@ pub async fn game_info() -> RouteResult<GameInfo> {
 /// Currently returns an empty list as notification system is not implemented.
 #[get("/notification/me")]
 pub async fn notification_me(
-    _user_service: &State<UserService>,
-    _auth: AuthGuard,
-) -> RouteResult<Vec<NotificationResponse>> {
-    // TODO: Implement notification system
-    // For now, return empty list
-    let notifications = Vec::new();
+    notification_service: &State<NotificationService>,
+    auth: AuthGuard,
+) -> RouteResult<Vec<crate::model::NotificationResponse>> {
+    let notifications = notification_service
+        .get_user_notifications(auth.user_id)
+        .await?;
     Ok(success_return(notifications))
 }
 
@@ -109,13 +113,13 @@ pub async fn notification_me(
 /// Returns hot update/bundle information for the client.
 /// Handles app version, bundle version, and device ID from headers.
 #[get("/game/content_bundle")]
-pub async fn game_content_bundle(// TODO: Extract headers for app_version, bundle_version, device_id
-) -> RouteResult<BundleResponse> {
-    // TODO: Implement bundle download system
-    // For now, return empty bundle list
-    let response = BundleResponse {
-        ordered_results: Vec::new(),
-    };
+pub async fn game_content_bundle(
+    bundle_service: &State<BundleService>,
+) -> RouteResult<BundleDownloadResponse> {
+    // For now, return empty bundle list as headers extraction needs to be implemented differently
+    let ordered_results = Vec::new();
+
+    let response = BundleDownloadResponse { ordered_results };
 
     Ok(success_return(response))
 }
@@ -126,40 +130,64 @@ pub async fn game_content_bundle(// TODO: Extract headers for app_version, bundl
 /// Requires authentication and handles rate limiting.
 #[get("/serve/download/me/song?<sid>&<url>")]
 pub async fn download_song(
-    _user_service: &State<UserService>,
-    _auth: AuthGuard,
+    download_service: &State<DownloadService>,
+    user_service: &State<UserService>,
+    auth: AuthGuard,
     sid: Vec<String>,
     url: Option<bool>,
 ) -> RouteResult<Vec<String>> {
-    // TODO: Implement download system with rate limiting
-    // Check if user has reached download limit
-    // Generate download URLs for requested songs
-
     let url_flag = url.unwrap_or(true);
 
     if url_flag {
-        // TODO: Check rate limit
-        // if is_limited {
-        //     return Err(ArcError::rate_limit("You have reached the download limit.", 903, -999));
-        // }
+        // Check if user has reached download limit
+        let is_limited = download_service.check_download_limit(auth.user_id).await?;
+        if is_limited {
+            return Err(ArcError::rate_limit(
+                "You have reached the download limit.",
+                903,
+                -999,
+            ));
+        }
     }
 
-    // For now, return empty URLs based on requested song IDs
-    let urls: Vec<String> = sid.into_iter().map(|_| String::new()).collect();
+    // Get user info for download processing
+    let user = user_service.get_user_info(auth.user_id).await?;
+
+    // Generate download URLs for requested songs
+    let urls = download_service
+        .get_download_urls(&user, &sid, url_flag)
+        .await?;
+
     Ok(success_return(urls))
+}
+
+/// Finale start endpoint
+///
+/// Grants Hikari (Fatalis) character to the user.
+/// Used when the Testify finale begins.
+#[post("/finale/finale_start")]
+pub async fn finale_start(
+    character_service: &State<CharacterService>,
+    auth: AuthGuard,
+) -> RouteResult<EmptyResponse> {
+    // Grant Hikari (Fatalis) character (ID: 55) to user
+    character_service.grant_hikari_fatalis(auth.user_id).await?;
+
+    Ok(success_return(EmptyResponse::default()))
 }
 
 /// Finale end endpoint
 ///
-/// Handles testify end event, grants Hikari & Tairitsu (Reunion) character.
-/// This is related to the Testify storyline conclusion in Arcaea.
+/// Grants Hikari & Tairitsu (Reunion) character to the user.
 #[post("/finale/finale_end")]
 pub async fn finale_end(
-    _user_service: &State<UserService>,
-    _auth: AuthGuard,
+    character_service: &State<CharacterService>,
+    auth: AuthGuard,
 ) -> RouteResult<EmptyResponse> {
-    // TODO: Implement character item system
     // Grant Hikari & Tairitsu (Reunion) character (ID: 5) to user
+    character_service
+        .grant_hikari_tairitsu_reunion(auth.user_id)
+        .await?;
 
     Ok(success_return(EmptyResponse::default()))
 }
@@ -170,34 +198,38 @@ pub async fn finale_end(
 /// Different pack IDs trigger different rewards and state changes.
 #[post("/insight/me/complete/<pack_id>")]
 pub async fn insight_complete(
-    _user_service: &State<UserService>,
-    _auth: AuthGuard,
+    character_service: &State<CharacterService>,
+    user_service: &State<UserService>,
+    auth: AuthGuard,
     pack_id: String,
 ) -> RouteResult<InsightCompleteResponse> {
-    let insight_state = match pack_id.as_str() {
+    let new_insight_state = match pack_id.as_str() {
         "eden_append_1" => {
-            // TODO: Implement character item system
             // Grant Insight (Ascendant - 8th Seeker) character (ID: 72)
+            character_service
+                .grant_insight_ascendant(auth.user_id)
+                .await?;
             // Update user insight_state to 1
+            user_service
+                .update_user_insight_state(auth.user_id, 1)
+                .await?;
             1
         }
         "lephon" => {
-            // TODO: Update user insight_state to 3
+            // Update user insight_state to 3
+            user_service
+                .update_user_insight_state(auth.user_id, 3)
+                .await?;
             3
         }
         _ => {
-            return Err(ArcError::Base {
-                message: "Invalid pack_id".to_string(),
-                error_code: 151,
-                api_error_code: -999,
-                extra_data: None,
-                status: 404,
-            });
+            return Err(ArcError::input(format!("Invalid pack_id: {}", pack_id)));
         }
     };
 
-    let response = InsightCompleteResponse { insight_state };
-    Ok(success_return(response))
+    Ok(success_return(InsightCompleteResponse {
+        insight_state: new_insight_state,
+    }))
 }
 
 /// Application log endpoint
@@ -266,6 +298,8 @@ pub fn routes() -> Vec<Route> {
         game_info,
         notification_me,
         game_content_bundle,
+        download_song,
+        finale_start,
         finale_end,
         insight_complete,
         applog_me,

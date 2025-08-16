@@ -165,16 +165,66 @@ pub async fn update_user(
     auth: AuthGuard,
     request: Json<HashMap<String, serde_json::Value>>,
 ) -> RouteResult<HashMap<String, serde_json::Value>> {
-    // TODO: Implement user profile updates
-    // This would involve validating the fields and updating the database
-    let _ = user_service;
-    let _ = auth;
-    let _ = request;
-
     let mut response = HashMap::new();
+    let mut updated_fields = 0;
+
+    for (field, value) in request.iter() {
+        match field.as_str() {
+            "character_id" => {
+                if let Some(character_id) = value.as_i64() {
+                    user_service
+                        .update_user_character(auth.user_id, character_id as i32)
+                        .await?;
+                    response.insert("character_id".to_string(), value.clone());
+                    updated_fields += 1;
+                }
+            }
+            "is_skill_sealed" => {
+                if let Some(is_sealed) = value.as_bool() {
+                    user_service
+                        .update_user_skill_sealed(auth.user_id, is_sealed)
+                        .await?;
+                    response.insert("is_skill_sealed".to_string(), value.clone());
+                    updated_fields += 1;
+                }
+            }
+            "favorite_character" => {
+                if let Some(fav_char) = value.as_i64() {
+                    user_service
+                        .update_user_column(
+                            auth.user_id,
+                            "favorite_character",
+                            &(fav_char as i32).to_string(),
+                        )
+                        .await?;
+                    response.insert("favorite_character".to_string(), value.clone());
+                    updated_fields += 1;
+                }
+            }
+            "is_hide_rating" => {
+                if let Some(hide_rating) = value.as_bool() {
+                    let hide_val = if hide_rating { 1 } else { 0 };
+                    user_service
+                        .update_user_column(auth.user_id, "is_hide_rating", &hide_val.to_string())
+                        .await?;
+                    response.insert("is_hide_rating".to_string(), value.clone());
+                    updated_fields += 1;
+                }
+            }
+            _ => {
+                // Ignore unknown fields for safety
+                continue;
+            }
+        }
+    }
+
     response.insert(
-        "message".to_string(),
-        serde_json::Value::String("Update not implemented yet".to_string()),
+        "updated_fields".to_string(),
+        serde_json::Value::Number(serde_json::Number::from(updated_fields)),
+    );
+    response.insert(
+        "user_id".to_string(),
+        serde_json::Value::Number(serde_json::Number::from(auth.user_id)),
     );
 
     Ok(success_return(response))

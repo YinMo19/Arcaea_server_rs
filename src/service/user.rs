@@ -568,4 +568,48 @@ impl UserService {
 
         Ok(())
     }
+
+    /// Update user's insight state
+    pub async fn update_user_insight_state(
+        &self,
+        user_id: i32,
+        insight_state: i32,
+    ) -> ArcResult<()> {
+        sqlx::query!(
+            "UPDATE user SET insight_state = ? WHERE user_id = ?",
+            insight_state,
+            user_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Update user's character ID
+    pub async fn update_user_character(&self, user_id: i32, character_id: i32) -> ArcResult<()> {
+        sqlx::query!(
+            "UPDATE user SET character_id = ? WHERE user_id = ?",
+            character_id,
+            user_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Update user's skill sealed status
+    pub async fn update_user_skill_sealed(&self, user_id: i32, is_sealed: bool) -> ArcResult<()> {
+        let is_sealed_val = if is_sealed { 1 } else { 0 };
+        sqlx::query!(
+            "UPDATE user SET is_skill_sealed = ? WHERE user_id = ?",
+            is_sealed_val,
+            user_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
 }

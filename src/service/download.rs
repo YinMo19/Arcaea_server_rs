@@ -6,7 +6,7 @@ use base64::Engine as _;
 use sqlx::MySqlPool;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Song file names that are allowed for download
@@ -378,10 +378,75 @@ impl DownloadService {
     }
 
     /// Get user's unlocked songs (placeholder for songlist integration)
-    pub async fn get_user_unlocks(&self, _user: &UserInfo) -> ArcResult<HashSet<String>> {
+    async fn get_user_unlocks(&self, _user: &UserInfo) -> ArcResult<HashSet<String>> {
         // TODO: Implement proper songlist parsing and user unlock checking
         // For now, return all available songs
         Ok(self.get_all_song_ids().into_iter().collect())
+    }
+
+    /// Get download URLs for requested songs
+    /// Returns a list of URLs or empty strings based on user permissions and rate limits
+    pub async fn get_download_urls(
+        &self,
+        user: &UserInfo,
+        song_ids: &[String],
+        url_flag: bool,
+    ) -> ArcResult<Vec<String>> {
+        let mut urls = Vec::new();
+
+        if !url_flag {
+            // If URL flag is false, return empty strings for each song
+            return Ok(vec![String::new(); song_ids.len()]);
+        }
+
+        // Get user's unlocked songs
+        let user_unlocks = self.get_user_unlocks(user).await?;
+
+        for song_id in song_ids {
+            if user_unlocks.contains(song_id) && self.song_exists(song_id) {
+                // Generate download token
+                let token = self.generate_download_token(user.user_id, song_id, "base.ogg");
+                let current_time = chrono::Utc::now().timestamp();
+
+                // Store token in database
+                sqlx::query!(
+                    "INSERT INTO download_token (user_id, song_id, file_name, token, time)
+                     VALUES (?, ?, 'base.ogg', ?, ?) ON DUPLICATE KEY UPDATE token = ?, time = ?",
+                    user.user_id,
+                    song_id,
+                    token,
+                    current_time,
+                    token,
+                    current_time
+                )
+                .execute(&self.pool)
+                .await?;
+
+                // Generate download URL
+                let download_url = if let Some(prefix) = &self.download_link_prefix {
+                    let mut url = prefix.clone();
+                    if !url.ends_with('/') {
+                        url.push('/');
+                    }
+                    format!("{}{}/base.ogg?t={}", url, song_id, token)
+                } else {
+                    format!("/download/{}/base.ogg?t={}", song_id, token)
+                };
+
+                urls.push(download_url);
+            } else {
+                // User doesn't have access to this song
+                urls.push(String::new());
+            }
+        }
+
+        Ok(urls)
+    }
+
+    /// Check if a song exists in the file system
+    fn song_exists(&self, song_id: &str) -> bool {
+        let song_path = PathBuf::from(&self.song_file_folder_path).join(song_id);
+        song_path.exists() && song_path.is_dir()
     }
 }
 

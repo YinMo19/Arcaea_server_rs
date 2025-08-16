@@ -8,15 +8,37 @@ use rocket::serde::json::Value;
 use rocket::{launch, routes, Build, Rocket};
 
 use Arcaea_server_rs::route::CORS;
-use Arcaea_server_rs::service::{DownloadService, ScoreService, UserService};
+use Arcaea_server_rs::service::{
+    BundleService, CharacterService, DownloadService, NotificationService, ScoreService,
+    UserService,
+};
 use Arcaea_server_rs::{Database, DbPool};
 
 /// Initialize application services with database connection
-async fn init_services(pool: DbPool) -> (UserService, DownloadService, ScoreService) {
+async fn init_services(
+    pool: DbPool,
+) -> (
+    UserService,
+    DownloadService,
+    ScoreService,
+    NotificationService,
+    BundleService,
+    CharacterService,
+) {
     let user_service = UserService::new(pool.clone());
     let download_service = DownloadService::with_defaults(pool.clone());
     let score_service = ScoreService::new(pool.clone());
-    (user_service, download_service, score_service)
+    let notification_service = NotificationService::new(pool.clone());
+    let bundle_service = BundleService::new(pool.clone(), std::path::PathBuf::from("bundles"));
+    let character_service = CharacterService::new(pool.clone());
+    (
+        user_service,
+        download_service,
+        score_service,
+        notification_service,
+        bundle_service,
+        character_service,
+    )
 }
 
 /// Health check endpoint
@@ -46,13 +68,23 @@ fn configure_rocket() -> Rocket<Build> {
         }))
         .attach(AdHoc::on_ignite("Services", |rocket| async {
             let pool = rocket.state::<DbPool>().unwrap().clone();
-            let (user_service, download_service, score_service) = init_services(pool).await;
+            let (
+                user_service,
+                download_service,
+                score_service,
+                notification_service,
+                bundle_service,
+                character_service,
+            ) = init_services(pool).await;
 
             println!("✅ Services initialized");
             rocket
                 .manage(user_service)
                 .manage(download_service)
                 .manage(score_service)
+                .manage(notification_service)
+                .manage(bundle_service)
+                .manage(character_service)
         }))
         .mount("/health", routes![health_check])
         .mount(
@@ -73,14 +105,14 @@ fn configure_rocket() -> Rocket<Build> {
                 Arcaea_server_rs::route::others::game_info,
                 Arcaea_server_rs::route::others::notification_me,
                 Arcaea_server_rs::route::others::game_content_bundle,
+                Arcaea_server_rs::route::others::download_song,
+                Arcaea_server_rs::route::others::finale_start,
                 Arcaea_server_rs::route::others::finale_end,
                 Arcaea_server_rs::route::others::insight_complete,
                 Arcaea_server_rs::route::others::applog_me,
                 Arcaea_server_rs::route::others::aggregate,
-                Arcaea_server_rs::route::download::download_song,
                 Arcaea_server_rs::route::download::serve_download_file,
                 Arcaea_server_rs::route::download::finale_progress,
-                Arcaea_server_rs::route::download::finale_start,
             ],
         )
         .mount(
