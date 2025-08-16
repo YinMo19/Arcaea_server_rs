@@ -174,9 +174,9 @@ fn rocket() -> _ {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use rocket::http::Status;
-    use rocket::local::blocking::Client;
+    // use super::*;
+    // use rocket::http::Status;
+    // use rocket::local::blocking::Client;
 
     #[test]
     fn test_health_endpoint() {

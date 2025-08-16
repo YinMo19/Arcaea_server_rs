@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 //! Arcaea Server Rust Implementation
 //!
 //! This is a Rust reimplementation of the Arcaea game server,

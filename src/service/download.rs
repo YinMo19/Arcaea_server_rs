@@ -1,7 +1,7 @@
 use crate::error::{ArcError, ArcResult};
 use crate::model::download::{DownloadAudio, DownloadFile, DownloadSong};
 use crate::model::user::UserInfo;
-use base64::{engine::general_purpose, Engine as _};
+use base64::Engine as _;
 
 use sqlx::MySqlPool;
 use std::collections::{HashMap, HashSet};
