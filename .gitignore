@@ -1,0 +1,10 @@
+/target
+
+database/songs/
+database/*.db
+database/*.db-shm
+database/*.db-wal
+
+py_version
+.env
+Rocket.toml

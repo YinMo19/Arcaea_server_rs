@@ -1,0 +1,5 @@
+[default.databases.core_db]
+url = "mysql://username:password@localhost:3306/arcaea_core"
+
+[default]
+port = 8090
