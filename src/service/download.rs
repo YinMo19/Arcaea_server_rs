@@ -1,34 +1,22 @@
+//! Download service for handling song file downloads and token management
+//!
+//! This service integrates with AssetManager to provide songlist-aware download functionality,
+//! user permission checking, and dynamic cache management similar to the Python implementation.
+
 use crate::error::{ArcError, ArcResult};
 use crate::model::download::{DownloadAudio, DownloadFile, DownloadSong};
 use crate::model::user::UserInfo;
+use crate::service::asset_manager::AssetManager;
 use base64::Engine as _;
-
 use sqlx::MySqlPool;
-use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-
-/// Song file names that are allowed for download
-const ALLOWED_FILE_NAMES: [&str; 11] = [
-    "0.aff",
-    "1.aff",
-    "2.aff",
-    "3.aff",
-    "4.aff",
-    "base.ogg",
-    "3.ogg",
-    "video.mp4",
-    "video_audio.ogg",
-    "video_720.mp4",
-    "video_1080.mp4",
-];
 
 /// Download service for handling song file downloads and token management
 pub struct DownloadService {
     pool: MySqlPool,
-    song_file_folder_path: String,
-    songlist_file_path: String,
+    asset_manager: Arc<AssetManager>,
     download_link_prefix: Option<String>,
     download_time_gap_limit: i64,
     download_times_limit: i32,
@@ -38,43 +26,28 @@ impl DownloadService {
     /// Create a new download service instance
     pub fn new(
         pool: MySqlPool,
-        song_file_folder_path: String,
-        songlist_file_path: String,
+        asset_manager: Arc<AssetManager>,
         download_link_prefix: Option<String>,
         download_time_gap_limit: i64,
         download_times_limit: i32,
     ) -> Self {
         Self {
             pool,
-            song_file_folder_path,
-            songlist_file_path,
+            asset_manager,
             download_link_prefix,
             download_time_gap_limit,
             download_times_limit,
         }
     }
 
-    /// Calculate MD5 hash of a song file
+    /// Calculate MD5 hash of a song file using asset manager cache
     pub fn get_song_file_md5(&self, song_id: &str, file_name: &str) -> Option<String> {
-        let path = Path::new(&self.song_file_folder_path)
-            .join(song_id)
-            .join(file_name);
-
-        if !path.is_file() {
-            return None;
-        }
-
-        match fs::read(&path) {
-            Ok(contents) => Some(format!("{:x}", md5::compute(&contents))),
-            Err(_) => None,
-        }
+        self.asset_manager.get_song_file_md5(song_id, file_name)
     }
 
     /// Check if a file is allowed for download based on songlist rules
-    pub fn is_available_file(&self, _song_id: &str, file_name: &str) -> bool {
-        // TODO: Implement songlist parsing logic
-        // For now, just check if file name is in allowed list
-        ALLOWED_FILE_NAMES.contains(&file_name)
+    pub fn is_available_file(&self, song_id: &str, file_name: &str) -> bool {
+        self.asset_manager.is_available_file(song_id, file_name)
     }
 
     /// Generate a download token for a user and file
@@ -84,13 +57,14 @@ impl DownloadService {
             .unwrap()
             .as_secs() as i64;
 
+        let random_bytes = rand::random::<[u8; 8]>();
         let token_data = format!(
             "{}{}{}{}{}",
             user_id,
             song_id,
             file_name,
             current_time,
-            base64::engine::general_purpose::STANDARD.encode(&rand::random::<[u8; 8]>())
+            base64::engine::general_purpose::STANDARD.encode(&random_bytes)
         );
 
         format!("{:x}", md5::compute(token_data.as_bytes()))
@@ -125,7 +99,7 @@ impl DownloadService {
         Ok(())
     }
 
-    /// Validate download token
+    /// Validate download token and return user_id and creation time
     pub async fn validate_download_token(
         &self,
         song_id: &str,
@@ -149,17 +123,18 @@ impl DownloadService {
                     .unwrap()
                     .as_secs() as i64;
 
-                if current_time - row.time.unwrap_or(0) > self.download_time_gap_limit {
+                let token_time = row.time.unwrap_or(0);
+                if current_time - token_time > self.download_time_gap_limit {
                     return Err(ArcError::no_access(
-                        "Download token has expired".to_string(),
+                        format!("The token `{}` has expired.", token),
                         403,
                     ));
                 }
 
-                Ok((row.user_id, row.time.unwrap_or(0)))
+                Ok((row.user_id, token_time))
             }
             None => Err(ArcError::no_access(
-                "Invalid download token".to_string(),
+                format!("The token `{}` is not valid.", token),
                 403,
             )),
         }
@@ -181,9 +156,10 @@ impl DownloadService {
     }
 
     /// Check if user has reached download limit
+    /// TODO: Implement proper rate limiting similar to Python's ArcLimiter
     pub async fn check_download_limit(&self, _user_id: i32) -> ArcResult<bool> {
-        // TODO: Implement proper rate limiting with timestamp checking
         // For now, return false (not limited)
+        // In the future, implement rate limiting based on download_times_limit
         Ok(false)
     }
 
@@ -195,85 +171,81 @@ impl DownloadService {
             } else {
                 format!("{}/", prefix)
             };
-            format!(
-                "{}{}?t={}",
-                prefix,
-                format!("{}/{}", song_id, file_name),
-                token
-            )
+            format!("{}{}/{}?t={}", prefix, song_id, file_name, token)
         } else {
-            // Return relative URL if no prefix is configured
+            // Use relative URL pattern similar to Python's url_for
             format!("/download/{}/{}?t={}", song_id, file_name, token)
         }
     }
 
-    /// Get list of available files for a song
+    /// Get list of available files for a song using asset manager
     pub fn get_song_file_names(&self, song_id: &str) -> Vec<String> {
-        let song_path = Path::new(&self.song_file_folder_path).join(song_id);
-        let mut files = Vec::new();
-
-        if let Ok(entries) = fs::read_dir(&song_path) {
-            for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_file() {
-                        if let Some(file_name) = entry.file_name().to_str() {
-                            if self.is_available_file(song_id, file_name) {
-                                files.push(file_name.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        files
+        self.asset_manager.get_song_file_names(song_id)
     }
 
-    /// Get list of all song IDs
+    /// Get list of all song IDs using asset manager
     pub fn get_all_song_ids(&self) -> Vec<String> {
-        let mut song_ids = Vec::new();
-
-        if let Ok(entries) = fs::read_dir(&self.song_file_folder_path) {
-            for entry in entries.flatten() {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_dir() {
-                        if let Some(dir_name) = entry.file_name().to_str() {
-                            song_ids.push(dir_name.to_string());
-                        }
-                    }
-                }
-            }
-        }
-
-        song_ids
+        self.asset_manager.get_all_song_ids()
     }
 
-    /// Generate download list for user
+    /// Generate download list for user with proper permission checking
     pub async fn generate_download_list(
         &self,
         user: &UserInfo,
         song_ids: Option<Vec<String>>,
         include_urls: bool,
     ) -> ArcResult<HashMap<String, DownloadSong>> {
+        // Check if download should be forbidden when user has no unlocked items
+        if self.asset_manager.should_forbid_download_when_no_item(user) {
+            return Ok(HashMap::new());
+        }
+
         // Check download limit if URLs are requested
         if include_urls && self.check_download_limit(user.user_id).await? {
             return Err(ArcError::rate_limit(
-                "You have reached the download limit".to_string(),
+                "You have reached the download limit.".to_string(),
                 903,
                 -999,
             ));
         }
 
-        let target_song_ids = song_ids.unwrap_or_else(|| self.get_all_song_ids());
+        // Get target song IDs
+        let target_song_ids = if let Some(song_ids) = song_ids {
+            // Filter requested songs by user's unlocked songs
+            if self.asset_manager.has_songlist() {
+                let user_unlocks = self.asset_manager.get_user_unlocks(user);
+                song_ids
+                    .into_iter()
+                    .filter(|id| user_unlocks.contains(id))
+                    .collect()
+            } else {
+                song_ids
+            }
+        } else {
+            // Get all songs, filtered by user unlocks if songlist is available
+            let all_songs = self.get_all_song_ids();
+            if self.asset_manager.has_songlist() {
+                let user_unlocks = self.asset_manager.get_user_unlocks(user);
+                all_songs
+                    .into_iter()
+                    .filter(|id| user_unlocks.contains(id))
+                    .collect()
+            } else {
+                all_songs
+            }
+        };
+
         let mut download_songs = HashMap::new();
         let mut download_tokens = Vec::new();
 
-        // Clear expired tokens
-        self.clear_expired_download_tokens().await?;
+        // Clear expired tokens before generating new ones
+        if include_urls {
+            self.clear_expired_download_tokens().await?;
+        }
 
         for song_id in target_song_ids {
-            let song_path = Path::new(&self.song_file_folder_path).join(&song_id);
-            if !song_path.exists() {
+            // Check if song directory exists
+            if !self.song_exists(&song_id) {
                 continue;
             }
 
@@ -287,7 +259,7 @@ impl DownloadService {
 
             for file_name in file_names {
                 let checksum = self.get_song_file_md5(&song_id, &file_name);
-                let (url, _token) = if include_urls {
+                let (url, token) = if include_urls {
                     let token = self.generate_download_token(user.user_id, &song_id, &file_name);
                     let url = self.generate_download_url(&song_id, &file_name, &token);
                     download_tokens.push((
@@ -301,66 +273,7 @@ impl DownloadService {
                     (None, None)
                 };
 
-                match file_name.as_str() {
-                    "base.ogg" => {
-                        let audio = DownloadAudio {
-                            checksum: checksum.clone(),
-                            url: url.clone(),
-                            difficulty_3: None,
-                        };
-                        download_song.audio = Some(audio);
-                    }
-                    "3.ogg" => {
-                        if let Some(ref mut audio) = download_song.audio {
-                            audio.difficulty_3 = Some(DownloadFile {
-                                checksum,
-                                url,
-                                file_name: None,
-                            });
-                        } else {
-                            let audio = DownloadAudio {
-                                checksum: None,
-                                url: None,
-                                difficulty_3: Some(DownloadFile {
-                                    checksum,
-                                    url,
-                                    file_name: None,
-                                }),
-                            };
-                            download_song.audio = Some(audio);
-                        }
-                    }
-                    "video.mp4" | "video_audio.ogg" | "video_720.mp4" | "video_1080.mp4" => {
-                        let additional_file = DownloadFile {
-                            checksum,
-                            url,
-                            file_name: Some(file_name.clone()),
-                        };
-
-                        if let Some(ref mut additional_files) = download_song.additional_files {
-                            additional_files.push(additional_file);
-                        } else {
-                            download_song.additional_files = Some(vec![additional_file]);
-                        }
-                    }
-                    chart_file if chart_file.ends_with(".aff") => {
-                        let difficulty_key = chart_file.chars().next().unwrap().to_string();
-                        let chart_entry = DownloadFile {
-                            checksum,
-                            url,
-                            file_name: None,
-                        };
-
-                        if let Some(ref mut chart) = download_song.chart {
-                            chart.insert(difficulty_key, chart_entry);
-                        } else {
-                            let mut chart = HashMap::new();
-                            chart.insert(difficulty_key, chart_entry);
-                            download_song.chart = Some(chart);
-                        }
-                    }
-                    _ => {}
-                }
+                self.process_file_into_song(&mut download_song, &file_name, checksum, url, token);
             }
 
             download_songs.insert(song_id, download_song);
@@ -377,103 +290,116 @@ impl DownloadService {
         Ok(download_songs)
     }
 
-    /// Get user's unlocked songs (placeholder for songlist integration)
-    async fn get_user_unlocks(&self, _user: &UserInfo) -> ArcResult<HashSet<String>> {
-        // TODO: Implement proper songlist parsing and user unlock checking
-        // For now, return all available songs
-        Ok(self.get_all_song_ids().into_iter().collect())
-    }
-
-    /// Get download URLs for requested songs
-    /// Returns a list of URLs or empty strings based on user permissions and rate limits
-    pub async fn get_download_urls(
+    /// Process a file into the appropriate section of DownloadSong
+    fn process_file_into_song(
         &self,
-        user: &UserInfo,
-        song_ids: &[String],
-        url_flag: bool,
-    ) -> ArcResult<Vec<String>> {
-        let mut urls = Vec::new();
-
-        if !url_flag {
-            // If URL flag is false, return empty strings for each song
-            return Ok(vec![String::new(); song_ids.len()]);
-        }
-
-        // Get user's unlocked songs
-        let user_unlocks = self.get_user_unlocks(user).await?;
-
-        for song_id in song_ids {
-            if user_unlocks.contains(song_id) && self.song_exists(song_id) {
-                // Generate download token
-                let token = self.generate_download_token(user.user_id, song_id, "base.ogg");
-                let current_time = chrono::Utc::now().timestamp();
-
-                // Store token in database
-                sqlx::query!(
-                    "INSERT INTO download_token (user_id, song_id, file_name, token, time)
-                     VALUES (?, ?, 'base.ogg', ?, ?) ON DUPLICATE KEY UPDATE token = ?, time = ?",
-                    user.user_id,
-                    song_id,
-                    token,
-                    current_time,
-                    token,
-                    current_time
-                )
-                .execute(&self.pool)
-                .await?;
-
-                // Generate download URL
-                let download_url = if let Some(prefix) = &self.download_link_prefix {
-                    let mut url = prefix.clone();
-                    if !url.ends_with('/') {
-                        url.push('/');
-                    }
-                    format!("{}{}/base.ogg?t={}", url, song_id, token)
+        download_song: &mut DownloadSong,
+        file_name: &str,
+        checksum: Option<String>,
+        url: Option<String>,
+        _token: Option<String>,
+    ) {
+        match file_name {
+            "base.ogg" => {
+                let audio = DownloadAudio {
+                    checksum: checksum.clone(),
+                    url: url.clone(),
+                    difficulty_3: None,
+                };
+                download_song.audio = Some(audio);
+            }
+            "3.ogg" => {
+                if let Some(ref mut audio) = download_song.audio {
+                    audio.difficulty_3 = Some(DownloadFile {
+                        checksum,
+                        url,
+                        file_name: None,
+                    });
                 } else {
-                    format!("/download/{}/base.ogg?t={}", song_id, token)
+                    let audio = DownloadAudio {
+                        checksum: None,
+                        url: None,
+                        difficulty_3: Some(DownloadFile {
+                            checksum,
+                            url,
+                            file_name: None,
+                        }),
+                    };
+                    download_song.audio = Some(audio);
+                }
+            }
+            "video.mp4" | "video_audio.ogg" | "video_720.mp4" | "video_1080.mp4" => {
+                let additional_file = DownloadFile {
+                    checksum,
+                    url,
+                    file_name: Some(file_name.to_string()),
                 };
 
-                urls.push(download_url);
-            } else {
-                // User doesn't have access to this song
-                urls.push(String::new());
+                if let Some(ref mut additional_files) = download_song.additional_files {
+                    additional_files.push(additional_file);
+                } else {
+                    download_song.additional_files = Some(vec![additional_file]);
+                }
             }
-        }
+            chart_file if chart_file.ends_with(".aff") => {
+                let difficulty_key = chart_file.chars().next().unwrap().to_string();
+                let chart_entry = DownloadFile {
+                    checksum,
+                    url,
+                    file_name: None,
+                };
 
-        Ok(urls)
+                if let Some(ref mut chart) = download_song.chart {
+                    chart.insert(difficulty_key, chart_entry);
+                } else {
+                    let mut chart = HashMap::new();
+                    chart.insert(difficulty_key, chart_entry);
+                    download_song.chart = Some(chart);
+                }
+            }
+            _ => {}
+        }
     }
 
-    /// Check if a song exists in the file system
+    /// Get user's unlocked songs using asset manager
+    pub fn get_user_unlocks(&self, user: &UserInfo) -> std::collections::HashSet<String> {
+        self.asset_manager.get_user_unlocks(user)
+    }
+
+    /// Check if a song directory exists
     fn song_exists(&self, song_id: &str) -> bool {
-        let song_path = PathBuf::from(&self.song_file_folder_path).join(song_id);
-        song_path.exists() && song_path.is_dir()
+        let all_songs = self.get_all_song_ids();
+        all_songs.contains(&song_id.to_string())
+    }
+
+    /// Initialize song data cache (equivalent to Python's initialize_cache)
+    pub async fn initialize_cache(&self) -> ArcResult<()> {
+        self.asset_manager.initialize_cache().await
+    }
+
+    /// Clear all song data cache (equivalent to Python's clear_all_cache)
+    pub async fn clear_all_cache(&self) {
+        self.asset_manager.clear_all_cache().await
+    }
+
+    /// Reload all caches (clear + initialize)
+    pub async fn reload_cache(&self) -> ArcResult<()> {
+        self.asset_manager.reload_cache().await
     }
 }
 
-/// Download service utilities
+/// Download service builder and utility methods
 impl DownloadService {
     /// Initialize download service with default configuration
     pub fn with_defaults(pool: MySqlPool) -> Self {
+        let asset_manager = Arc::new(AssetManager::with_defaults(pool.clone()));
         Self::new(
             pool,
-            "./songs".to_string(),
-            "./songlist".to_string(),
+            asset_manager,
             None,
             3600, // 1 hour token expiry
             100,  // 100 downloads per day
         )
-    }
-
-    /// Set song file folder path
-    pub fn with_song_folder_path(mut self, path: String) -> Self {
-        self.song_file_folder_path = path;
-        self
-    }
-
-    /// Set songlist file path
-    pub fn with_songlist_path(mut self, path: String) -> Self {
-        self.songlist_file_path = path;
-        self
     }
 
     /// Set download link prefix
@@ -492,5 +418,10 @@ impl DownloadService {
     pub fn with_times_limit(mut self, limit: i32) -> Self {
         self.download_times_limit = limit;
         self
+    }
+
+    /// Get reference to asset manager
+    pub fn asset_manager(&self) -> &AssetManager {
+        &self.asset_manager
     }
 }

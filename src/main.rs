@@ -10,8 +10,8 @@ use Arcaea_server_rs::constants::GAME_API_PREFIX;
 use Arcaea_server_rs::error::{bad_request, forbidden, internal_error, not_found, unauthorized};
 use Arcaea_server_rs::route::CORS;
 use Arcaea_server_rs::service::{
-    BundleService, CharacterService, DownloadService, NotificationService, ScoreService,
-    UserService,
+    AssetManager, BundleService, CharacterService, DownloadService, NotificationService,
+    OperationManager, ScoreService, UserService,
 };
 use Arcaea_server_rs::{Database, DbPool};
 
@@ -27,13 +27,44 @@ async fn init_services(
     NotificationService,
     BundleService,
     CharacterService,
+    std::sync::Arc<AssetManager>,
+    OperationManager,
 ) {
+    // Initialize AssetManager with proper paths
+    let asset_manager = std::sync::Arc::new(
+        AssetManager::with_defaults(pool.clone())
+            .with_song_folder(std::path::PathBuf::from("./songs"))
+            .with_songlist_path(std::path::PathBuf::from("./songlist"))
+            .with_bundle_folder(std::path::PathBuf::from("./bundles"))
+            .set_pre_calculate_hashes(true),
+    );
+
+    // Initialize asset cache on startup
+    log::info!("Initializing asset cache...");
+    if let Err(e) = asset_manager.initialize_cache().await {
+        log::error!("Failed to initialize asset cache: {}", e);
+        std::process::exit(1);
+    }
+    log::info!("Asset cache initialized successfully");
+
     let user_service = UserService::new(pool.clone());
-    let download_service = DownloadService::with_defaults(pool.clone());
+    let download_service = DownloadService::new(
+        pool.clone(),
+        asset_manager.clone(),
+        None, // download_link_prefix
+        3600, // download_time_gap_limit (1 hour)
+        100,  // download_times_limit
+    );
     let score_service = ScoreService::new(pool.clone());
     let notification_service = NotificationService::new(pool.clone());
     let bundle_service = BundleService::new(pool.clone(), std::path::PathBuf::from("bundles"));
     let character_service = CharacterService::new(pool.clone());
+    let operation_manager = OperationManager::new(
+        asset_manager.clone(),
+        std::sync::Arc::new(bundle_service.clone()),
+        pool.clone(),
+    );
+
     (
         user_service,
         download_service,
@@ -41,6 +72,8 @@ async fn init_services(
         notification_service,
         bundle_service,
         character_service,
+        asset_manager,
+        operation_manager,
     )
 }
 
@@ -71,6 +104,8 @@ async fn configure_rocket() -> Rocket<Build> {
                 notification_service,
                 bundle_service,
                 character_service,
+                asset_manager,
+                operation_manager,
             ) = init_services(pool).await;
 
             log::info!("Services initialized");
@@ -81,6 +116,8 @@ async fn configure_rocket() -> Rocket<Build> {
                 .manage(notification_service)
                 .manage(bundle_service)
                 .manage(character_service)
+                .manage(asset_manager)
+                .manage(operation_manager)
         }))
         // for prometheus telemetry
         .attach(prometheus.clone())

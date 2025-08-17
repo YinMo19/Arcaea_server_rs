@@ -126,6 +126,7 @@ pub struct BundleDownloadResponse {
 }
 
 /// Bundle service for managing content bundles
+#[derive(Clone)]
 pub struct BundleService {
     pool: MySqlPool,
     bundle_folder: PathBuf,

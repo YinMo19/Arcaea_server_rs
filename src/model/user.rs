@@ -132,6 +132,12 @@ pub struct UserInfo {
     pub mp_notification_enabled: bool,
     pub highest_rating_ptt: i32,
     pub insight_state: i32,
+    /// Pack IDs the user has unlocked
+    pub packs: Vec<String>,
+    /// Single song IDs the user has unlocked
+    pub singles: Vec<String>,
+    /// World song IDs the user has unlocked
+    pub world_songs: Vec<String>,
 }
 
 /// User for insertion (new user registration)
@@ -230,6 +236,10 @@ impl From<User> for UserInfo {
             mp_notification_enabled: user.mp_notification_enabled(),
             highest_rating_ptt: user.highest_rating_ptt.unwrap_or(0),
             insight_state: user.insight_state.unwrap_or(4),
+            // TODO: These should be populated from user_item table queries
+            packs: Vec::new(),
+            singles: Vec::new(),
+            world_songs: Vec::new(),
         }
     }
 }
