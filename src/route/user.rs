@@ -1,12 +1,13 @@
 use crate::context::ClientContext;
 use crate::error::ArcError;
-use crate::model::{UserLoginDto, UserRegisterDto};
+use crate::model::{AuthResponse, UserRegisterDto};
+
 use crate::route::common::{success_return, AuthGuard, RouteResult};
 use crate::service::UserService;
 use rocket::form::Form;
 use rocket::serde::json::Json;
 use rocket::{get, post, routes, FromForm, Route, State};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
 
 /// User registration request payload
@@ -18,21 +19,6 @@ pub struct RegisterRequest {
     pub device_id: Option<String>,
 }
 
-/// User login request payload
-#[derive(Debug, Deserialize)]
-pub struct LoginRequest {
-    pub name: String,
-    pub password: String,
-    pub device_id: Option<String>,
-}
-
-/// Authentication response payload
-#[derive(Debug, Serialize)]
-pub struct AuthResponse {
-    pub user_id: i32,
-    pub access_token: String,
-}
-
 /// User registration endpoint
 ///
 /// Registers a new user account with the provided credentials.
@@ -42,7 +28,7 @@ pub struct AuthResponse {
 pub async fn register(
     user_service: &State<UserService>,
     register_info: Form<RegisterRequest>,
-    ctx: ClientContext,
+    ctx: ClientContext<'_>,
 ) -> RouteResult<AuthResponse> {
     let register_data = UserRegisterDto {
         name: register_info.name.clone(),
@@ -57,37 +43,8 @@ pub async fn register(
         .or_else(|| ctx.get_device_id());
 
     let user_auth = user_service
-        .register_user(register_data, device_id, ip)
+        .register_user(register_data, device_id, ip.map(|c| c.to_string()))
         .await?;
-
-    let response = AuthResponse {
-        user_id: user_auth.user_id,
-        access_token: user_auth.token,
-    };
-
-    Ok(success_return(response))
-}
-
-/// User login endpoint
-///
-/// Authenticates user credentials and returns an access token.
-/// Validates username/password, checks for bans, manages device
-/// sessions and generates a new access token.
-#[post("/login", data = "<request>")]
-pub async fn login(
-    user_service: &State<UserService>,
-    request: Json<LoginRequest>,
-    ctx: ClientContext,
-) -> RouteResult<AuthResponse> {
-    let login_data = UserLoginDto {
-        name: request.name.clone(),
-        password: request.password.clone(),
-        device_id: request.device_id.clone(),
-    };
-
-    let ip = ctx.get_client_ip();
-
-    let user_auth = user_service.login_user(login_data, ip).await?;
 
     let response = AuthResponse {
         user_id: user_auth.user_id,
@@ -477,7 +434,6 @@ pub async fn email_resend_verify() -> RouteResult<serde_json::Value> {
 pub fn routes() -> Vec<Route> {
     routes![
         register,
-        login,
         user_me,
         logout,
         user_by_code,

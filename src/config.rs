@@ -27,7 +27,7 @@ pub struct Config {
 
     // Download settings
     pub download_link_prefix: String,
-    pub bundle_download_link_prefix: String,
+    pub bundle_download_link_prefix: Option<String>,
     pub download_use_nginx_x_accel_redirect: bool,
     pub nginx_x_accel_redirect_prefix: String,
     pub bundle_nginx_x_accel_redirect_prefix: String,
@@ -96,7 +96,9 @@ impl Default for Config {
             api_token: String::new(),
 
             download_link_prefix: String::new(),
-            bundle_download_link_prefix: String::new(),
+            bundle_download_link_prefix: Some(String::from(
+                "https://arc.yinmo.site/bundle_download/",
+            )),
             download_use_nginx_x_accel_redirect: false,
             nginx_x_accel_redirect_prefix: "/nginx_download/".to_string(),
             bundle_nginx_x_accel_redirect_prefix: "/nginx_bundle_download/".to_string(),

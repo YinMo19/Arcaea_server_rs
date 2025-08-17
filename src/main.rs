@@ -8,12 +8,13 @@ use rocket::{launch, Build, Rocket};
 
 use Arcaea_server_rs::constants::GAME_API_PREFIX;
 use Arcaea_server_rs::error::{bad_request, forbidden, internal_error, not_found, unauthorized};
+use Arcaea_server_rs::route::others::bundle_download;
 use Arcaea_server_rs::route::CORS;
 use Arcaea_server_rs::service::{
     AssetManager, BundleService, CharacterService, DownloadService, NotificationService,
     OperationManager, ScoreService, UserService,
 };
-use Arcaea_server_rs::{Database, DbPool};
+use Arcaea_server_rs::{config, Database, DbPool};
 
 use rocket_prometheus::PrometheusMetrics;
 
@@ -57,7 +58,11 @@ async fn init_services(
     );
     let score_service = ScoreService::new(pool.clone());
     let notification_service = NotificationService::new(pool.clone());
-    let mut bundle_service = BundleService::new(pool.clone(), std::path::PathBuf::from("bundles"));
+    let mut bundle_service = BundleService::new(
+        pool.clone(),
+        std::path::PathBuf::from("bundles"),
+        config::CONFIG.bundle_download_link_prefix.clone(),
+    );
 
     // Initialize bundle service
     log::info!("Initializing bundle service...");
@@ -132,6 +137,8 @@ async fn configure_rocket() -> Rocket<Build> {
         .attach(prometheus.clone())
         .mount("/metrics", prometheus)
         .mount("/user", Arcaea_server_rs::route::user::routes())
+        .mount("/auth", Arcaea_server_rs::route::auth::routes())
+        .mount("/", rocket::routes![bundle_download])
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::others::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::download::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::score::routes())

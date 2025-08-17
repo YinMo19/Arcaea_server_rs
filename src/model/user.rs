@@ -1,3 +1,4 @@
+use rocket::FromForm;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
@@ -242,4 +243,17 @@ impl From<User> for UserInfo {
             world_songs: Vec::new(),
         }
     }
+}
+
+/// User login request payload
+#[derive(Debug, Deserialize, FromForm)]
+pub struct LoginRequest {
+    pub grant_type: Option<String>,
+}
+
+/// Authentication response payload
+#[derive(Debug, Serialize)]
+pub struct AuthResponse {
+    pub user_id: i32,
+    pub access_token: String,
 }

@@ -396,10 +396,10 @@ impl UserService {
     ///
     /// Validates username and password, checks for bans,
     /// manages device sessions and generates access token.
-    pub async fn login_user(
+    pub async fn login_user<'r>(
         &self,
         login_data: UserLoginDto,
-        ip: Option<String>,
+        ip: Option<&'r str>,
     ) -> ArcResult<UserAuth> {
         // TODO: Implement rate limiting
         // self.check_login_rate_limit(&login_data.name).await?;

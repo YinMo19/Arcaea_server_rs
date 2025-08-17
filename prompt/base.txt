@@ -6,9 +6,9 @@ python 版本在 py_version文件夹内，这个文件夹目前处于 gitignore 
 
 关于 python 版本的结构，路由相关的文件在 server 文件夹下面，而核心逻辑在 core 下面。你必须要保证我的路由和 server 下面定义的路由完全一致，而我的 service 逻辑和 python 版本的 core 逻辑一致。
 
-我已经初步实现 core 文件夹下的 others， user，download ，character 和 score 模块。 现在downloads 模块看起来功能实现了但是还没加载到整个app 中。我希望你详细阅读 python 模块的实现，看看他是怎么做到可以动态重加载所有资源的。我希望你能够使用 rocket state 管理这些 assets，以便在启动时加载所有 assets，包括 songs 和 bundles。
+我已经初步实现 core 文件夹下的 others， user，download ，character 和 score 模块。目前的 bundle 下载模块还有问题，通过测试发现 2025-08-17T15:05:44.454245Z  INFO Arcaea_server_rs::service::bundle: Bundle list request:
 
-一些结构上的想法（已经初步实现，你需要保证与之前实现的一致性）：我希望你去阅读 python 版本的错误，并根据他的错误处理方式来专门给我产生处理错误的文件。我期望你使用 thiserror 来处理所有错误。所有 api 最后都返回 result T, ArcError 这里的 错误是 thiserror 的一个 enum。  除此之外，我希望我的整个项目是一个 service 和 route 分离的结构。我希望这样，一个 service 文件夹和一个 route 文件夹，以及一个对应的 model 文件，分别处理主要逻辑，路由以及数据库对应的结构。python 的代码是正确的实现，你只需要根据 python 的逻辑完成 rust 的重写即可。代码风格上保持和现有代码一致，我的一个要求是尽量把所有 struct 全部放在对应的 model 内， service 单文件不超过 1000 行。常量模块在 lib.rs 和 config.rs 里面均有定义，如需可查看。
+一些结构上的想法（已经初步实现，你需要保证与之前实现的一致性）：我希望你去阅读 python 版本的错误，并根据他的错误处理方式来专门给我产生处理错误的文件。我期望你使用 thiserror 来处理所有错误。所有 api 最后都返回 result T, ArcError 这里的 错误是 thiserror 的一个 enum。  除此之外，我希望我的整个项目是一个 service 和 route 分离的结构。我希望这样，一个 service 文件夹和一个 route 文件夹，以及一个对应的 model 文件，分别处理主要逻辑，路由以及数据库对应的结构。python 的代码是正确的实现，你只需要根据 python 的逻辑完成 rust 的重写即可。代码风格上保持和现有代码一致，我的一个要求是尽量把所有 struct 全部放在对应的 model 内， service 单文件不超过 1000 行。常量模块在 lib.rs 和 config.rs 里面均有定义，如需可查看。如果你需要获取客户端 ip，我已经完成了一个 ctx 可以让你作为 guard 直接使用，获取客户 ip 和其他信息，具体可以在 context.rs 查看。
 
 最后我的要求是，你要假设你是 linus，对代码的要求是简洁和可用性高于一切。 所有对函数的详细文档都直接写在 rust 函数的上方的函数文档内，对功能进行详细描述即可。不要另外开 markdown 来写文档，毫无必要，任何进展直接告诉我即可。
  在写完之后记得 cargo check 保证能够过编译。如果你确认能过通过编译，那么可以进行测试，如果你需要测试，直接用最简单的 curl -X POST "http://localhost:8090/user" \

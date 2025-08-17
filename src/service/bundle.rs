@@ -95,8 +95,8 @@ impl ContentBundle {
             app_version: self.app_version.clone(),
             json_size: self.json_size,
             bundle_size: self.bundle_size,
-            json_url: self.json_url.clone(),
-            bundle_url: self.bundle_url.clone(),
+            json_url: self.json_url.clone().unwrap_or("Error".to_string()),
+            bundle_url: self.bundle_url.clone().unwrap_or("Error".to_string()),
         }
     }
 }
@@ -112,10 +112,10 @@ pub struct BundleResponse {
     pub json_size: u64,
     #[serde(rename = "bundleSize")]
     pub bundle_size: u64,
-    #[serde(rename = "jsonUrl", skip_serializing_if = "Option::is_none")]
-    pub json_url: Option<String>,
-    #[serde(rename = "bundleUrl", skip_serializing_if = "Option::is_none")]
-    pub bundle_url: Option<String>,
+    #[serde(rename = "jsonUrl")]
+    pub json_url: String,
+    #[serde(rename = "bundleUrl")]
+    pub bundle_url: String,
 }
 
 /// Bundle download response
@@ -140,7 +140,7 @@ pub struct BundleService {
 
 impl BundleService {
     /// Create a new bundle service
-    pub fn new(pool: MySqlPool, bundle_folder: PathBuf) -> Self {
+    pub fn new(pool: MySqlPool, bundle_folder: PathBuf, download_prefix: Option<String>) -> Self {
         Self {
             pool,
             bundle_folder,
@@ -149,7 +149,7 @@ impl BundleService {
             next_versions: HashMap::new(),
             version_tuple_bundles: HashMap::new(),
             strict_mode: false,
-            download_prefix: None,
+            download_prefix: download_prefix,
         }
     }
 
@@ -228,8 +228,6 @@ impl BundleService {
 
     /// Process a bundle JSON file
     async fn process_bundle_json(&mut self, json_path: &Path) -> ArcResult<()> {
-        log::info!("Processing bundle JSON file: {:?}", json_path);
-
         let json_content = fs::read_to_string(json_path).map_err(|e| ArcError::Io {
             message: format!("Failed to read JSON file: {}", e),
         })?;
@@ -286,7 +284,7 @@ impl BundleService {
         );
 
         self.next_versions
-            .entry(prev_version)
+            .entry(prev_version.clone())
             .or_insert_with(Vec::new)
             .push(bundle.version);
 
@@ -307,8 +305,8 @@ impl BundleService {
         }
 
         let current_version = bundle_version.unwrap_or("0.0.0");
+
         let target_version = self.max_bundle_version.get(app_version).ok_or_else(|| {
-            log::warn!("No bundles found for app version: {}", app_version);
             ArcError::no_data(
                 format!("No bundles found for app version: {}", app_version),
                 404,
@@ -365,7 +363,9 @@ impl BundleService {
                 bundle_with_urls.json_url = Some(self.generate_download_url(&json_token));
                 bundle_with_urls.bundle_url = Some(self.generate_download_url(&bundle_token));
 
-                results.push(bundle_with_urls.to_response());
+                let response = bundle_with_urls.to_response();
+                results.push(response);
+            } else {
             }
         }
 
@@ -421,7 +421,7 @@ impl BundleService {
     fn generate_token(&self) -> String {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        (0..128)
+        (0..64)
             .map(|_| format!("{:02x}", rng.gen::<u8>()))
             .collect()
     }
@@ -457,7 +457,7 @@ impl BundleService {
             format!("{}{}", url, token)
         } else {
             // Default to relative URL
-            format!("/bundle/download/{}", token)
+            format!("/bundle_download/{}", token)
         }
     }
 
@@ -517,5 +517,16 @@ impl BundleService {
         })?;
 
         Ok(content)
+    }
+
+    /// Get bundle file path for serving
+    pub async fn get_bundle_file_path(&self, file_path: &str) -> ArcResult<PathBuf> {
+        let full_path = self.bundle_folder.join(file_path);
+
+        if !full_path.exists() {
+            return Err(ArcError::no_data("File not found".to_string(), 404, -2));
+        }
+
+        Ok(full_path)
     }
 }

@@ -1,10 +1,14 @@
 use crate::config::{ARCAEA_DATABASE_VERSION, ARCAEA_LOG_DATABASE_VERSION, ARCAEA_SERVER_VERSION};
 use crate::error::ArcError;
 
-use crate::context::VersionContext;
+use crate::context::{ClientContext, VersionContext};
 use crate::route::common::{success_return, AuthGuard, EmptyResponse, RouteResult};
 use crate::service::bundle::BundleDownloadResponse;
 use crate::service::{BundleService, CharacterService, NotificationService, UserService};
+use rocket::fs::NamedFile;
+use rocket::http::Status;
+
+use rocket::response::status;
 use rocket::serde::json::Json;
 use rocket::{get, post, routes, Route, State};
 use serde::{Deserialize, Serialize};
@@ -129,7 +133,6 @@ pub async fn game_content_bundle(
         .await?;
 
     let response = BundleDownloadResponse { ordered_results };
-
     Ok(success_return(response))
 }
 
@@ -262,6 +265,56 @@ pub async fn aggregate(calls: String) -> RouteResult<AggregateResponse> {
     };
 
     Ok(success_return(response))
+}
+
+/// Bundle download endpoint
+///
+/// Serves bundle files (JSON and CB) using download tokens.
+/// Handles rate limiting for bundle files and token validation.
+#[get("/bundle_download/<token>")]
+pub async fn bundle_download(
+    bundle_service: &State<BundleService>,
+    token: &str,
+    ctx: ClientContext<'_>,
+) -> Result<NamedFile, status::Custom<String>> {
+    // Get client IP for rate limiting
+    let client_ip = ctx.get_client_ip().unwrap_or_else(|| "127.0.0.1");
+
+    match bundle_service
+        .get_file_path_by_token(&token, client_ip)
+        .await
+    {
+        Ok(file_path) => {
+            // Get the bundle file path directly from the service
+            match bundle_service.get_bundle_file_path(&file_path).await {
+                Ok(full_path) => match NamedFile::open(full_path).await {
+                    Ok(file) => Ok(file),
+                    Err(_) => Err(status::Custom(
+                        Status::NotFound,
+                        "File not found".to_string(),
+                    )),
+                },
+                Err(e) => {
+                    let status_code = match e.status() {
+                        403 => Status::Forbidden,
+                        404 => Status::NotFound,
+                        429 => Status::TooManyRequests,
+                        _ => Status::InternalServerError,
+                    };
+                    Err(status::Custom(status_code, e.to_string()))
+                }
+            }
+        }
+        Err(e) => {
+            let status_code = match e.status() {
+                403 => Status::Forbidden,
+                404 => Status::NotFound,
+                429 => Status::TooManyRequests,
+                _ => Status::InternalServerError,
+            };
+            Err(status::Custom(status_code, e.to_string()))
+        }
+    }
 }
 
 /// Get all others routes
