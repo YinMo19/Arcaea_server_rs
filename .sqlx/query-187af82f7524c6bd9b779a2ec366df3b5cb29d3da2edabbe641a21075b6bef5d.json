@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE best_score SET score = ?, shiny_perfect_count = ?, perfect_count = ?,\n                         near_count = ?, miss_count = ?, health = ?, modifier = ?, clear_type = ?,\n                         rating = ?, time_played = ?, score_v2 = ?\n                         WHERE user_id = ? AND song_id = ? AND difficulty = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 14
+    },
+    "nullable": []
+  },
+  "hash": "187af82f7524c6bd9b779a2ec366df3b5cb29d3da2edabbe641a21075b6bef5d"
+}

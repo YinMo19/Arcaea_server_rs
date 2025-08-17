@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO user_char_full (user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag)\n                     VALUES (?, ?, 1, 0, 0, 0, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "de51d9a0af788f2373c0925cbe51fc586a9cdb8483b2bdcd53d7798d002b7358"
+}

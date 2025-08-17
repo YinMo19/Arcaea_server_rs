@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT rating_ptt FROM user WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rating_ptt",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "2df23dbfd47e331e9d3c8e66717894126b478c511cdef1c985e9590d5b1f47d5"
+}

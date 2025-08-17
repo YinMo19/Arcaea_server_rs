@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM bundle_download_token WHERE time < ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "fdab51868bcfe867c6c04cab78dfbea9d18a46502357bb790683d55081d4aa4d"
+}

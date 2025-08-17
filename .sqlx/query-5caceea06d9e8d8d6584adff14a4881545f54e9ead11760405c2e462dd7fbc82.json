@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO songplay_token VALUES (?, ?, '', 0, ?, 0, 0, 3, 1, 100, 0, 0, '', '', 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "5caceea06d9e8d8d6584adff14a4881545f54e9ead11760405c2e462dd7fbc82"
+}

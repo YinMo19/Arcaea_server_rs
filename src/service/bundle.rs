@@ -227,6 +227,8 @@ impl BundleService {
 
     /// Process a bundle JSON file
     async fn process_bundle_json(&mut self, json_path: &Path) -> ArcResult<()> {
+        log::info!("Processing bundle JSON file: {:?}", json_path);
+
         let json_content = fs::read_to_string(json_path).map_err(|e| ArcError::Io {
             message: format!("Failed to read JSON file: {}", e),
         })?;
@@ -305,6 +307,7 @@ impl BundleService {
 
         let current_version = bundle_version.unwrap_or("0.0.0");
         let target_version = self.max_bundle_version.get(app_version).ok_or_else(|| {
+            log::warn!("No bundles found for app version: {}", app_version);
             ArcError::no_data(
                 format!("No bundles found for app version: {}", app_version),
                 404,

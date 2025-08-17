@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT mp_notification_enabled FROM user WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mp_notification_enabled",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 4
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "9c62888fa07a3087c3983fdde60fcbe6a0fee27f87c18721b31aa427570dacb0"
+}

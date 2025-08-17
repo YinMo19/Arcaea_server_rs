@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM songplay_token WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "1dc70560f5cd75c3151408089a8919f5406efc83d71ad82c7cb6e8db77788fe0"
+}

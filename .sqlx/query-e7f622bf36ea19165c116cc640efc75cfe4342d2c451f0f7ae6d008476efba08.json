@@ -1,0 +1,36 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT user_id, time FROM download_token\n             WHERE song_id = ? AND file_name = ? AND token = ? LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "time",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 20
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "e7f622bf36ea19165c116cc640efc75cfe4342d2c451f0f7ae6d008476efba08"
+}

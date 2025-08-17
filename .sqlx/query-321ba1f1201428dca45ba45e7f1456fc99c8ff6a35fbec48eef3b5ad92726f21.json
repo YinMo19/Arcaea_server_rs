@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM download_token WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "321ba1f1201428dca45ba45e7f1456fc99c8ff6a35fbec48eef3b5ad92726f21"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM friend WHERE user_id_me = ? OR user_id_other = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "79c5312882a82e1a7a49229c14c733630cd87a8f44e128dcb998e5561fb2b847"
+}

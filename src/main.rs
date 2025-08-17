@@ -45,7 +45,7 @@ async fn init_services(
 }
 
 /// Configure the Rocket application
-fn configure_rocket() -> Rocket<Build> {
+async fn configure_rocket() -> Rocket<Build> {
     let prometheus = PrometheusMetrics::new();
 
     rocket::build()
@@ -103,7 +103,7 @@ fn configure_rocket() -> Rocket<Build> {
 
 /// Application entry point
 #[launch]
-fn rocket() -> _ {
+async fn rocket() -> _ {
     // init log
     tracing_subscriber::fmt::init();
 
@@ -116,5 +116,5 @@ fn rocket() -> _ {
     dotenv::dotenv().ok();
 
     // Configure and launch the application
-    configure_rocket()
+    configure_rocket().await
 }

@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT value FROM user_kvdata WHERE user_id = ? AND class = 'world' AND `key` = 'total_step_count' AND idx = 0",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "char_set": 224,
+          "max_size": 262140
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "fa2c21b73d745933f238b008647e184973f922feac9d329bb61eaaadb107b875"
+}

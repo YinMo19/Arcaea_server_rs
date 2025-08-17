@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE best_score SET best_clear_type = ? WHERE user_id = ? AND song_id = ? AND difficulty = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "c9276b0361c70db22c8f971baf22274d087560e8d6f2939caf621a75307df2ae"
+}

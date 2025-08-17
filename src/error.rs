@@ -263,6 +263,13 @@ impl ArcError {
         }
     }
 
+    /// Create a rocket error
+    pub fn rocket_err<S: Into<String>>(message: S) -> Self {
+        Self::Rocket {
+            message: message.into(),
+        }
+    }
+
     /// Get the HTTP status code for this error
     pub fn status(&self) -> u16 {
         match self {

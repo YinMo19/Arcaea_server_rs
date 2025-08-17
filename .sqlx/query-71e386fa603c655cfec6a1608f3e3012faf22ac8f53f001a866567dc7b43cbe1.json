@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user_char_full SET skill_flag = 1 - skill_flag WHERE user_id = ? AND character_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "71e386fa603c655cfec6a1608f3e3012faf22ac8f53f001a866567dc7b43cbe1"
+}

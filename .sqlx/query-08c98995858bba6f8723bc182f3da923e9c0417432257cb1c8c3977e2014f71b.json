@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO user_save (user_id, scores_data, clearlamps_data, clearedsongs_data, unlocklist_data, installid_data, devicemodelname_data, story_data, createdAt, finalestate_data)\n             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n             ON DUPLICATE KEY UPDATE\n             scores_data = VALUES(scores_data),\n             clearlamps_data = VALUES(clearlamps_data),\n             clearedsongs_data = VALUES(clearedsongs_data),\n             unlocklist_data = VALUES(unlocklist_data),\n             installid_data = VALUES(installid_data),\n             devicemodelname_data = VALUES(devicemodelname_data),\n             story_data = VALUES(story_data),\n             createdAt = VALUES(createdAt),\n             finalestate_data = VALUES(finalestate_data)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "08c98995858bba6f8723bc182f3da923e9c0417432257cb1c8c3977e2014f71b"
+}

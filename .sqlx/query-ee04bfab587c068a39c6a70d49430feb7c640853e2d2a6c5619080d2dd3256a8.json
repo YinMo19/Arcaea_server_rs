@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO download_token (user_id, song_id, file_name, token, time)\n                     VALUES (?, ?, 'base.ogg', ?, ?) ON DUPLICATE KEY UPDATE token = ?, time = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "ee04bfab587c068a39c6a70d49430feb7c640853e2d2a6c5619080d2dd3256a8"
+}

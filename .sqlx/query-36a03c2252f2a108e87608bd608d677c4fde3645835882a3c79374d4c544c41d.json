@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user_item SET amount = amount + ? WHERE user_id = ? AND item_id = 'core_generic' AND type = 'core'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "36a03c2252f2a108e87608bd608d677c4fde3645835882a3c79374d4c544c41d"
+}

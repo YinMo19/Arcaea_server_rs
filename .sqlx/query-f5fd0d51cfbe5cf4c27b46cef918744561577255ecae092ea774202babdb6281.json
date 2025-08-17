@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user SET max_stamina_notification_enabled = ? WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "f5fd0d51cfbe5cf4c27b46cef918744561577255ecae092ea774202babdb6281"
+}

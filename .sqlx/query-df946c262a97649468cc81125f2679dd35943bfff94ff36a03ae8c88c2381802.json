@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT course_state FROM songplay_token WHERE token = ? AND user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "course_state",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "df946c262a97649468cc81125f2679dd35943bfff94ff36a03ae8c88c2381802"
+}

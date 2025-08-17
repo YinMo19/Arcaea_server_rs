@@ -1,0 +1,36 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT is_uncapped, is_uncapped_override FROM user_char_full WHERE user_id = ? AND character_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "is_uncapped",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 4
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "is_uncapped_override",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 4
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "47230e78fd85c491953791669ef3d7e56aabaea6197a17e11611ea3887d1cd4b"
+}

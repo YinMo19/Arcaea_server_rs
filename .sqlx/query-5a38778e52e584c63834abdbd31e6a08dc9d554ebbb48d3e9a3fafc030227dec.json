@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT insight_state FROM user WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "insight_state",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "5a38778e52e584c63834abdbd31e6a08dc9d554ebbb48d3e9a3fafc030227dec"
+}

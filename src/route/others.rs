@@ -1,6 +1,7 @@
 use crate::config::{ARCAEA_DATABASE_VERSION, ARCAEA_LOG_DATABASE_VERSION, ARCAEA_SERVER_VERSION};
 use crate::error::ArcError;
 
+use crate::context::VersionContext;
 use crate::route::common::{success_return, AuthGuard, EmptyResponse, RouteResult};
 use crate::service::bundle::BundleDownloadResponse;
 use crate::service::{BundleService, CharacterService, NotificationService, UserService};
@@ -112,10 +113,20 @@ pub async fn notification_me(
 /// Handles app version, bundle version, and device ID from headers.
 #[get("/game/content_bundle")]
 pub async fn game_content_bundle(
-    _bundle_service: &State<BundleService>,
+    version_ctx: VersionContext<'_>,
+    bundle_service: &State<BundleService>,
 ) -> RouteResult<BundleDownloadResponse> {
-    // For now, return empty bundle list as headers extraction needs to be implemented differently
-    let ordered_results = Vec::new();
+    let app_version = match version_ctx.app_version {
+        Some(version) => version,
+        None => return Err(ArcError::no_data("no app version provided", 404, -2)),
+    };
+    let ordered_results = bundle_service
+        .get_bundle_list(
+            app_version,
+            version_ctx.bundle_version,
+            version_ctx.device_id,
+        )
+        .await?;
 
     let response = BundleDownloadResponse { ordered_results };
 

@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT amount FROM user_item WHERE user_id = ? AND item_id = ? AND type = 'core'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "amount",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "f032c3e31e472e497c55f587a1ff83e9dc21545995dc73ff454cf0a98fcf004b"
+}

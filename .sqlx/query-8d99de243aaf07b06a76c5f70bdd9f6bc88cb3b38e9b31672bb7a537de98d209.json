@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO bundle_download_token (token, file_path, time, device_id) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "8d99de243aaf07b06a76c5f70bdd9f6bc88cb3b38e9b31672bb7a537de98d209"
+}

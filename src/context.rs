@@ -221,6 +221,45 @@ impl<'r> FromRequest<'r> for IpContext {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct VersionContext<'r> {
+    pub app_version: Option<&'r str>,
+    pub bundle_version: Option<&'r str>,
+    pub device_id: Option<&'r str>,
+}
+
+impl<'r> VersionContext<'r> {
+    pub fn get_app_version(&self) -> Option<&str> {
+        self.app_version
+    }
+
+    pub fn get_bundle_version(&self) -> Option<&str> {
+        self.bundle_version
+    }
+
+    pub fn get_device_id(&self) -> Option<&str> {
+        self.device_id
+    }
+}
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for VersionContext<'r> {
+    type Error = ();
+
+    async fn from_request(request: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
+        let app_version = request.headers().get_one("AppVersion");
+        let bundle_version = request.headers().get_one("BundleVersion");
+
+        let device_id = request.headers().get_one("DeviceId");
+
+        Outcome::Success(VersionContext {
+            app_version: app_version,
+            bundle_version: bundle_version,
+            device_id: device_id,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

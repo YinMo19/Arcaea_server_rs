@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user SET is_skill_sealed = ? WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "19c3e4de1553c4677c2d44294ff514943f0d27be505d75a2f63194a967e9c5c1"
+}

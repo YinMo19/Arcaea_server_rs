@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM user_item WHERE user_id = ? AND item_id = ? AND type = 'core' AND amount <= 0",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "6935613f441f5579d187c06b2ef12c643dd9b8bbca961330108a15ee85b644c1"
+}

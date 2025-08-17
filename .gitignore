@@ -8,3 +8,5 @@ database/*.db-wal
 py_version
 .env
 Rocket.toml
+
+bundles

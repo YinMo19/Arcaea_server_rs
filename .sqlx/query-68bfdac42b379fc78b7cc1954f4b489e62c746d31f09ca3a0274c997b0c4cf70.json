@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT rating FROM best_score WHERE user_id = ? ORDER BY rating DESC LIMIT 30",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rating",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 22
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "68bfdac42b379fc78b7cc1954f4b489e62c746d31f09ca3a0274c997b0c4cf70"
+}
