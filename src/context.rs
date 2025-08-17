@@ -248,7 +248,7 @@ impl<'r> FromRequest<'r> for VersionContext<'r> {
 
     async fn from_request(request: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
         let app_version = request.headers().get_one("AppVersion");
-        let bundle_version = request.headers().get_one("BundleVersion");
+        let bundle_version = request.headers().get_one("ContentBundle");
 
         let device_id = request.headers().get_one("DeviceId");
 

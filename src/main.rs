@@ -34,7 +34,7 @@ async fn init_services(
     let asset_manager = std::sync::Arc::new(
         AssetManager::with_defaults(pool.clone())
             .with_song_folder(std::path::PathBuf::from("./songs"))
-            .with_songlist_path(std::path::PathBuf::from("./songlist"))
+            .with_songlist_path(std::path::PathBuf::from("./songs/songlist"))
             .with_bundle_folder(std::path::PathBuf::from("./bundles"))
             .set_pre_calculate_hashes(true),
     );
@@ -57,7 +57,16 @@ async fn init_services(
     );
     let score_service = ScoreService::new(pool.clone());
     let notification_service = NotificationService::new(pool.clone());
-    let bundle_service = BundleService::new(pool.clone(), std::path::PathBuf::from("bundles"));
+    let mut bundle_service = BundleService::new(pool.clone(), std::path::PathBuf::from("bundles"));
+
+    // Initialize bundle service
+    log::info!("Initializing bundle service...");
+    if let Err(e) = bundle_service.initialize().await {
+        log::error!("Failed to initialize bundle service: {}", e);
+        std::process::exit(1);
+    }
+    log::info!("Bundle service initialized successfully");
+
     let character_service = CharacterService::new(pool.clone());
     let operation_manager = OperationManager::new(
         asset_manager.clone(),

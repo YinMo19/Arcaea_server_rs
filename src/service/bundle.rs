@@ -201,7 +201,7 @@ impl BundleService {
     fn scan_directory<'a>(
         &'a mut self,
         dir: &'a Path,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ArcResult<()>> + 'a>> {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ArcResult<()>> + Send + 'a>> {
         Box::pin(async move {
             let entries = fs::read_dir(dir).map_err(|e| ArcError::Io {
                 message: format!("Failed to read directory: {}", e),
