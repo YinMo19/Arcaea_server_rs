@@ -1,5 +1,8 @@
+use crate::config::{Constants, CONFIG};
 use crate::error::{ArcError, ArcResult};
-use crate::model::{Character, UserCharacter};
+use crate::model::{
+    Character, CharacterValue, CoreItem, Level, Skill, UserCharacter, UserCharacterInfo,
+};
 use sqlx::MySqlPool;
 
 /// Character service for managing character items and user character data
@@ -13,27 +16,59 @@ impl CharacterService {
         Self { pool }
     }
 
+    /// Get the appropriate table name based on configuration
+    fn get_user_char_table(&self) -> &'static str {
+        if CONFIG.character_full_unlock {
+            "user_char_full"
+        } else {
+            "user_char"
+        }
+    }
+
     /// Grant a character to a user by character ID
     pub async fn grant_character_by_id(&self, user_id: i32, character_id: i32) -> ArcResult<()> {
-        // Check if user already has this character
-        let exists = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM user_char WHERE user_id = ? AND character_id = ?",
-            user_id,
-            character_id
-        )
-        .fetch_one(&self.pool)
-        .await?;
+        let _table_name = self.get_user_char_table();
 
-        if exists == 0 {
-            // Grant the character with default values
-            sqlx::query!(
-                "INSERT INTO user_char (user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag)
-                 VALUES (?, ?, 1, 0, 0, 0, 0)",
+        // Check if user already has this character
+        let exists = if CONFIG.character_full_unlock {
+            sqlx::query_scalar!(
+                "SELECT COUNT(*) FROM user_char_full WHERE user_id = ? AND character_id = ?",
                 user_id,
                 character_id
             )
-            .execute(&self.pool)
-            .await?;
+            .fetch_one(&self.pool)
+            .await?
+        } else {
+            sqlx::query_scalar!(
+                "SELECT COUNT(*) FROM user_char WHERE user_id = ? AND character_id = ?",
+                user_id,
+                character_id
+            )
+            .fetch_one(&self.pool)
+            .await?
+        };
+
+        if exists == 0 {
+            // Grant the character with default values
+            if CONFIG.character_full_unlock {
+                sqlx::query!(
+                    "INSERT INTO user_char_full (user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag)
+                     VALUES (?, ?, 1, 0, 0, 0, 0)",
+                    user_id,
+                    character_id
+                )
+                .execute(&self.pool)
+                .await?;
+            } else {
+                sqlx::query!(
+                    "INSERT INTO user_char (user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag)
+                     VALUES (?, ?, 1, 0, 0, 0, 0)",
+                    user_id,
+                    character_id
+                )
+                .execute(&self.pool)
+                .await?;
+            }
         }
 
         Ok(())
@@ -57,7 +92,7 @@ impl CharacterService {
             ArcError::no_data(
                 format!("No character with name: {}", character_name),
                 404,
-                -121,
+                -130,
             )
         })?;
 
@@ -66,125 +101,294 @@ impl CharacterService {
 
     /// Check if a user has a specific character
     pub async fn user_has_character(&self, user_id: i32, character_id: i32) -> ArcResult<bool> {
-        let count = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM user_char WHERE user_id = ? AND character_id = ?",
-            user_id,
-            character_id
-        )
-        .fetch_one(&self.pool)
-        .await?;
+        let _table_name = self.get_user_char_table();
+
+        let count = if CONFIG.character_full_unlock {
+            sqlx::query_scalar!(
+                "SELECT COUNT(*) FROM user_char_full WHERE user_id = ? AND character_id = ?",
+                user_id,
+                character_id
+            )
+            .fetch_one(&self.pool)
+            .await?
+        } else {
+            sqlx::query_scalar!(
+                "SELECT COUNT(*) FROM user_char WHERE user_id = ? AND character_id = ?",
+                user_id,
+                character_id
+            )
+            .fetch_one(&self.pool)
+            .await?
+        };
 
         Ok(count > 0)
     }
 
-    /// Get user's character data
-    pub async fn get_user_character(
-        &self,
-        user_id: i32,
-        character_id: i32,
-    ) -> ArcResult<Option<UserCharacter>> {
-        let user_char = sqlx::query!(
-            "SELECT user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag
-             FROM user_char WHERE user_id = ? AND character_id = ?",
-            user_id,
+    /// Get character base information by ID
+    pub async fn get_character_info(&self, character_id: i32) -> ArcResult<Character> {
+        let character = sqlx::query_as!(
+            Character,
+            "SELECT character_id, name, max_level, frag1, prog1, overdrive1, frag20, prog20, overdrive20,
+             frag30, prog30, overdrive30, skill_id, skill_unlock_level, skill_requires_uncap,
+             skill_id_uncap, char_type, is_uncapped
+             FROM `character` WHERE character_id = ?",
             character_id
         )
         .fetch_optional(&self.pool)
-        .await?;
+        .await?
+        .ok_or_else(|| {
+            ArcError::no_data(
+                format!("No such character: {}", character_id),
+                404,
+                -130,
+            )
+        })?;
 
-        let user_char = user_char.map(|row| UserCharacter {
-            user_id: row.user_id,
-            character_id: row.character_id,
-            level: row.level.unwrap_or(1),
-            exp: row.exp.unwrap_or(0.0),
-            is_uncapped: row.is_uncapped.unwrap_or(0),
-            is_uncapped_override: row.is_uncapped_override.unwrap_or(0),
-            skill_flag: row.skill_flag.unwrap_or(0),
-        });
-
-        Ok(user_char)
+        Ok(character)
     }
 
-    /// Get all characters owned by a user
-    pub async fn get_user_characters(&self, user_id: i32) -> ArcResult<Vec<UserCharacter>> {
-        let user_char_rows = sqlx::query!(
-            "SELECT user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag
-             FROM user_char WHERE user_id = ?",
-            user_id
+    /// Get character uncap cores
+    pub async fn get_character_uncap_cores(&self, character_id: i32) -> ArcResult<Vec<CoreItem>> {
+        let core_items = sqlx::query!(
+            "SELECT character_id, item_id, type, amount FROM char_item WHERE character_id = ? AND type = 'core'",
+            character_id
         )
         .fetch_all(&self.pool)
         .await?;
 
-        let user_chars = user_char_rows
+        let cores = core_items
             .into_iter()
-            .map(|row| UserCharacter {
-                user_id: row.user_id,
-                character_id: row.character_id,
-                level: row.level.unwrap_or(1),
-                exp: row.exp.unwrap_or(0.0),
-                is_uncapped: row.is_uncapped.unwrap_or(0),
-                is_uncapped_override: row.is_uncapped_override.unwrap_or(0),
-                skill_flag: row.skill_flag.unwrap_or(0),
+            .map(|item| CoreItem {
+                item_id: item.item_id,
+                amount: item.amount.unwrap_or(0),
             })
             .collect();
 
-        Ok(user_chars)
+        Ok(cores)
     }
 
-    /// Update character level
-    pub async fn update_character_level(
+    /// Get user character uncap condition (is_uncapped, is_uncapped_override)
+    pub async fn get_user_character_uncap_condition(
         &self,
         user_id: i32,
         character_id: i32,
-        level: i32,
-    ) -> ArcResult<()> {
+    ) -> ArcResult<(bool, bool)> {
+        let _table_name = self.get_user_char_table();
+
+        let result = if CONFIG.character_full_unlock {
+            let row = sqlx::query!(
+                "SELECT is_uncapped, is_uncapped_override FROM user_char_full WHERE user_id = ? AND character_id = ?",
+                user_id,
+                character_id
+            )
+            .fetch_optional(&self.pool)
+            .await?;
+
+            row.map(|r| (r.is_uncapped, r.is_uncapped_override))
+        } else {
+            let row = sqlx::query!(
+                "SELECT is_uncapped, is_uncapped_override FROM user_char WHERE user_id = ? AND character_id = ?",
+                user_id,
+                character_id
+            )
+            .fetch_optional(&self.pool)
+            .await?;
+
+            row.map(|r| (r.is_uncapped, r.is_uncapped_override))
+        };
+
+        if let Some((is_uncapped, is_uncapped_override)) = result {
+            Ok((
+                is_uncapped.unwrap_or(0) != 0,
+                is_uncapped_override.unwrap_or(0) != 0,
+            ))
+        } else {
+            Ok((false, false))
+        }
+    }
+
+    /// Get complete user character information
+    pub async fn get_user_character_info(
+        &self,
+        user_id: i32,
+        character_id: i32,
+    ) -> ArcResult<UserCharacterInfo> {
+        let _table_name = self.get_user_char_table();
+
+        // Get character base info first
+        let character = self.get_character_info(character_id).await?;
+
+        // Get user character data
+        let (level, exp, is_uncapped, is_uncapped_override, skill_flag) = if CONFIG
+            .character_full_unlock
+        {
+            let row = sqlx::query!(
+                "SELECT level, exp, is_uncapped, is_uncapped_override, skill_flag FROM user_char_full WHERE user_id = ? AND character_id = ?",
+                user_id, character_id
+            )
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| ArcError::no_data("The character of the user does not exist.", 404, -130))?;
+
+            (
+                row.level.unwrap_or(1),
+                row.exp.unwrap_or(0.0),
+                row.is_uncapped.unwrap_or(0) != 0,
+                row.is_uncapped_override.unwrap_or(0) != 0,
+                row.skill_flag.unwrap_or(0) != 0,
+            )
+        } else {
+            let row = sqlx::query!(
+                "SELECT level, exp, is_uncapped, is_uncapped_override, skill_flag FROM user_char WHERE user_id = ? AND character_id = ?",
+                user_id, character_id
+            )
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| ArcError::no_data("The character of the user does not exist.", 404, -130))?;
+
+            (
+                row.level.unwrap_or(1),
+                row.exp.unwrap_or(0.0),
+                row.is_uncapped.unwrap_or(0) != 0,
+                row.is_uncapped_override.unwrap_or(0) != 0,
+                row.skill_flag.unwrap_or(0) != 0,
+            )
+        };
+
+        // Build level information
+        let mut level_info = Level::new();
+        level_info.level = level;
+        level_info.exp = exp;
+        level_info.max_level = character.max_level.unwrap_or(20);
+
+        // Build skill information
+        let mut skill = Skill::new();
+        skill.skill_id = character.skill_id.clone();
+        skill.skill_id_uncap = character.skill_id_uncap.clone();
+        skill.skill_unlock_level = character.skill_unlock_level.unwrap_or(1);
+        skill.skill_requires_uncap = character.skill_requires_uncap();
+
+        // Build character values
+        let mut frag = CharacterValue::new();
+        frag.set_parameter(
+            character.frag1.unwrap_or(0.0),
+            character.frag20.unwrap_or(0.0),
+            character.frag30.unwrap_or(0.0),
+        );
+
+        let mut prog = CharacterValue::new();
+        prog.set_parameter(
+            character.prog1.unwrap_or(0.0),
+            character.prog20.unwrap_or(0.0),
+            character.prog30.unwrap_or(0.0),
+        );
+
+        let mut overdrive = CharacterValue::new();
+        overdrive.set_parameter(
+            character.overdrive1.unwrap_or(0.0),
+            character.overdrive20.unwrap_or(0.0),
+            character.overdrive30.unwrap_or(0.0),
+        );
+
+        // Get uncap cores
+        let uncap_cores = self.get_character_uncap_cores(character_id).await?;
+
+        // Set voice data for specific characters
+        let voice = if [21, 46].contains(&character_id) {
+            Some(vec![0, 1, 2, 3, 100, 1000, 1001])
+        } else {
+            None
+        };
+
+        // Handle Fatalis special calculations (character 55)
+        let mut fatalis_is_limited = false;
+        if character_id == 55 {
+            let addition = if CONFIG.character_full_unlock {
+                fatalis_is_limited = true;
+                Constants::FATALIS_MAX_VALUE as f64
+            } else {
+                // Get world step count from user_kvdata
+                let steps = sqlx::query_scalar!(
+                    r#"SELECT value FROM user_kvdata WHERE user_id = ? AND class = 'world' AND `key` = 'total_step_count' AND idx = 0"#,
+                    user_id
+                )
+                .fetch_optional(&self.pool)
+                .await?
+                .and_then(|v| v.and_then(|s| s.parse::<i32>().ok()))
+                .unwrap_or(0) as f64;
+
+                let addition = steps / 30.0;
+                if addition >= Constants::FATALIS_MAX_VALUE as f64 {
+                    fatalis_is_limited = true;
+                    Constants::FATALIS_MAX_VALUE as f64
+                } else {
+                    addition
+                }
+            };
+            prog.addition = addition;
+            overdrive.addition = addition;
+        }
+
+        let user_char_info = UserCharacterInfo {
+            character_id,
+            name: character.name.unwrap_or_default(),
+            char_type: character.char_type.unwrap_or(0),
+            level: level_info,
+            skill,
+            frag,
+            prog,
+            overdrive,
+            is_uncapped,
+            is_uncapped_override,
+            skill_flag,
+            uncap_cores,
+            voice,
+            fatalis_is_limited,
+        };
+
+        Ok(user_char_info)
+    }
+
+    /// Toggle uncap override state for a character
+    pub async fn toggle_character_uncap_override(
+        &self,
+        user_id: i32,
+        character_id: i32,
+    ) -> ArcResult<UserCharacterInfo> {
+        let _table_name = self.get_user_char_table();
+
+        // Get current uncap condition
+        let (is_uncapped, is_uncapped_override) = self
+            .get_user_character_uncap_condition(user_id, character_id)
+            .await?;
+
+        // Can only toggle if character is actually uncapped
+        if !is_uncapped {
+            return Err(ArcError::Base {
+                message: "Unknown Error".to_string(),
+                error_code: 108,
+                api_error_code: -100,
+                extra_data: None,
+                status: 200,
+            });
+        }
+
+        let new_override = !is_uncapped_override;
+
+        // Update user table
         sqlx::query!(
-            "UPDATE user_char SET level = ? WHERE user_id = ? AND character_id = ?",
-            level,
-            user_id,
-            character_id
+            "UPDATE user SET is_char_uncapped_override = ? WHERE user_id = ?",
+            if new_override { 1 } else { 0 },
+            user_id
         )
         .execute(&self.pool)
         .await?;
 
-        Ok(())
-    }
-
-    /// Update character experience
-    pub async fn update_character_exp(
-        &self,
-        user_id: i32,
-        character_id: i32,
-        exp: f64,
-    ) -> ArcResult<()> {
-        sqlx::query!(
-            "UPDATE user_char SET exp = ? WHERE user_id = ? AND character_id = ?",
-            exp,
-            user_id,
-            character_id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
-    }
-
-    /// Update character uncap status
-    pub async fn update_character_uncap(
-        &self,
-        user_id: i32,
-        character_id: i32,
-        is_uncapped: bool,
-        is_uncapped_override: Option<bool>,
-    ) -> ArcResult<()> {
-        let is_uncapped_val = if is_uncapped { 1 } else { 0 };
-        let is_uncapped_override_val = is_uncapped_override.map(|b| if b { 1 } else { 0 });
-
-        if let Some(override_val) = is_uncapped_override_val {
+        // Update character table
+        if CONFIG.character_full_unlock {
             sqlx::query!(
-                "UPDATE user_char SET is_uncapped = ?, is_uncapped_override = ? WHERE user_id = ? AND character_id = ?",
-                is_uncapped_val,
-                override_val,
+                "UPDATE user_char_full SET is_uncapped_override = ? WHERE user_id = ? AND character_id = ?",
+                if new_override { 1 } else { 0 },
                 user_id,
                 character_id
             )
@@ -192,8 +396,249 @@ impl CharacterService {
             .await?;
         } else {
             sqlx::query!(
-                "UPDATE user_char SET is_uncapped = ? WHERE user_id = ? AND character_id = ?",
-                is_uncapped_val,
+                "UPDATE user_char SET is_uncapped_override = ? WHERE user_id = ? AND character_id = ?",
+                if new_override { 1 } else { 0 },
+                user_id,
+                character_id
+            )
+            .execute(&self.pool)
+            .await?;
+        }
+
+        // Return updated character info
+        self.get_user_character_info(user_id, character_id).await
+    }
+
+    /// Perform character uncap (first time)
+    pub async fn character_uncap(
+        &self,
+        user_id: i32,
+        character_id: i32,
+    ) -> ArcResult<UserCharacterInfo> {
+        if CONFIG.character_full_unlock {
+            return Err(ArcError::Base {
+                message: "All characters are available.".to_string(),
+                error_code: 108,
+                api_error_code: -100,
+                extra_data: None,
+                status: 200,
+            });
+        }
+
+        // Get current uncap state
+        let (is_uncapped, _) = self
+            .get_user_character_uncap_condition(user_id, character_id)
+            .await?;
+
+        if is_uncapped {
+            return Err(ArcError::Base {
+                message: "The character has been uncapped.".to_string(),
+                error_code: 108,
+                api_error_code: -100,
+                extra_data: None,
+                status: 200,
+            });
+        }
+
+        // Get required cores
+        let uncap_cores = self.get_character_uncap_cores(character_id).await?;
+
+        // Check if user has enough cores
+        for core in &uncap_cores {
+            if core.amount > 0 {
+                let user_amount = sqlx::query_scalar!(
+                    "SELECT amount FROM user_item WHERE user_id = ? AND item_id = ? AND type = 'core'",
+                    user_id,
+                    core.item_id
+                )
+                .fetch_optional(&self.pool)
+                .await?
+                .flatten()
+                .unwrap_or(0);
+
+                if core.amount > user_amount {
+                    return Err(ArcError::ItemNotEnough {
+                        message: "The cores are not enough.".to_string(),
+                        error_code: 108,
+                        api_error_code: -100,
+                        extra_data: None,
+                        status: 200,
+                    });
+                }
+            }
+        }
+
+        // Consume cores
+        for core in &uncap_cores {
+            if core.amount > 0 {
+                sqlx::query!(
+                    "UPDATE user_item SET amount = amount - ? WHERE user_id = ? AND item_id = ? AND type = 'core'",
+                    core.amount,
+                    user_id,
+                    core.item_id
+                )
+                .execute(&self.pool)
+                .await?;
+
+                // Remove item if amount becomes 0
+                sqlx::query!(
+                    "DELETE FROM user_item WHERE user_id = ? AND item_id = ? AND type = 'core' AND amount <= 0",
+                    user_id,
+                    core.item_id
+                )
+                .execute(&self.pool)
+                .await?;
+            }
+        }
+
+        // Update character uncap state
+        sqlx::query!(
+            "UPDATE user_char SET is_uncapped = 1, is_uncapped_override = 0 WHERE user_id = ? AND character_id = ?",
+            user_id,
+            character_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Return updated character info
+        self.get_user_character_info(user_id, character_id).await
+    }
+
+    /// Upgrade character with experience
+    pub async fn upgrade_character(
+        &self,
+        user_id: i32,
+        character_id: i32,
+        exp_addition: f64,
+    ) -> ArcResult<UserCharacterInfo> {
+        if exp_addition == 0.0 {
+            return self.get_user_character_info(user_id, character_id).await;
+        }
+
+        if CONFIG.character_full_unlock {
+            return Err(ArcError::Base {
+                message: "All characters are available.".to_string(),
+                error_code: 108,
+                api_error_code: -100,
+                extra_data: None,
+                status: 200,
+            });
+        }
+
+        // Get current character info
+        let mut char_info = self.get_user_character_info(user_id, character_id).await?;
+
+        // Set max level based on uncap state
+        char_info.level.max_level = if char_info.is_uncapped { 30 } else { 20 };
+
+        // Add experience and calculate new level
+        char_info.level.add_exp(exp_addition)?;
+
+        // Update database
+        let _table_name = self.get_user_char_table();
+        if CONFIG.character_full_unlock {
+            sqlx::query!(
+                "UPDATE user_char_full SET level = ?, exp = ? WHERE user_id = ? AND character_id = ?",
+                char_info.level.level,
+                char_info.level.exp,
+                user_id,
+                character_id
+            )
+            .execute(&self.pool)
+            .await?;
+        } else {
+            sqlx::query!(
+                "UPDATE user_char SET level = ?, exp = ? WHERE user_id = ? AND character_id = ?",
+                char_info.level.level,
+                char_info.level.exp,
+                user_id,
+                character_id
+            )
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(char_info)
+    }
+
+    /// Upgrade character using core items (ether drops)
+    pub async fn upgrade_character_by_core(
+        &self,
+        user_id: i32,
+        character_id: i32,
+        core_amount: i32,
+    ) -> ArcResult<UserCharacterInfo> {
+        if core_amount >= 0 {
+            return Err(ArcError::input(
+                "The amount of `core_generic` should be negative.",
+            ));
+        }
+
+        // Check if user has enough core_generic
+        let user_amount = sqlx::query_scalar!(
+            "SELECT amount FROM user_item WHERE user_id = ? AND item_id = 'core_generic' AND type = 'core'",
+            user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .flatten()
+        .unwrap_or(0);
+
+        if (-core_amount) > user_amount {
+            return Err(ArcError::ItemNotEnough {
+                message: "Not enough core_generic.".to_string(),
+                error_code: 108,
+                api_error_code: -100,
+                extra_data: None,
+                status: 200,
+            });
+        }
+
+        // Consume cores
+        sqlx::query!(
+            "UPDATE user_item SET amount = amount + ? WHERE user_id = ? AND item_id = 'core_generic' AND type = 'core'",
+            core_amount,
+            user_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Remove item if amount becomes 0
+        sqlx::query!(
+            "DELETE FROM user_item WHERE user_id = ? AND item_id = 'core_generic' AND type = 'core' AND amount <= 0",
+            user_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Calculate exp to add
+        let exp_addition = (-core_amount) as f64 * Constants::CORE_EXP as f64;
+
+        // Upgrade character
+        self.upgrade_character(user_id, character_id, exp_addition)
+            .await
+    }
+
+    /// Change character skill state (for Maya)
+    pub async fn change_character_skill_state(
+        &self,
+        user_id: i32,
+        character_id: i32,
+    ) -> ArcResult<()> {
+        let _table_name = self.get_user_char_table();
+
+        // Toggle skill flag
+        if CONFIG.character_full_unlock {
+            sqlx::query!(
+                "UPDATE user_char_full SET skill_flag = 1 - skill_flag WHERE user_id = ? AND character_id = ?",
+                user_id,
+                character_id
+            )
+            .execute(&self.pool)
+            .await?;
+        } else {
+            sqlx::query!(
+                "UPDATE user_char SET skill_flag = 1 - skill_flag WHERE user_id = ? AND character_id = ?",
                 user_id,
                 character_id
             )
@@ -204,39 +649,49 @@ impl CharacterService {
         Ok(())
     }
 
-    /// Update character skill flag
-    pub async fn update_character_skill_flag(
-        &self,
-        user_id: i32,
-        character_id: i32,
-        skill_flag: i32,
-    ) -> ArcResult<()> {
-        sqlx::query!(
-            "UPDATE user_char SET skill_flag = ? WHERE user_id = ? AND character_id = ?",
-            skill_flag,
-            user_id,
-            character_id
-        )
-        .execute(&self.pool)
-        .await?;
+    /// Get all characters owned by a user
+    pub async fn get_user_characters(&self, user_id: i32) -> ArcResult<Vec<UserCharacter>> {
+        let user_chars = if CONFIG.character_full_unlock {
+            let rows = sqlx::query!(
+                "SELECT user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag FROM user_char_full WHERE user_id = ?",
+                user_id
+            )
+            .fetch_all(&self.pool)
+            .await?;
 
-        Ok(())
-    }
+            rows.into_iter()
+                .map(|row| UserCharacter {
+                    user_id: row.user_id,
+                    character_id: row.character_id,
+                    level: row.level.unwrap_or(1),
+                    exp: row.exp.unwrap_or(0.0),
+                    is_uncapped: row.is_uncapped.unwrap_or(0) as i8,
+                    is_uncapped_override: row.is_uncapped_override.unwrap_or(0) as i8,
+                    skill_flag: row.skill_flag.unwrap_or(0),
+                })
+                .collect()
+        } else {
+            let rows = sqlx::query!(
+                "SELECT user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag FROM user_char WHERE user_id = ?",
+                user_id
+            )
+            .fetch_all(&self.pool)
+            .await?;
 
-    /// Get character base information
-    pub async fn get_character_info(&self, character_id: i32) -> ArcResult<Option<Character>> {
-        let character = sqlx::query_as!(
-            Character,
-            "SELECT character_id, name, max_level, frag1, prog1, overdrive1, frag20, prog20, overdrive20,
-             frag30, prog30, overdrive30, skill_id, skill_unlock_level, skill_requires_uncap,
-             skill_id_uncap, char_type, is_uncapped
-             FROM `character` WHERE character_id = ?",
-            character_id
-        )
-        .fetch_optional(&self.pool)
-        .await?;
+            rows.into_iter()
+                .map(|row| UserCharacter {
+                    user_id: row.user_id,
+                    character_id: row.character_id,
+                    level: row.level.unwrap_or(1),
+                    exp: row.exp.unwrap_or(0.0),
+                    is_uncapped: row.is_uncapped.unwrap_or(0) as i8,
+                    is_uncapped_override: row.is_uncapped_override.unwrap_or(0) as i8,
+                    skill_flag: row.skill_flag.unwrap_or(0),
+                })
+                .collect()
+        };
 
-        Ok(character)
+        Ok(user_chars)
     }
 
     /// Get all available characters
@@ -282,13 +737,25 @@ impl CharacterService {
 
     /// Remove a character from user (if needed for debugging or admin purposes)
     pub async fn remove_character(&self, user_id: i32, character_id: i32) -> ArcResult<()> {
-        sqlx::query!(
-            "DELETE FROM user_char WHERE user_id = ? AND character_id = ?",
-            user_id,
-            character_id
-        )
-        .execute(&self.pool)
-        .await?;
+        let _table_name = self.get_user_char_table();
+
+        if CONFIG.character_full_unlock {
+            sqlx::query!(
+                "DELETE FROM user_char_full WHERE user_id = ? AND character_id = ?",
+                user_id,
+                character_id
+            )
+            .execute(&self.pool)
+            .await?;
+        } else {
+            sqlx::query!(
+                "DELETE FROM user_char WHERE user_id = ? AND character_id = ?",
+                user_id,
+                character_id
+            )
+            .execute(&self.pool)
+            .await?;
+        }
 
         Ok(())
     }
@@ -315,10 +782,18 @@ impl CharacterService {
 
     /// Get character count for user
     pub async fn get_user_character_count(&self, user_id: i32) -> ArcResult<i64> {
-        let count =
+        let count = if CONFIG.character_full_unlock {
+            sqlx::query_scalar!(
+                "SELECT COUNT(*) FROM user_char_full WHERE user_id = ?",
+                user_id
+            )
+            .fetch_one(&self.pool)
+            .await?
+        } else {
             sqlx::query_scalar!("SELECT COUNT(*) FROM user_char WHERE user_id = ?", user_id)
                 .fetch_one(&self.pool)
-                .await?;
+                .await?
+        };
 
         Ok(count)
     }

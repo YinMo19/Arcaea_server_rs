@@ -4,6 +4,7 @@ use crate::model::{
     Character, User, UserAuth, UserCodeMapping, UserCredentials, UserExists, UserInfo,
     UserLoginDevice, UserLoginDto, UserRegisterDto,
 };
+use crate::service::CharacterService;
 use base64::{engine::general_purpose, Engine as _};
 use rand::Rng;
 use sha2::{Digest, Sha256};
@@ -14,12 +15,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// User service for handling user operations
 pub struct UserService {
     pool: Pool<MySql>,
+    character_service: CharacterService,
 }
 
 impl UserService {
     /// Create a new user service instance
     pub fn new(pool: Pool<MySql>) -> Self {
-        Self { pool }
+        let character_service = CharacterService::new(pool.clone());
+        Self {
+            pool,
+            character_service,
+        }
     }
 
     /// Get current timestamp in milliseconds
@@ -689,51 +695,12 @@ impl UserService {
         user_id: i32,
         character_id: i32,
     ) -> ArcResult<serde_json::Value> {
-        // Get current uncap status
-        let char_info = sqlx::query!(
-            "SELECT is_uncapped, is_uncapped_override FROM user_char WHERE user_id = ? AND character_id = ?",
-            user_id,
-            character_id
-        )
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or_else(|| ArcError::no_data("Character not found", 108, -130))?;
+        let character_info = self
+            .character_service
+            .toggle_character_uncap_override(user_id, character_id)
+            .await?;
 
-        if char_info.is_uncapped.unwrap_or(0) == 0 {
-            return Err(ArcError::input("Character not uncapped"));
-        }
-
-        let new_override = if char_info.is_uncapped_override.unwrap_or(0) == 0 {
-            1
-        } else {
-            0
-        };
-
-        // Update user table
-        sqlx::query!(
-            "UPDATE user SET is_char_uncapped_override = ? WHERE user_id = ?",
-            new_override,
-            user_id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        // Update user_char table
-        sqlx::query!(
-            "UPDATE user_char SET is_uncapped_override = ? WHERE user_id = ? AND character_id = ?",
-            new_override,
-            user_id,
-            character_id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        // Return character info
-        Ok(serde_json::json!({
-            "character_id": character_id,
-            "is_uncapped": char_info.is_uncapped.unwrap_or(0) == 1,
-            "is_uncapped_override": new_override == 1
-        }))
+        Ok(serde_json::to_value(character_info.to_dict())?)
     }
 
     /// Perform character uncap
@@ -741,27 +708,18 @@ impl UserService {
     /// Uncaps a character using required fragments/cores.
     pub async fn character_uncap(
         &self,
-        _user_id: i32,
+        user_id: i32,
         character_id: i32,
     ) -> ArcResult<(serde_json::Value, serde_json::Value)> {
-        // TODO: Implement character uncap logic
-        // This would involve:
-        // 1. Check if character is already uncapped
-        // 2. Check required cores/fragments
-        // 3. Deduct cores/fragments from user inventory
-        // 4. Update character uncap status
+        let character_info = self
+            .character_service
+            .character_uncap(user_id, character_id)
+            .await?;
 
-        // For now, return placeholder
-        let character_info = serde_json::json!({
-            "character_id": character_id,
-            "is_uncapped": true
-        });
+        // Get user cores after uncap
+        let cores = self.get_user_cores(user_id).await?;
 
-        let cores = serde_json::json!({
-            "core_generic": 0
-        });
-
-        Ok((character_info, cores))
+        Ok((serde_json::to_value(character_info.to_dict())?, cores))
     }
 
     /// Upgrade character using cores
@@ -769,29 +727,19 @@ impl UserService {
     /// Uses ether drops (core_generic) to upgrade character experience.
     pub async fn upgrade_character_by_core(
         &self,
-        _user_id: i32,
+        user_id: i32,
         character_id: i32,
-        _amount: i32,
+        amount: i32,
     ) -> ArcResult<(serde_json::Value, serde_json::Value)> {
-        // TODO: Implement character upgrade logic
-        // This would involve:
-        // 1. Check user has enough cores
-        // 2. Deduct cores from inventory
-        // 3. Add experience to character
-        // 4. Update character level if needed
+        let character_info = self
+            .character_service
+            .upgrade_character_by_core(user_id, character_id, -amount)
+            .await?;
 
-        // For now, return placeholder
-        let character_info = serde_json::json!({
-            "character_id": character_id,
-            "exp": 1000,
-            "level": 20
-        });
+        // Get user cores after upgrade
+        let cores = self.get_user_cores(user_id).await?;
 
-        let cores = serde_json::json!({
-            "core_generic": 100
-        });
-
-        Ok((character_info, cores))
+        Ok((serde_json::to_value(character_info.to_dict())?, cores))
     }
 
     /// Get user's cloud save data
@@ -1039,5 +987,24 @@ impl UserService {
         transaction.commit().await?;
 
         Ok(())
+    }
+
+    /// Get user cores (for API responses)
+    ///
+    /// Returns user's core inventory as JSON.
+    async fn get_user_cores(&self, user_id: i32) -> ArcResult<serde_json::Value> {
+        let cores = sqlx::query!(
+            "SELECT item_id, amount FROM user_item WHERE user_id = ? AND type = 'core'",
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut cores_map = std::collections::HashMap::new();
+        for core in cores {
+            cores_map.insert(core.item_id, core.amount);
+        }
+
+        Ok(serde_json::to_value(cores_map)?)
     }
 }
