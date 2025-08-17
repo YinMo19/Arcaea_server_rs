@@ -62,7 +62,6 @@ pub struct UserRegisterDto {
     pub name: String,
     pub password: String,
     pub email: String,
-    pub user_code: Option<String>,
 }
 
 /// User login data transfer object

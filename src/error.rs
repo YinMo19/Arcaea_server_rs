@@ -1,3 +1,4 @@
+use rocket::serde::json::Value;
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -393,3 +394,53 @@ impl From<std::io::Error> for ArcError {
 
 /// Alias for Result with ArcError
 pub type ArcResult<T> = Result<T, ArcError>;
+
+/// 404 Not Found handler
+#[rocket::catch(404)]
+pub fn not_found() -> Value {
+    rocket::serde::json::json!({
+        "success": false,
+        "error_code": 404,
+        "message": "Endpoint not found"
+    })
+}
+
+/// 500 Internal Server Error handler
+#[rocket::catch(500)]
+pub fn internal_error() -> Value {
+    rocket::serde::json::json!({
+        "success": false,
+        "error_code": 500,
+        "message": "Internal server error"
+    })
+}
+
+/// 400 Bad Request handler
+#[rocket::catch(400)]
+pub fn bad_request() -> Value {
+    rocket::serde::json::json!({
+        "success": false,
+        "error_code": 400,
+        "message": "Bad request"
+    })
+}
+
+/// 401 Unauthorized handler
+#[rocket::catch(401)]
+pub fn unauthorized() -> Value {
+    rocket::serde::json::json!({
+        "success": false,
+        "error_code": 401,
+        "message": "Unauthorized"
+    })
+}
+
+/// 403 Forbidden handler
+#[rocket::catch(403)]
+pub fn forbidden() -> Value {
+    rocket::serde::json::json!({
+        "success": false,
+        "error_code": 403,
+        "message": "Forbidden"
+    })
+}

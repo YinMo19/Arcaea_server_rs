@@ -2,18 +2,18 @@ use crate::error::ArcError;
 use crate::model::{UserLoginDto, UserRegisterDto};
 use crate::route::common::{success_return, AuthGuard, RouteResult};
 use crate::service::UserService;
+use rocket::form::Form;
 use rocket::serde::json::Json;
-use rocket::{get, post, routes, Route, State};
+use rocket::{get, post, routes, FromForm, Route, State};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// User registration request payload
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, FromForm)]
 pub struct RegisterRequest {
     pub name: String,
     pub password: String,
     pub email: String,
-    pub user_code: Option<String>,
     pub device_id: Option<String>,
 }
 
@@ -37,23 +37,22 @@ pub struct AuthResponse {
 /// Registers a new user account with the provided credentials.
 /// Validates input data, checks for existing users, and creates
 /// a new account with initial character data.
-#[post("/register", data = "<request>")]
+#[post("/", data = "<register_info>")]
 pub async fn register(
     user_service: &State<UserService>,
-    request: Json<RegisterRequest>,
+    register_info: Form<RegisterRequest>,
     // Note: ClientRealIp is not available in current Rocket version
     // Using Option<String> as placeholder for IP extraction
 ) -> RouteResult<AuthResponse> {
     let register_data = UserRegisterDto {
-        name: request.name.clone(),
-        password: request.password.clone(),
-        email: request.email.clone(),
-        user_code: request.user_code.clone(),
+        name: register_info.name.clone(),
+        password: register_info.password.clone(),
+        email: register_info.email.clone(),
     };
 
     // TODO: Extract real IP from request headers
     let ip: Option<String> = None;
-    let device_id = request.device_id.clone();
+    let device_id = register_info.device_id.clone();
 
     let user_auth = user_service
         .register_user(register_data, device_id, ip)

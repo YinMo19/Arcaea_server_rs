@@ -109,7 +109,7 @@ pub mod constants {
     pub use crate::config::Constants;
 
     /// API version paths
-    pub const GAME_API_PREFIX: &str = "/coldwind/35";
+    pub const GAME_API_PREFIX: &str = "/yinmo/30";
     pub const OLD_GAME_API_PREFIX: &[&str] = &[];
 
     /// Default values

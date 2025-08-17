@@ -248,9 +248,9 @@ lazy_static! {
 }
 
 /// Server version information
-pub const ARCAEA_SERVER_VERSION: &str = "v2.12.0.4";
-pub const ARCAEA_DATABASE_VERSION: &str = "v2.12.0.4";
-pub const ARCAEA_LOG_DATABASE_VERSION: &str = "v1.1";
+pub const ARCAEA_SERVER_VERSION: &str = "v0.1.0";
+pub const ARCAEA_DATABASE_VERSION: &str = "v0.1.0";
+pub const ARCAEA_LOG_DATABASE_VERSION: &str = "v0.1.0";
 
 /// Rate limiting configuration
 #[derive(Debug, Clone)]

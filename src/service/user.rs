@@ -214,24 +214,19 @@ impl UserService {
         _ip: Option<String>,
     ) -> ArcResult<UserAuth> {
         // TODO: Implement rate limiting for IP and device
-        // if let Some(device_id) = &device_id {
-        //     self.check_device_rate_limit(device_id).await?;
-        // }
         // if let Some(ip) = &ip {
         //     self.check_ip_rate_limit(ip).await?;
         // }
 
+        // if let Some(device_id) = &device_id {
+        //     self.check_device_rate_limit(device_id).await?;
+        // }
         // Validate input data
         self.validate_username(&user_data.name).await?;
         Self::validate_password(&user_data.password)?;
         self.validate_email(&user_data.email).await?;
 
-        let user_code = if let Some(code) = user_data.user_code {
-            self.validate_user_code(&code).await?;
-            code
-        } else {
-            self.generate_user_code().await?
-        };
+        let user_code = self.generate_user_code().await?;
 
         let user_id = self.generate_user_id().await?;
         let join_date = Self::current_timestamp();

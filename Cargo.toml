@@ -29,6 +29,10 @@ md5 = "0.7"
 openssl = { version = "0.10", features = ["vendored"], optional = true }
 rustls = { version = "0.22", optional = true }
 dotenv = "0.15.0"
+log = "0.4.27"
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
+rocket_prometheus = "0.10.1"
 
 [dependencies.rocket_db_pools]
 version = "0.2.0"

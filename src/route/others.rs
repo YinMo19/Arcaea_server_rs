@@ -3,9 +3,7 @@ use crate::error::ArcError;
 
 use crate::route::common::{success_return, AuthGuard, EmptyResponse, RouteResult};
 use crate::service::bundle::BundleDownloadResponse;
-use crate::service::{
-    BundleService, CharacterService, DownloadService, NotificationService, UserService,
-};
+use crate::service::{BundleService, CharacterService, NotificationService, UserService};
 use rocket::serde::json::Json;
 use rocket::{get, post, routes, Route, State};
 use serde::{Deserialize, Serialize};
@@ -122,43 +120,6 @@ pub async fn game_content_bundle(
     let response = BundleDownloadResponse { ordered_results };
 
     Ok(success_return(response))
-}
-
-/// Song download endpoint
-///
-/// Provides download URLs for requested songs.
-/// Requires authentication and handles rate limiting.
-#[get("/serve/download/me/song?<sid>&<url>")]
-pub async fn download_song(
-    download_service: &State<DownloadService>,
-    user_service: &State<UserService>,
-    auth: AuthGuard,
-    sid: Vec<String>,
-    url: Option<bool>,
-) -> RouteResult<Vec<String>> {
-    let url_flag = url.unwrap_or(true);
-
-    if url_flag {
-        // Check if user has reached download limit
-        let is_limited = download_service.check_download_limit(auth.user_id).await?;
-        if is_limited {
-            return Err(ArcError::rate_limit(
-                "You have reached the download limit.",
-                903,
-                -999,
-            ));
-        }
-    }
-
-    // Get user info for download processing
-    let user = user_service.get_user_info(auth.user_id).await?;
-
-    // Generate download URLs for requested songs
-    let urls = download_service
-        .get_download_urls(&user, &sid, url_flag)
-        .await?;
-
-    Ok(success_return(urls))
 }
 
 /// Finale start endpoint
@@ -298,7 +259,6 @@ pub fn routes() -> Vec<Route> {
         game_info,
         notification_me,
         game_content_bundle,
-        download_song,
         finale_start,
         finale_end,
         insight_complete,
