@@ -1,3 +1,4 @@
+use crate::context::ClientContext;
 use crate::error::ArcError;
 use crate::model::{UserLoginDto, UserRegisterDto};
 use crate::route::common::{success_return, AuthGuard, RouteResult};
@@ -41,8 +42,7 @@ pub struct AuthResponse {
 pub async fn register(
     user_service: &State<UserService>,
     register_info: Form<RegisterRequest>,
-    // Note: ClientRealIp is not available in current Rocket version
-    // Using Option<String> as placeholder for IP extraction
+    ctx: ClientContext,
 ) -> RouteResult<AuthResponse> {
     let register_data = UserRegisterDto {
         name: register_info.name.clone(),
@@ -50,9 +50,11 @@ pub async fn register(
         email: register_info.email.clone(),
     };
 
-    // TODO: Extract real IP from request headers
-    let ip: Option<String> = None;
-    let device_id = register_info.device_id.clone();
+    let ip = ctx.get_client_ip();
+    let device_id = register_info
+        .device_id
+        .clone()
+        .or_else(|| ctx.get_device_id());
 
     let user_auth = user_service
         .register_user(register_data, device_id, ip)
@@ -75,8 +77,7 @@ pub async fn register(
 pub async fn login(
     user_service: &State<UserService>,
     request: Json<LoginRequest>,
-    // Note: ClientRealIp is not available in current Rocket version
-    // Using Option<String> as placeholder for IP extraction
+    ctx: ClientContext,
 ) -> RouteResult<AuthResponse> {
     let login_data = UserLoginDto {
         name: request.name.clone(),
@@ -84,8 +85,7 @@ pub async fn login(
         device_id: request.device_id.clone(),
     };
 
-    // TODO: Extract real IP from request headers
-    let ip: Option<String> = None;
+    let ip = ctx.get_client_ip();
 
     let user_auth = user_service.login_user(login_data, ip).await?;
 
@@ -248,6 +248,231 @@ pub async fn auth_test(auth: AuthGuard) -> RouteResult<HashMap<String, serde_jso
     Ok(success_return(response))
 }
 
+/// Toggle insight/invasion skill endpoint
+///
+/// Toggles the user's insight state for invasion skill.
+#[post("/me/toggle_invasion")]
+pub async fn toggle_invasion(
+    user_service: &State<UserService>,
+    auth: AuthGuard,
+) -> RouteResult<serde_json::Value> {
+    let user_info = user_service.toggle_invasion(auth.user_id).await?;
+
+    let response = serde_json::json!({
+        "user_id": auth.user_id,
+        "insight_state": user_info.insight_state
+    });
+
+    Ok(success_return(response))
+}
+
+/// Character change endpoint
+///
+/// Changes the user's current character and skill sealed state.
+#[derive(Debug, Deserialize, FromForm)]
+pub struct CharacterChangeRequest {
+    pub character: i32,
+    pub skill_sealed: String,
+}
+
+#[post("/me/character", data = "<request>")]
+pub async fn character_change(
+    user_service: &State<UserService>,
+    auth: AuthGuard,
+    request: Form<CharacterChangeRequest>,
+) -> RouteResult<serde_json::Value> {
+    let is_skill_sealed = request.skill_sealed == "true";
+
+    user_service
+        .change_character(auth.user_id, request.character, is_skill_sealed)
+        .await?;
+
+    let response = serde_json::json!({
+        "user_id": auth.user_id,
+        "character": request.character
+    });
+
+    Ok(success_return(response))
+}
+
+/// Toggle character uncap override endpoint
+///
+/// Toggles the uncap override state for a specific character.
+#[post("/me/character/<character_id>/toggle_uncap")]
+pub async fn toggle_uncap(
+    user_service: &State<UserService>,
+    auth: AuthGuard,
+    character_id: i32,
+) -> RouteResult<serde_json::Value> {
+    let character_info = user_service
+        .toggle_character_uncap_override(auth.user_id, character_id)
+        .await?;
+
+    let response = serde_json::json!({
+        "user_id": auth.user_id,
+        "character": [character_info]
+    });
+
+    Ok(success_return(response))
+}
+
+/// Character first uncap endpoint
+///
+/// Performs the first uncap of a character using fragments.
+#[post("/me/character/<character_id>/uncap")]
+pub async fn character_first_uncap(
+    user_service: &State<UserService>,
+    auth: AuthGuard,
+    character_id: i32,
+) -> RouteResult<serde_json::Value> {
+    let (character_info, cores) = user_service
+        .character_uncap(auth.user_id, character_id)
+        .await?;
+
+    let response = serde_json::json!({
+        "user_id": auth.user_id,
+        "character": [character_info],
+        "cores": cores
+    });
+
+    Ok(success_return(response))
+}
+
+/// Character experience upgrade endpoint
+///
+/// Uses ether drops to upgrade character experience.
+#[derive(Debug, Deserialize, FromForm)]
+pub struct CharacterExpRequest {
+    pub amount: i32,
+}
+
+#[post("/me/character/<character_id>/exp", data = "<request>")]
+pub async fn character_exp(
+    user_service: &State<UserService>,
+    auth: AuthGuard,
+    character_id: i32,
+    request: Form<CharacterExpRequest>,
+) -> RouteResult<serde_json::Value> {
+    let (character_info, cores) = user_service
+        .upgrade_character_by_core(auth.user_id, character_id, request.amount)
+        .await?;
+
+    let response = serde_json::json!({
+        "user_id": auth.user_id,
+        "character": [character_info],
+        "cores": cores
+    });
+
+    Ok(success_return(response))
+}
+
+/// Cloud save get endpoint
+///
+/// Retrieves user's cloud save data.
+#[get("/me/save")]
+pub async fn cloud_get(
+    user_service: &State<UserService>,
+    auth: AuthGuard,
+) -> RouteResult<serde_json::Value> {
+    let save_data = user_service.get_user_save_data(auth.user_id).await?;
+    Ok(success_return(save_data))
+}
+
+/// Cloud save post endpoint
+///
+/// Updates user's cloud save data.
+#[derive(Debug, Deserialize, FromForm)]
+pub struct CloudSaveRequest {
+    pub scores_data: String,
+    pub scores_checksum: String,
+    pub clearlamps_data: String,
+    pub clearlamps_checksum: String,
+    pub clearedsongs_data: String,
+    pub clearedsongs_checksum: String,
+    pub unlocklist_data: String,
+    pub unlocklist_checksum: String,
+    pub installid_data: String,
+    pub installid_checksum: String,
+    pub devicemodelname_data: String,
+    pub devicemodelname_checksum: String,
+    pub story_data: String,
+    pub story_checksum: String,
+    pub finalestate_data: Option<String>,
+    pub finalestate_checksum: Option<String>,
+}
+
+#[post("/me/save", data = "<request>")]
+pub async fn cloud_post(
+    user_service: &State<UserService>,
+    auth: AuthGuard,
+    request: Form<CloudSaveRequest>,
+) -> RouteResult<serde_json::Value> {
+    user_service
+        .update_user_save_data(auth.user_id, &*request)
+        .await?;
+
+    let response = serde_json::json!({
+        "user_id": auth.user_id
+    });
+
+    Ok(success_return(response))
+}
+
+/// System settings endpoint
+///
+/// Updates various user settings.
+#[derive(Debug, Deserialize, FromForm)]
+pub struct SettingRequest {
+    pub value: String,
+}
+
+#[post("/me/setting/<set_arg>", data = "<request>")]
+pub async fn sys_set(
+    user_service: &State<UserService>,
+    auth: AuthGuard,
+    set_arg: String,
+    request: Form<SettingRequest>,
+) -> RouteResult<serde_json::Value> {
+    let user_info = user_service
+        .update_user_setting(auth.user_id, &set_arg, &request.value)
+        .await?;
+
+    let user_json = serde_json::to_value(&user_info).map_err(|e| ArcError::Json {
+        message: e.to_string(),
+    })?;
+
+    Ok(success_return(user_json))
+}
+
+/// User account deletion endpoint
+///
+/// Requests deletion of the user's account.
+#[post("/me/request_delete")]
+pub async fn user_delete(
+    user_service: &State<UserService>,
+    auth: AuthGuard,
+) -> RouteResult<serde_json::Value> {
+    user_service.delete_user_account(auth.user_id).await?;
+
+    let response = serde_json::json!({
+        "user_id": auth.user_id
+    });
+
+    Ok(success_return(response))
+}
+
+/// Email verification resend endpoint
+///
+/// Resends email verification (currently unavailable).
+#[post("/email/resend_verify")]
+pub async fn email_resend_verify() -> RouteResult<serde_json::Value> {
+    Err(ArcError::no_data(
+        "Email verification unavailable.",
+        151,
+        -1,
+    ))
+}
+
 /// Get all user routes
 pub fn routes() -> Vec<Route> {
     routes![
@@ -257,6 +482,16 @@ pub fn routes() -> Vec<Route> {
         logout,
         user_by_code,
         update_user,
-        auth_test
+        auth_test,
+        toggle_invasion,
+        character_change,
+        toggle_uncap,
+        character_first_uncap,
+        character_exp,
+        cloud_get,
+        cloud_post,
+        sys_set,
+        user_delete,
+        email_resend_verify
     ]
 }

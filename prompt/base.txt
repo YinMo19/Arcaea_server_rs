@@ -1,1 +1,20 @@
-我正在打算用 rust 重写一个 python flask 实现的后端服务。我已经简单构想了整个项目的模样，我想让你阅读 python 源代码并帮我实现。数据库方面，我打算使用 mariadb，并使用 sqlx 操作。我希望你尽量使用 query! query_as! query_scale!宏，在编译期判断 sql 正确性，并且尽可能的使用 struct 直接映射到 sql 内部的表格，而非使用 row.get 获取，因此我可以给你一个 mysql://arcaea:yinmo19sprivite@localhost:3306/arcaea_core 这样的实际可用的 mariadb 实例供参考。 另外数据库结构我已经设计好了（从 python 版本相似的结构） 你必须阅读这个数据库迁移作为整个数据库结构的构想。我已经完成了迁移，python 版本在 py_version文件夹内，这个文件夹目前处于 gitignore 状态，你是用 function call 可能无法 grep 其中内容，想要查找文件或者查找内容直接使用命令行的 grep 和 find。你必须阅读 python 的代码 ，每一行和每一个实现都完全摸清了才能开始写 rust 版本的内容，由于提前约定好了 api，因此你必须保证 python 版本的 api 和 rust 版本的 api 完全一致，不能有任何区别，否则将会引起错误。我已经初步实现 core 文件夹下的 others 和 user ，我希望你继续帮我完成 download 和 score 模块。一些结构上的想法（已经初步实现，你需要保证与之前实现的一致性）：我希望你去阅读 python 版本的错误，并根据他的错误处理方式来专门给我产生处理错误的文件。我期望你使用 thiserror 来处理所有错误。所有 api 最后都返回 result T, ArcError 这里的 错误是 thiserror 的一个 enum。  除此之外，我希望我的整个项目是一个 service 和 route 分离的结构。我希望这样，一个 service 文件夹和一个 route 文件夹，以及一个对应的 model 文件，分别处理主要逻辑，路由以及数据库对应的结构。python 的代码是正确的实现，你只需要根据 python 的逻辑完成 rust 的重写即可。  最后我的要求是，所有对函数的详细文档都直接写在 rust 函数的上方的函数文档内，对功能进行详细描述即可。不要另外开 markdown 来写文档，毫无必要，任何进展直接告诉我即可。在写完之后记得 cargo check 保证能够过编译。python 版本无论多复杂都不允许你做任何简化，除非你能保证最后逻辑结果完全一致，否则保持一模一样的实现，不要自作聪明。对于暂时无法完成的模块允许使用 todo 保留。
+我正在打算用 rust 重写一个 python flask 实现的后端服务。我已经简单构想了整个项目的模样，我想让你阅读 python 源代码并帮我实现。
+
+数据库方面，我打算使用 mariadb，并使用 sqlx 操作。我希望你尽量使用 query! query_as! query_scale!宏，在编译期判断 sql 正确性，并且尽可能的使用 struct 直接映射到 sql 内部的表格，而非使用 row.get 获取，因此我可以给你一个 mysql://arcaea:yinmo19sprivite@localhost:3306/arcaea_core 这样的实际可用的 mariadb 实例供参考。 另外数据库结构我已经设计好了（从 python 版本相似的结构） 你必须阅读这个数据库迁移作为整个数据库结构的构想,我已经完成了迁移。
+
+python 版本在 py_version文件夹内，这个文件夹目前处于 gitignore 状态，你是用 function call 可能无法 grep 其中内容，想要查找文件或者查找内容直接使用命令行的 grep 和 find。你必须阅读 python 的代码 ，每一行和每一个实现都完全摸清了才能开始写 rust 版本的内容，由于提前约定好了 api，因此你必须保证 python 版本的 api 和 rust 版本的 api 完全一致，不能有任何区别，否则将会引起错误。
+
+关于 python 版本的结构，路由相关的文件在 server 文件夹下面，而核心逻辑在 core 下面。你必须要保证我的路由和 server 下面定义的路由完全一致，而我的 service 逻辑和 python 版本的 core 逻辑一致。
+
+我已经初步实现 core 文件夹下的 others 和 user 以及 download 和 score 模块 ，但是现在的实现并不完整，我希望你帮我实现接下来两个内容: 创建一个上下文 ctx 作为 dataguard，这个 ctx 的目的是为了获取客户端的 ip 和一些客户端信息，例如 cookie。目前代码中不少 todo 是关于客户端 ip 无法获取，你在完成这个 ctx 之后可以直接加入特定 route 的函数参数，然后完成 todo 部分。其次请你详细阅读 python 版本的 user 路由，查看现在的 rust 版本的路由然后实现每个部分。
+
+一些结构上的想法（已经初步实现，你需要保证与之前实现的一致性）：我希望你去阅读 python 版本的错误，并根据他的错误处理方式来专门给我产生处理错误的文件。我期望你使用 thiserror 来处理所有错误。所有 api 最后都返回 result T, ArcError 这里的 错误是 thiserror 的一个 enum。  除此之外，我希望我的整个项目是一个 service 和 route 分离的结构。我希望这样，一个 service 文件夹和一个 route 文件夹，以及一个对应的 model 文件，分别处理主要逻辑，路由以及数据库对应的结构。python 的代码是正确的实现，你只需要根据 python 的逻辑完成 rust 的重写即可。代码风格上保持和现有代码一致，我的一个要求是尽量把所有 struct 全部放在对应的 model 内， service 单文件不超过 1000 行。
+
+最后我的要求是，你要假设你是 linus，对代码的要求是简洁和可用性高于一切。 所有对函数的详细文档都直接写在 rust 函数的上方的函数文档内，对功能进行详细描述即可。不要另外开 markdown 来写文档，毫无必要，任何进展直接告诉我即可。
+ 在写完之后记得 cargo check 保证能够过编译。如果你确认能过通过编译，那么可以进行测试，如果你需要测试，直接用最简单的 curl -X POST "http://localhost:8090/user" \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -d "name=ciallo" \
+     -d "password=0d000721" \
+     -d "email=arcaea@yinmo19.top" \
+     -d "device_id=0ed5525d2a77e201" 这样的 curl 直接使用命令行测试，我已经在后台跑起来一个最新的案例，你可以放心的直接 curl 来看看结果如何。不要新开任何的 test 文件来写一毫无用处的测试。如果你认为你的 curl 足够简单，就像我给的案例这样，你可以放在 scripts 下面，每个 curl 一个sh文件，上面的案例在 register.sh 内。
+ python 版本无论多复杂都不允许你做任何简化，除非你能保证最后逻辑结果完全一致，否则保持一模一样的实现，不要自作聪明。对于暂时无法完成的模块允许使用 todo 保留。

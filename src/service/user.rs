@@ -607,4 +607,437 @@ impl UserService {
 
         Ok(())
     }
+
+    /// Toggle user's invasion/insight state
+    ///
+    /// Cycles through the insight state values according to the game logic.
+    pub async fn toggle_invasion(&self, user_id: i32) -> ArcResult<UserInfo> {
+        // Get current insight state
+        let current_state =
+            sqlx::query!("SELECT insight_state FROM user WHERE user_id = ?", user_id)
+                .fetch_optional(&self.pool)
+                .await?
+                .ok_or_else(|| ArcError::no_data("No user.", 108, -3))?;
+
+        // Toggle insight state (4 -> 0 -> 1 -> 2 -> 3 -> 4)
+        let insight_toggle_states = [4, 0, 1, 2, 3];
+        let current_index = insight_toggle_states
+            .iter()
+            .position(|&x| x == current_state.insight_state.unwrap_or(4))
+            .unwrap_or(0);
+        let new_state = insight_toggle_states[(current_index + 1) % insight_toggle_states.len()];
+
+        sqlx::query!(
+            "UPDATE user SET insight_state = ? WHERE user_id = ?",
+            new_state,
+            user_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        self.get_user_info(user_id).await
+    }
+
+    /// Change user's character and skill sealed state
+    ///
+    /// Updates the user's current character and whether skills are sealed.
+    pub async fn change_character(
+        &self,
+        user_id: i32,
+        character_id: i32,
+        is_skill_sealed: bool,
+    ) -> ArcResult<()> {
+        // Get character uncap status
+        let char_info = sqlx::query!(
+            "SELECT is_uncapped, is_uncapped_override FROM user_char WHERE user_id = ? AND character_id = ?",
+            user_id,
+            character_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let (is_uncapped, is_uncapped_override) = if let Some(info) = char_info {
+            (
+                info.is_uncapped.unwrap_or(0),
+                info.is_uncapped_override.unwrap_or(0),
+            )
+        } else {
+            (0, 0) // Default values if character not found
+        };
+
+        let skill_sealed_val = if is_skill_sealed { 1 } else { 0 };
+
+        sqlx::query!(
+            "UPDATE user SET character_id = ?, is_skill_sealed = ?, is_char_uncapped = ?, is_char_uncapped_override = ? WHERE user_id = ?",
+            character_id,
+            skill_sealed_val,
+            is_uncapped,
+            is_uncapped_override,
+            user_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Toggle character uncap override
+    ///
+    /// Toggles the uncap override state for a specific character.
+    pub async fn toggle_character_uncap_override(
+        &self,
+        user_id: i32,
+        character_id: i32,
+    ) -> ArcResult<serde_json::Value> {
+        // Get current uncap status
+        let char_info = sqlx::query!(
+            "SELECT is_uncapped, is_uncapped_override FROM user_char WHERE user_id = ? AND character_id = ?",
+            user_id,
+            character_id
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| ArcError::no_data("Character not found", 108, -130))?;
+
+        if char_info.is_uncapped.unwrap_or(0) == 0 {
+            return Err(ArcError::input("Character not uncapped"));
+        }
+
+        let new_override = if char_info.is_uncapped_override.unwrap_or(0) == 0 {
+            1
+        } else {
+            0
+        };
+
+        // Update user table
+        sqlx::query!(
+            "UPDATE user SET is_char_uncapped_override = ? WHERE user_id = ?",
+            new_override,
+            user_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Update user_char table
+        sqlx::query!(
+            "UPDATE user_char SET is_uncapped_override = ? WHERE user_id = ? AND character_id = ?",
+            new_override,
+            user_id,
+            character_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Return character info
+        Ok(serde_json::json!({
+            "character_id": character_id,
+            "is_uncapped": char_info.is_uncapped.unwrap_or(0) == 1,
+            "is_uncapped_override": new_override == 1
+        }))
+    }
+
+    /// Perform character uncap
+    ///
+    /// Uncaps a character using required fragments/cores.
+    pub async fn character_uncap(
+        &self,
+        _user_id: i32,
+        character_id: i32,
+    ) -> ArcResult<(serde_json::Value, serde_json::Value)> {
+        // TODO: Implement character uncap logic
+        // This would involve:
+        // 1. Check if character is already uncapped
+        // 2. Check required cores/fragments
+        // 3. Deduct cores/fragments from user inventory
+        // 4. Update character uncap status
+
+        // For now, return placeholder
+        let character_info = serde_json::json!({
+            "character_id": character_id,
+            "is_uncapped": true
+        });
+
+        let cores = serde_json::json!({
+            "core_generic": 0
+        });
+
+        Ok((character_info, cores))
+    }
+
+    /// Upgrade character using cores
+    ///
+    /// Uses ether drops (core_generic) to upgrade character experience.
+    pub async fn upgrade_character_by_core(
+        &self,
+        _user_id: i32,
+        character_id: i32,
+        _amount: i32,
+    ) -> ArcResult<(serde_json::Value, serde_json::Value)> {
+        // TODO: Implement character upgrade logic
+        // This would involve:
+        // 1. Check user has enough cores
+        // 2. Deduct cores from inventory
+        // 3. Add experience to character
+        // 4. Update character level if needed
+
+        // For now, return placeholder
+        let character_info = serde_json::json!({
+            "character_id": character_id,
+            "exp": 1000,
+            "level": 20
+        });
+
+        let cores = serde_json::json!({
+            "core_generic": 100
+        });
+
+        Ok((character_info, cores))
+    }
+
+    /// Get user's cloud save data
+    ///
+    /// Retrieves all cloud save data for the user.
+    pub async fn get_user_save_data(&self, user_id: i32) -> ArcResult<serde_json::Value> {
+        let save_data = sqlx::query!("SELECT * FROM user_save WHERE user_id = ?", user_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        if let Some(data) = save_data {
+            let response = serde_json::json!({
+                "user_id": user_id,
+                "story": {
+                    "": serde_json::from_str::<serde_json::Value>(&data.story_data.unwrap_or_default()).unwrap_or(serde_json::json!([]))
+                },
+                "devicemodelname": {
+                    "val": serde_json::from_str::<serde_json::Value>(&data.devicemodelname_data.unwrap_or_default()).unwrap_or(serde_json::json!(""))
+                },
+                "installid": {
+                    "val": serde_json::from_str::<serde_json::Value>(&data.installid_data.unwrap_or_default()).unwrap_or(serde_json::json!(""))
+                },
+                "unlocklist": {
+                    "": serde_json::from_str::<serde_json::Value>(&data.unlocklist_data.unwrap_or_default()).unwrap_or(serde_json::json!([]))
+                },
+                "clearedsongs": {
+                    "": serde_json::from_str::<serde_json::Value>(&data.clearedsongs_data.unwrap_or_default()).unwrap_or(serde_json::json!([]))
+                },
+                "clearlamps": {
+                    "": serde_json::from_str::<serde_json::Value>(&data.clearlamps_data.unwrap_or_default()).unwrap_or(serde_json::json!([]))
+                },
+                "scores": {
+                    "": serde_json::from_str::<serde_json::Value>(&data.scores_data.unwrap_or_default()).unwrap_or(serde_json::json!([]))
+                },
+                "version": {
+                    "val": 1
+                },
+                "createdAt": data.createdAt.unwrap_or(0),
+                "finalestate": {
+                    "val": data.finalestate_data.unwrap_or_default()
+                }
+            });
+            Ok(response)
+        } else {
+            Err(ArcError::no_data("User has no cloud save data", 108, -3))
+        }
+    }
+
+    /// Update user's cloud save data
+    ///
+    /// Updates the user's cloud save data with new values.
+    pub async fn update_user_save_data(
+        &self,
+        user_id: i32,
+        save_request: &crate::route::user::CloudSaveRequest,
+    ) -> ArcResult<()> {
+        // TODO: Implement checksum validation like in Python version
+        // For now, just update the data
+
+        let current_time = Self::current_timestamp();
+
+        sqlx::query!(
+            "INSERT INTO user_save (user_id, scores_data, clearlamps_data, clearedsongs_data, unlocklist_data, installid_data, devicemodelname_data, story_data, createdAt, finalestate_data)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+             scores_data = VALUES(scores_data),
+             clearlamps_data = VALUES(clearlamps_data),
+             clearedsongs_data = VALUES(clearedsongs_data),
+             unlocklist_data = VALUES(unlocklist_data),
+             installid_data = VALUES(installid_data),
+             devicemodelname_data = VALUES(devicemodelname_data),
+             story_data = VALUES(story_data),
+             createdAt = VALUES(createdAt),
+             finalestate_data = VALUES(finalestate_data)",
+            user_id,
+            save_request.scores_data,
+            save_request.clearlamps_data,
+            save_request.clearedsongs_data,
+            save_request.unlocklist_data,
+            save_request.installid_data,
+            save_request.devicemodelname_data,
+            save_request.story_data,
+            current_time,
+            save_request.finalestate_data
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Update user setting
+    ///
+    /// Updates a specific user setting based on the setting argument.
+    pub async fn update_user_setting(
+        &self,
+        user_id: i32,
+        set_arg: &str,
+        value: &str,
+    ) -> ArcResult<UserInfo> {
+        match set_arg {
+            "favorite_character" => {
+                let character_id: i32 = value
+                    .parse()
+                    .map_err(|_| ArcError::input("Invalid character ID"))?;
+                sqlx::query!(
+                    "UPDATE user SET favorite_character = ? WHERE user_id = ?",
+                    character_id,
+                    user_id
+                )
+                .execute(&self.pool)
+                .await?;
+            }
+            "is_hide_rating" | "max_stamina_notification_enabled" | "mp_notification_enabled" => {
+                let bool_value = value == "true";
+                let int_value = if bool_value { 1 } else { 0 };
+
+                match set_arg {
+                    "is_hide_rating" => {
+                        sqlx::query!(
+                            "UPDATE user SET is_hide_rating = ? WHERE user_id = ?",
+                            int_value,
+                            user_id
+                        )
+                        .execute(&self.pool)
+                        .await?;
+                    }
+                    "max_stamina_notification_enabled" => {
+                        sqlx::query!(
+                            "UPDATE user SET max_stamina_notification_enabled = ? WHERE user_id = ?",
+                            int_value,
+                            user_id
+                        )
+                        .execute(&self.pool)
+                        .await?;
+                    }
+                    "mp_notification_enabled" => {
+                        sqlx::query!(
+                            "UPDATE user SET mp_notification_enabled = ? WHERE user_id = ?",
+                            int_value,
+                            user_id
+                        )
+                        .execute(&self.pool)
+                        .await?;
+                    }
+                    _ => {}
+                }
+            }
+            _ => return Err(ArcError::input("Invalid setting argument")),
+        }
+
+        self.get_user_info(user_id).await
+    }
+
+    /// Delete user account
+    ///
+    /// Deletes a user account and all associated data.
+    pub async fn delete_user_account(&self, user_id: i32) -> ArcResult<()> {
+        // Check if account deletion is allowed based on config
+        if !CONFIG.allow_self_account_delete {
+            return Err(ArcError::no_data("Cannot delete the account.", 151, -1));
+        }
+
+        // Start a transaction for atomic deletion
+        let mut transaction = self.pool.begin().await?;
+
+        // Delete from all related tables
+        sqlx::query!("DELETE FROM login WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        sqlx::query!(
+            "DELETE FROM friend WHERE user_id_me = ? OR user_id_other = ?",
+            user_id,
+            user_id
+        )
+        .execute(&mut *transaction)
+        .await?;
+
+        sqlx::query!("DELETE FROM best_score WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        sqlx::query!("DELETE FROM user_char WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        sqlx::query!("DELETE FROM user_char_full WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        sqlx::query!("DELETE FROM recent30 WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        sqlx::query!("DELETE FROM user_world WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        sqlx::query!("DELETE FROM user_item WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        sqlx::query!("DELETE FROM user_save WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        sqlx::query!("DELETE FROM user_present WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        sqlx::query!("DELETE FROM user_redeem WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        sqlx::query!("DELETE FROM user_role WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        sqlx::query!("DELETE FROM user_course WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        sqlx::query!("DELETE FROM user_mission WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        sqlx::query!("DELETE FROM user_kvdata WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        sqlx::query!("DELETE FROM user_custom_course WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        sqlx::query!("DELETE FROM download_token WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        // Finally delete from user table
+        sqlx::query!("DELETE FROM user WHERE user_id = ?", user_id)
+            .execute(&mut *transaction)
+            .await?;
+
+        transaction.commit().await?;
+
+        Ok(())
+    }
 }

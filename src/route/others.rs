@@ -112,7 +112,7 @@ pub async fn notification_me(
 /// Handles app version, bundle version, and device ID from headers.
 #[get("/game/content_bundle")]
 pub async fn game_content_bundle(
-    bundle_service: &State<BundleService>,
+    _bundle_service: &State<BundleService>,
 ) -> RouteResult<BundleDownloadResponse> {
     // For now, return empty bundle list as headers extraction needs to be implemented differently
     let ordered_results = Vec::new();
