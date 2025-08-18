@@ -339,6 +339,7 @@ impl FileCache {
 }
 
 /// Main asset manager for songs and bundles
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct AssetManager {
     pool: MySqlPool,

@@ -1,10 +1,13 @@
 use crate::config::{ARCAEA_DATABASE_VERSION, ARCAEA_LOG_DATABASE_VERSION, ARCAEA_SERVER_VERSION};
-use crate::error::ArcError;
-
 use crate::context::{ClientContext, VersionContext};
+use crate::error::ArcError;
 use crate::route::common::{success_return, AuthGuard, EmptyResponse, RouteResult};
+use crate::service::aggregate::*;
 use crate::service::bundle::BundleDownloadResponse;
-use crate::service::{BundleService, CharacterService, NotificationService, UserService};
+use crate::service::{
+    BundleService, CharacterService, DownloadService, NotificationService, PresentService,
+    PurchaseService, ScoreService, UserService, WorldService,
+};
 use rocket::fs::NamedFile;
 use rocket::http::Status;
 
@@ -13,6 +16,8 @@ use rocket::serde::json::Json;
 use rocket::{get, post, routes, Route, State};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use url::Url;
+use urlencoding::decode;
 
 /// Game information response structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,7 +62,7 @@ pub struct InsightCompleteResponse {
 #[derive(Debug, Deserialize)]
 pub struct AggregateCall {
     pub endpoint: String,
-    pub id: Option<String>,
+    pub id: Option<serde_json::Value>,
 }
 
 /// Aggregate response structure
@@ -69,7 +74,7 @@ pub struct AggregateResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_code: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
+    pub id: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extra: Option<HashMap<String, serde_json::Value>>,
 }
@@ -77,7 +82,7 @@ pub struct AggregateResponse {
 /// Aggregate value structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AggregateValue {
-    pub id: Option<String>,
+    pub id: Option<serde_json::Value>,
     pub value: serde_json::Value,
 }
 
@@ -222,7 +227,19 @@ pub async fn applog_me(_log_data: Json<serde_json::Value>) -> RouteResult<EmptyR
 /// Handles integrated requests that combine multiple API calls.
 /// Processes up to 10 requests in a single call for efficiency.
 #[get("/compose/aggregate?<calls>")]
-pub async fn aggregate(calls: String) -> RouteResult<AggregateResponse> {
+pub async fn aggregate(
+    calls: String,
+    user_service: &State<UserService>,
+    character_service: &State<CharacterService>,
+    score_service: &State<ScoreService>,
+    download_service: &State<DownloadService>,
+    bundle_service: &State<BundleService>,
+    notification_service: &State<NotificationService>,
+    present_service: &State<PresentService>,
+    world_service: &State<WorldService>,
+    purchase_service: &State<PurchaseService>,
+    auth: AuthGuard,
+) -> RouteResult<AggregateResponse> {
     // Parse the calls parameter as JSON
     let call_list: Vec<AggregateCall> = match serde_json::from_str(&calls) {
         Ok(calls) => calls,
@@ -248,17 +265,67 @@ pub async fn aggregate(calls: String) -> RouteResult<AggregateResponse> {
         }));
     }
 
-    // TODO: Implement actual request processing
-    // For each call in call_list:
-    // 1. Parse the endpoint URL
-    // 2. Extract query parameters
-    // 3. Route to appropriate handler
-    // 4. Collect responses
+    let mut response_values = Vec::new();
 
-    // For now, return empty success response
+    // Process each request
+    for call in call_list {
+        let endpoint_url = match Url::parse(&format!("http://localhost{}", call.endpoint)) {
+            Ok(url) => url,
+            Err(_) => {
+                continue; // Skip invalid URLs
+            }
+        };
+
+        let path = endpoint_url.path();
+        let query_params = parse_query_params(endpoint_url.query().unwrap_or(""));
+
+        // Route to appropriate handler based on path
+        let result = match path {
+            "/user/me" => handle_user_me(user_service, auth.user_id).await,
+            "/game/info" => handle_game_info().await,
+            "/present/me" => handle_present_info(present_service, auth.user_id).await,
+            "/world/map/me" => handle_world_all(world_service, auth.user_id).await,
+            "/score/song/friend" => {
+                handle_song_score_friend(score_service, user_service, auth.user_id, &query_params)
+                    .await
+            }
+            "/serve/download/me/song" => {
+                handle_download_song(download_service, auth.user_id, &query_params).await
+            }
+            "/purchase/bundle/pack" => handle_bundle_pack(purchase_service, auth.user_id).await,
+            "/purchase/bundle/bundle" => handle_bundle_bundle().await,
+            "/purchase/bundle/single" => handle_bundle_single(purchase_service, auth.user_id).await,
+            "/finale/progress" => handle_finale_progress().await,
+            _ => Err(ArcError::no_data(
+                "Endpoint not found in aggregate",
+                404,
+                -2,
+            )),
+        };
+
+        match result {
+            Ok(value) => {
+                response_values.push(AggregateValue {
+                    id: call.id.clone(),
+                    value,
+                });
+            }
+            Err(e) => {
+                // Return error response immediately on first error
+                return Ok(success_return(AggregateResponse {
+                    success: false,
+                    value: None,
+                    error_code: Some(e.error_code()),
+                    id: call.id,
+                    extra: e.extra_data().cloned(),
+                }));
+            }
+        }
+    }
+
     let response = AggregateResponse {
         success: true,
-        value: Some(Vec::new()),
+        value: Some(response_values),
         error_code: None,
         id: None,
         extra: None,
@@ -317,6 +384,25 @@ pub async fn bundle_download(
     }
 }
 
+/// Parse query parameters from URL query string
+fn parse_query_params(query: &str) -> HashMap<String, String> {
+    let mut params = HashMap::new();
+    if query.is_empty() {
+        return params;
+    }
+
+    for pair in query.split('&') {
+        if let Some(eq_pos) = pair.find('=') {
+            let key = &pair[..eq_pos];
+            let value = &pair[eq_pos + 1..];
+            if let (Ok(decoded_key), Ok(decoded_value)) = (decode(key), decode(value)) {
+                params.insert(decoded_key.to_string(), decoded_value.to_string());
+            }
+        }
+    }
+    params
+}
+
 /// Get all others routes
 pub fn routes() -> Vec<Route> {
     routes![
@@ -327,6 +413,7 @@ pub fn routes() -> Vec<Route> {
         finale_end,
         insight_complete,
         applog_me,
-        aggregate
+        aggregate,
+        bundle_download
     ]
 }
