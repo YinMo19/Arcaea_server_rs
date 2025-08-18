@@ -112,39 +112,120 @@ pub struct UserLoginDevice {
     pub login_device: Option<String>,
 }
 
-/// User basic info for API responses
+/// User settings structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserSettings {
+    pub favorite_character: i32,
+    pub is_hide_rating: bool,
+    pub max_stamina_notification_enabled: bool,
+    pub mp_notification_enabled: bool,
+}
+
+/// User recent score information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserRecentScore {
+    pub song_id: String,
+    pub difficulty: i32,
+    pub score: i32,
+    pub shiny_perfect_count: i32,
+    pub perfect_count: i32,
+    pub near_count: i32,
+    pub miss_count: i32,
+    pub health: i32,
+    pub modifier: i32,
+    pub time_played: i64,
+    pub clear_type: i32,
+    pub rating: f64,
+}
+
+/// User core information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserCores {
+    pub core_generic: i32,
+    pub core_chunithm: i32,
+    pub core_desolate: i32,
+    pub core_hollow: i32,
+    pub core_crimson: i32,
+    pub core_ambivalent: i32,
+    pub core_scarlet: i32,
+    pub core_groove: i32,
+    pub core_azure: i32,
+    pub core_binary: i32,
+    pub core_colorful: i32,
+    pub core_course: i32,
+}
+
+impl Default for UserCores {
+    fn default() -> Self {
+        Self {
+            core_generic: 0,
+            core_chunithm: 0,
+            core_desolate: 0,
+            core_hollow: 0,
+            core_crimson: 0,
+            core_ambivalent: 0,
+            core_scarlet: 0,
+            core_groove: 0,
+            core_azure: 0,
+            core_binary: 0,
+            core_colorful: 0,
+            core_course: 0,
+        }
+    }
+}
+
+/// User basic info for API responses matching Python implementation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserInfo {
     pub user_id: i32,
     pub name: String,
     pub user_code: String,
-    pub rating_ptt: i32,
-    pub character_id: i32,
-    pub is_skill_sealed: bool,
-    pub is_char_uncapped: bool,
-    pub is_char_uncapped_override: bool,
-    pub is_hide_rating: bool,
-    pub favorite_character: i32,
-    pub max_stamina_notification_enabled: bool,
-    pub current_map: String,
+    pub display_name: String,
     pub ticket: i32,
+    pub character: i32,
+    pub is_locked_name_duplicate: bool,
+    pub is_skill_sealed: bool,
+    pub current_map: String,
     pub prog_boost: i32,
-    pub world_rank_score: i32,
+    pub beyond_boost_gauge: f64,
+    pub kanae_stored_prog: f64,
     pub next_fragstam_ts: i64,
     pub max_stamina_ts: i64,
     pub stamina: i32,
     pub world_mode_locked_end_ts: i64,
-    pub beyond_boost_gauge: f64,
-    pub kanae_stored_prog: f64,
-    pub mp_notification_enabled: bool,
-    pub highest_rating_ptt: i32,
     pub insight_state: i32,
-    /// Pack IDs the user has unlocked
+    pub is_aprilfools: bool,
+    pub max_friend: i32,
+    pub rating: i32,
+    pub join_date: i64,
+    pub global_rank: Option<i32>,
+    pub country: Option<String>,
+    pub custom_banner: Option<String>,
+    pub course_banners: Vec<serde_json::Value>,
+    pub locked_char_ids: Vec<i32>,
+    pub pick_ticket: i32,
+
+    // Settings object
+    pub settings: UserSettings,
+
+    // Character and related info
+    pub character_stats: Vec<serde_json::Value>,
+    pub characters: Vec<i32>,
+
+    // Social features
+    pub friends: Vec<serde_json::Value>,
+
+    // Collections
     pub packs: Vec<String>,
-    /// Single song IDs the user has unlocked
     pub singles: Vec<String>,
-    /// World song IDs the user has unlocked
     pub world_songs: Vec<String>,
+    pub world_unlocks: Vec<String>,
+    pub curr_available_maps: Vec<String>,
+    pub user_missions: Vec<serde_json::Value>,
+
+    // Items and scores
+    pub cores: UserCores,
+    pub recent_score: Vec<UserRecentScore>,
 }
 
 /// User for insertion (new user registration)
@@ -218,35 +299,57 @@ impl User {
 
 impl From<User> for UserInfo {
     fn from(user: User) -> Self {
+        let favorite_character = user.favorite_character.unwrap_or(-1);
+
         Self {
             user_id: user.user_id,
             name: user.name.clone().unwrap_or_default(),
             user_code: user.user_code.clone().unwrap_or_default(),
-            rating_ptt: user.rating_ptt.unwrap_or(0),
-            character_id: user.character_id.unwrap_or(0),
-            is_skill_sealed: user.is_skill_sealed(),
-            is_char_uncapped: user.is_char_uncapped(),
-            is_char_uncapped_override: user.is_char_uncapped_override(),
-            is_hide_rating: user.is_hide_rating(),
-            favorite_character: user.favorite_character.unwrap_or(-1),
-            max_stamina_notification_enabled: user.max_stamina_notification_enabled(),
-            current_map: user.current_map.clone().unwrap_or_default(),
+            display_name: user.name.clone().unwrap_or_default(),
             ticket: user.ticket.unwrap_or(0),
+            character: user.character_id.unwrap_or(0),
+            is_locked_name_duplicate: false,
+            is_skill_sealed: user.is_skill_sealed(),
+            current_map: user.current_map.clone().unwrap_or_default(),
             prog_boost: user.prog_boost.unwrap_or(0),
-            world_rank_score: user.world_rank_score.unwrap_or(0),
+            beyond_boost_gauge: user.beyond_boost_gauge.unwrap_or(0.0),
+            kanae_stored_prog: user.kanae_stored_prog.unwrap_or(0.0),
             next_fragstam_ts: user.next_fragstam_ts.unwrap_or(0),
             max_stamina_ts: user.max_stamina_ts.unwrap_or(0),
             stamina: user.stamina.unwrap_or(0),
             world_mode_locked_end_ts: user.world_mode_locked_end_ts.unwrap_or(0),
-            beyond_boost_gauge: user.beyond_boost_gauge.unwrap_or(0.0),
-            kanae_stored_prog: user.kanae_stored_prog.unwrap_or(0.0),
-            mp_notification_enabled: user.mp_notification_enabled(),
-            highest_rating_ptt: user.highest_rating_ptt.unwrap_or(0),
             insight_state: user.insight_state.unwrap_or(4),
-            // TODO: These should be populated from user_item table queries
-            packs: Vec::new(),
-            singles: Vec::new(),
-            world_songs: Vec::new(),
+            is_aprilfools: false, // TODO: Get from config
+            max_friend: 50,       // TODO: Get from constants
+            rating: user.rating_ptt.unwrap_or(0),
+            join_date: user.join_date.unwrap_or(0),
+            global_rank: None,
+            country: None,
+            custom_banner: None,
+            course_banners: Vec::new(),
+            locked_char_ids: Vec::new(),
+            pick_ticket: 0,
+
+            settings: UserSettings {
+                favorite_character,
+                is_hide_rating: user.is_hide_rating(),
+                max_stamina_notification_enabled: user.max_stamina_notification_enabled(),
+                mp_notification_enabled: user.mp_notification_enabled(),
+            },
+
+            character_stats: Vec::new(), // TODO: Load from character service
+            characters: Vec::new(),      // TODO: Load from character service
+            friends: Vec::new(),         // TODO: Load from friend service
+
+            packs: Vec::new(),               // TODO: Load from user packs
+            singles: Vec::new(),             // TODO: Load from user singles
+            world_songs: Vec::new(),         // TODO: Load from user world songs
+            world_unlocks: Vec::new(),       // TODO: Load from user world unlocks
+            curr_available_maps: Vec::new(), // TODO: Load from world service
+            user_missions: Vec::new(),       // TODO: Load from mission service
+
+            cores: UserCores::default(), // TODO: Load from user cores
+            recent_score: Vec::new(),    // TODO: Load from recent scores
         }
     }
 }

@@ -3,7 +3,7 @@ use crate::error::{ArcError, ArcResult};
 use crate::model::{
     Character, CharacterValue, CoreItem, Level, Skill, UserCharacter, UserCharacterInfo,
 };
-use sqlx::MySqlPool;
+use sqlx::{MySqlPool, Row};
 
 /// Character service for managing character items and user character data
 pub struct CharacterService {
@@ -99,6 +99,139 @@ impl CharacterService {
         self.grant_character_by_id(user_id, character_id).await
     }
 
+    /// Get user character statistics as JSON values for API response
+    pub async fn get_user_character_stats(
+        &self,
+        user_id: i32,
+    ) -> ArcResult<Vec<serde_json::Value>> {
+        let table_name = self.get_user_char_table();
+
+        let query = format!(
+            r#"
+            SELECT uc.character_id, uc.level, uc.exp, uc.is_uncapped, uc.is_uncapped_override,
+                   c.name, c.char_type, c.skill_id, c.skill_id_uncap, c.skill_unlock_level,
+                   c.skill_requires_uncap, c.prog30, c.overdrive30, c.frag30
+            FROM {} uc
+            JOIN `character` c ON uc.character_id = c.character_id
+            WHERE uc.user_id = ?
+            ORDER BY uc.character_id
+            "#,
+            table_name
+        );
+
+        let characters = sqlx::query(&query)
+            .bind(user_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut character_stats = Vec::new();
+
+        for char_record in characters {
+            let character_id: i32 = char_record.get("character_id");
+
+            // Get uncap cores for this character
+            let uncap_cores = self.get_character_uncap_cores(character_id).await?;
+
+            let character_stat = serde_json::json!({
+                "character_id": character_id,
+                "name": char_record.get::<Option<String>, _>("name").unwrap_or_default(),
+                "level": char_record.get::<i32, _>("level"),
+                "exp": char_record.get::<f64, _>("exp"),
+                "level_exp": char_record.get::<f64, _>("exp"),
+                "is_uncapped": char_record.get::<i8, _>("is_uncapped") != 0,
+                "is_uncapped_override": char_record.get::<i8, _>("is_uncapped_override") != 0,
+                "char_type": char_record.get::<Option<i32>, _>("char_type").unwrap_or(0),
+                "skill_id": char_record.get::<Option<String>, _>("skill_id").unwrap_or_default(),
+                "skill_id_uncap": char_record.get::<Option<String>, _>("skill_id_uncap").unwrap_or_default(),
+                "skill_unlock_level": char_record.get::<Option<i32>, _>("skill_unlock_level").unwrap_or(0),
+                "skill_requires_uncap": char_record.get::<Option<i8>, _>("skill_requires_uncap").unwrap_or(0) != 0,
+                "prog": char_record.get::<Option<f64>, _>("prog30").unwrap_or(0.0),
+                "overdrive": char_record.get::<Option<f64>, _>("overdrive30").unwrap_or(0.0),
+                "frag": char_record.get::<Option<f64>, _>("frag30").unwrap_or(0.0),
+                "uncap_cores": uncap_cores,
+                "base_character": false
+            });
+
+            character_stats.push(character_stat);
+        }
+
+        Ok(character_stats)
+    }
+
+    /// Get list of character IDs that the user owns
+    pub async fn get_user_character_ids(&self, user_id: i32) -> ArcResult<Vec<i32>> {
+        let character_ids = if CONFIG.character_full_unlock {
+            sqlx::query_scalar!(
+                "SELECT character_id FROM user_char_full WHERE user_id = ? ORDER BY character_id",
+                user_id
+            )
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_scalar!(
+                "SELECT character_id FROM user_char WHERE user_id = ? ORDER BY character_id",
+                user_id
+            )
+            .fetch_all(&self.pool)
+            .await?
+        };
+
+        Ok(character_ids)
+    }
+
+    /// Get uncap cores required for a character
+    async fn get_character_uncap_cores(
+        &self,
+        character_id: i32,
+    ) -> ArcResult<Vec<serde_json::Value>> {
+        let cores = sqlx::query!(
+            r#"
+            SELECT item_id as core_type, amount
+            FROM char_item
+            WHERE character_id = ? AND type = 'core'
+            ORDER BY item_id
+            "#,
+            character_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let uncap_cores: Vec<serde_json::Value> = cores
+            .into_iter()
+            .map(|core| {
+                serde_json::json!({
+                    "core_type": core.core_type,
+                    "amount": core.amount
+                })
+            })
+            .collect();
+
+        Ok(uncap_cores)
+    }
+
+    /// Get character uncap cores as CoreItem structs
+    async fn get_character_uncap_cores_as_items(
+        &self,
+        character_id: i32,
+    ) -> ArcResult<Vec<CoreItem>> {
+        let core_items = sqlx::query!(
+            "SELECT character_id, item_id, type, amount FROM char_item WHERE character_id = ? AND type = 'core'",
+            character_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let cores = core_items
+            .into_iter()
+            .map(|item| CoreItem {
+                item_id: item.item_id,
+                amount: item.amount.unwrap_or(0),
+            })
+            .collect();
+
+        Ok(cores)
+    }
+
     /// Check if a user has a specific character
     pub async fn user_has_character(&self, user_id: i32, character_id: i32) -> ArcResult<bool> {
         let _table_name = self.get_user_char_table();
@@ -145,26 +278,6 @@ impl CharacterService {
         })?;
 
         Ok(character)
-    }
-
-    /// Get character uncap cores
-    pub async fn get_character_uncap_cores(&self, character_id: i32) -> ArcResult<Vec<CoreItem>> {
-        let core_items = sqlx::query!(
-            "SELECT character_id, item_id, type, amount FROM char_item WHERE character_id = ? AND type = 'core'",
-            character_id
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let cores = core_items
-            .into_iter()
-            .map(|item| CoreItem {
-                item_id: item.item_id,
-                amount: item.amount.unwrap_or(0),
-            })
-            .collect();
-
-        Ok(cores)
     }
 
     /// Get user character uncap condition (is_uncapped, is_uncapped_override)
@@ -291,7 +404,9 @@ impl CharacterService {
         );
 
         // Get uncap cores
-        let uncap_cores = self.get_character_uncap_cores(character_id).await?;
+        let uncap_cores = self
+            .get_character_uncap_cores_as_items(character_id)
+            .await?;
 
         // Set voice data for specific characters
         let voice = if [21, 46].contains(&character_id) {
@@ -441,7 +556,9 @@ impl CharacterService {
         }
 
         // Get required cores
-        let uncap_cores = self.get_character_uncap_cores(character_id).await?;
+        let uncap_cores = self
+            .get_character_uncap_cores_as_items(character_id)
+            .await?;
 
         // Check if user has enough cores
         for core in &uncap_cores {

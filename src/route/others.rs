@@ -225,7 +225,8 @@ pub async fn aggregate(
                     .await
             }
             "/serve/download/me/song" => {
-                handle_download_song(download_service, auth.user_id, &query_params).await
+                handle_download_song(download_service, user_service, auth.user_id, &query_params)
+                    .await
             }
             "/purchase/bundle/pack" => handle_bundle_pack(purchase_service, auth.user_id).await,
             "/purchase/bundle/bundle" => handle_bundle_bundle().await,
@@ -246,6 +247,7 @@ pub async fn aggregate(
                 });
             }
             Err(e) => {
+                log::warn!("{}", e);
                 // Return error response immediately on first error
                 return Ok(AggregateResponse {
                     success: false,
@@ -266,6 +268,7 @@ pub async fn aggregate(
         extra: None,
     };
 
+    log::info!("resp: {:?}", response);
     Ok(response)
 }
 

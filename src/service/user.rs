@@ -1,5 +1,6 @@
 use crate::config::{Constants, CONFIG};
 use crate::error::{ArcError, ArcResult};
+use crate::model::user::{UserCores, UserRecentScore};
 use crate::model::{
     Character, User, UserAuth, UserCodeMapping, UserCredentials, UserExists, UserInfo,
     UserLoginDevice, UserLoginDto, UserRegisterDto,
@@ -528,8 +529,34 @@ impl UserService {
             .fetch_optional(&self.pool)
             .await?;
 
-        user.map(UserInfo::from)
-            .ok_or_else(|| ArcError::no_data("User not found.", 401, -3))
+        let user = user.ok_or_else(|| ArcError::no_data("User not found.", 401, -3))?;
+
+        // Load additional user data
+        let mut user_info = UserInfo::from(user);
+
+        // Load character stats from character service
+        user_info.character_stats = self
+            .character_service
+            .get_user_character_stats(user_id)
+            .await?;
+        user_info.characters = self
+            .character_service
+            .get_user_character_ids(user_id)
+            .await?;
+
+        // Load user cores
+        user_info.cores = self.get_user_cores(user_id).await?;
+
+        // Load user packs, singles, and world songs
+        user_info.packs = self.get_user_packs(user_id).await?;
+        user_info.singles = self.get_user_singles(user_id).await?;
+        user_info.world_songs = self.get_user_world_songs(user_id).await?;
+        user_info.world_unlocks = self.get_user_world_unlocks(user_id).await?;
+
+        // Load recent score
+        user_info.recent_score = self.get_user_recent_scores(user_id).await?;
+
+        Ok(user_info)
     }
 
     /// Get user ID from user code
@@ -718,7 +745,7 @@ impl UserService {
             .await?;
 
         // Get user cores after uncap
-        let cores = self.get_user_cores(user_id).await?;
+        let cores = self.get_user_cores_json(user_id).await?;
 
         Ok((serde_json::to_value(character_info.to_dict())?, cores))
     }
@@ -738,7 +765,7 @@ impl UserService {
             .await?;
 
         // Get user cores after upgrade
-        let cores = self.get_user_cores(user_id).await?;
+        let cores = self.get_user_cores_json(user_id).await?;
 
         Ok((serde_json::to_value(character_info.to_dict())?, cores))
     }
@@ -787,6 +814,128 @@ impl UserService {
         } else {
             Err(ArcError::no_data("User has no cloud save data", 108, -3))
         }
+    }
+
+    /// Get user cores information
+    async fn get_user_cores(&self, user_id: i32) -> ArcResult<UserCores> {
+        let cores = sqlx::query!(
+            r#"
+            SELECT item_id, amount
+            FROM user_item
+            WHERE user_id = ? AND type = 'core'
+            "#,
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut user_cores = UserCores::default();
+
+        for core in cores {
+            let amount = core.amount.unwrap_or(0);
+            match core.item_id.as_str() {
+                "core_generic" => user_cores.core_generic = amount,
+                "core_chunithm" => user_cores.core_chunithm = amount,
+                "core_desolate" => user_cores.core_desolate = amount,
+                "core_hollow" => user_cores.core_hollow = amount,
+                "core_crimson" => user_cores.core_crimson = amount,
+                "core_ambivalent" => user_cores.core_ambivalent = amount,
+                "core_scarlet" => user_cores.core_scarlet = amount,
+                "core_groove" => user_cores.core_groove = amount,
+                "core_azure" => user_cores.core_azure = amount,
+                "core_binary" => user_cores.core_binary = amount,
+                "core_colorful" => user_cores.core_colorful = amount,
+                "core_course" => user_cores.core_course = amount,
+                _ => {}
+            }
+        }
+
+        Ok(user_cores)
+    }
+
+    /// Get user pack unlocks
+    async fn get_user_packs(&self, user_id: i32) -> ArcResult<Vec<String>> {
+        let packs = sqlx::query_scalar!(
+            "SELECT item_id FROM user_item WHERE user_id = ? AND type = 'pack'",
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(packs)
+    }
+
+    /// Get user single song unlocks
+    async fn get_user_singles(&self, user_id: i32) -> ArcResult<Vec<String>> {
+        let singles = sqlx::query_scalar!(
+            "SELECT item_id FROM user_item WHERE user_id = ? AND type = 'single'",
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(singles)
+    }
+
+    /// Get user world song unlocks
+    async fn get_user_world_songs(&self, user_id: i32) -> ArcResult<Vec<String>> {
+        let world_songs = sqlx::query_scalar!(
+            "SELECT item_id FROM user_item WHERE user_id = ? AND type = 'world_song'",
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(world_songs)
+    }
+
+    /// Get user world unlocks
+    async fn get_user_world_unlocks(&self, user_id: i32) -> ArcResult<Vec<String>> {
+        let world_unlocks = sqlx::query_scalar!(
+            "SELECT item_id FROM user_item WHERE user_id = ? AND type = 'world_unlock'",
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(world_unlocks)
+    }
+
+    /// Get user recent scores
+    async fn get_user_recent_scores(&self, user_id: i32) -> ArcResult<Vec<UserRecentScore>> {
+        let user = sqlx::query!(
+            r#"
+            SELECT song_id, difficulty, score, shiny_perfect_count, perfect_count,
+                   near_count, miss_count, health, modifier, time_played, clear_type, rating
+            FROM user
+            WHERE user_id = ? AND song_id IS NOT NULL
+            "#,
+            user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(record) = user {
+            if let Some(song_id) = record.song_id {
+                let recent_score = UserRecentScore {
+                    song_id,
+                    difficulty: record.difficulty.unwrap_or(0),
+                    score: record.score.unwrap_or(0),
+                    shiny_perfect_count: record.shiny_perfect_count.unwrap_or(0),
+                    perfect_count: record.perfect_count.unwrap_or(0),
+                    near_count: record.near_count.unwrap_or(0),
+                    miss_count: record.miss_count.unwrap_or(0),
+                    health: record.health.unwrap_or(100),
+                    modifier: record.modifier.unwrap_or(0),
+                    time_played: record.time_played.unwrap_or(0),
+                    clear_type: record.clear_type.unwrap_or(0),
+                    rating: record.rating.unwrap_or(0.0),
+                };
+                return Ok(vec![recent_score]);
+            }
+        }
+
+        Ok(Vec::new())
     }
 
     /// Update user's cloud save data
@@ -990,22 +1139,11 @@ impl UserService {
         Ok(())
     }
 
-    /// Get user cores (for API responses)
+    /// Get user cores as JSON (for API responses)
     ///
     /// Returns user's core inventory as JSON.
-    async fn get_user_cores(&self, user_id: i32) -> ArcResult<serde_json::Value> {
-        let cores = sqlx::query!(
-            "SELECT item_id, amount FROM user_item WHERE user_id = ? AND type = 'core'",
-            user_id
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut cores_map = std::collections::HashMap::new();
-        for core in cores {
-            cores_map.insert(core.item_id, core.amount);
-        }
-
-        Ok(serde_json::to_value(cores_map)?)
+    async fn get_user_cores_json(&self, user_id: i32) -> ArcResult<serde_json::Value> {
+        let user_cores = self.get_user_cores(user_id).await?;
+        Ok(serde_json::to_value(user_cores)?)
     }
 }

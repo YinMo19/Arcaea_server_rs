@@ -57,28 +57,56 @@ pub async fn handle_song_score_friend(
     _score_service: &ScoreService,
     _user_service: &UserService,
     _user_id: i32,
-    _query_params: &HashMap<String, String>,
+    query_params: &HashMap<String, String>,
 ) -> Result<serde_json::Value, ArcError> {
-    // TODO: Friend score system not implemented yet
-    Err(ArcError::no_data(
-        "Friend score system not implemented",
-        404,
-        -2,
-    ))
+    // Get song_id and difficulty from query params
+    let _song_id = query_params.get("song_id");
+    let _difficulty = query_params.get("difficulty");
+
+    // For now, return empty friend score list since friend system is not implemented
+    // In the future, this should query friend scores from the database
+    Ok(serde_json::json!([]))
 }
 
 /// Handle /serve/download/me/song endpoint
 pub async fn handle_download_song(
-    _download_service: &DownloadService,
-    _user_id: i32,
-    _query_params: &HashMap<String, String>,
+    download_service: &DownloadService,
+    user_service: &UserService,
+    user_id: i32,
+    query_params: &HashMap<String, String>,
 ) -> Result<serde_json::Value, ArcError> {
-    // TODO: Song download system not implemented yet
-    Err(ArcError::no_data(
-        "Song download system not implemented",
-        404,
-        -2,
-    ))
+    // Get user info for permission checking
+    let user_info = user_service.get_user_info(user_id).await?;
+
+    // Parse song IDs from query parameters
+    let song_ids = query_params.get("sid").map(|s| {
+        s.split(',')
+            .map(|id| id.to_string())
+            .collect::<Vec<String>>()
+    });
+
+    // Parse URL flag (defaults to true)
+    let url_flag = query_params
+        .get("url")
+        .and_then(|s| s.parse::<bool>().ok())
+        .unwrap_or(true);
+
+    // Check rate limiting if URLs are requested
+    if url_flag && download_service.check_download_limit(user_id).await? {
+        return Err(ArcError::rate_limit(
+            "You have reached the download limit.".to_string(),
+            903,
+            -999,
+        ));
+    }
+
+    // Generate download list
+    let download_songs = download_service
+        .generate_download_list(&user_info, song_ids, url_flag)
+        .await?;
+
+    // Convert to the expected format
+    Ok(serde_json::to_value(download_songs)?)
 }
 
 /// Handle /purchase/bundle/pack endpoint
