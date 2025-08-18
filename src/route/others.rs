@@ -17,6 +17,7 @@ use rocket::http::Status;
 use rocket::response::status;
 use rocket::serde::json::Json;
 use rocket::{get, post, routes, Route, State};
+use serde_json::Value;
 use std::collections::HashMap;
 use url::Url;
 use urlencoding::decode;
@@ -268,7 +269,7 @@ pub async fn aggregate(
         extra: None,
     };
 
-    log::info!("resp: {:?}", response);
+    log::info!("resp: {}", &serde_json::to_string(&response).unwrap());
     Ok(response)
 }
 

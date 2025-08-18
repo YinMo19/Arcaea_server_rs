@@ -1,19 +1,10 @@
-我正在打算用 rust 重写一个 python flask 实现的后端服务。我已经简单构想了整个项目的模样，我想让你阅读 python 源代码并帮我实现。
+我正在打算用 rust 重写一个 python flask 实现的后端服务。我已经简单构想了整个项目的模样，我想让你阅读 python 源代码并帮我实现。一些结构上和基础内容：
 
 数据库方面，我打算使用 mariadb，并使用 sqlx 操作。我希望你尽量使用 query! query_as! query_scale!宏，在编译期判断 sql 正确性，并且尽可能的使用 struct 直接映射到 sql 内部的表格，而非使用 row.get 获取，因此我可以给你一个 mysql://arcaea:yinmo19sprivite@localhost:3306/arcaea_core 这样的实际可用的 mariadb 实例供参考。 另外数据库结构我已经设计好了（从 python 版本相似的结构） 我会在下面列出整个数据库迁移作为整个数据库结构, 你需要根据这个数据库结构来写 sql。另外我已经完成了迁移。
 
 python 版本在 py_version文件夹内，这个文件夹目前处于 gitignore 状态，你是用 function call 可能无法 grep 其中内容，想要查找文件或者查找内容直接使用命令行的 grep 和 find。你必须阅读 python 的代码 ，每一行和每一个实现都完全摸清了才能开始写 rust 版本的内容，由于提前约定好了 api，因此你必须保证 python 版本的 api 和 rust 版本的 api 完全一致，不能有任何区别，否则将会引起错误。
 
 关于 python 版本的结构，路由相关的文件在 server 文件夹下面，而核心逻辑在 core 下面。你必须要保证我的路由和 server 下面定义的路由完全一致，而我的 service 逻辑和 python 版本的 core 逻辑一致。
-
-我已经初步实现 core 文件夹下的 others， user，download ，character 和 score 模块。 目前 others 中的 aggregate 函数已经简单的实现了接口，但是具体内容还没完全实现。2025-08-18T02:58:06.969483Z  INFO rocket::server::_: Matched: (login) POST /auth/login
-2025-08-18T02:58:06.996876Z  INFO rocket::server::_: Outcome: Success(200 OK)
-2025-08-18T02:58:06.997258Z  INFO rocket::server::_: Response succeeded.
-2025-08-18T02:58:07.063710Z  INFO rocket::server: GET /yinmo/30/compose/aggregate?calls=%5B%7B%20%22endpoint%22%3A%20%22%2Fuser%2Fme%22%2C%20%22id%22%3A%200%20%7D%2C%20%7B%20%22endpoint%22%3A%20%22%2Fpurchase%2Fbundle%2Fpack%22%2C%20%22id%22%3A%201%20%7D%2C%7B%20%22endpoint%22%3A%20%22%2Fserve%2Fdownload%2Fme%2Fsong%3Furl%3Dfalse%22%2C%20%22id%22%3A%202%20%7D%2C%20%7B%20%22endpoint%22%3A%20%22%2Fgame%2Finfo%22%2C%20%22id%22%3A%203%20%7D%2C%7B%20%22endpoint%22%3A%20%22%2Fpresent%2Fme%3Flang%3Den%22%2C%20%22id%22%3A%204%20%7D%2C%20%7B%20%22endpoint%22%3A%20%22%2Fworld%2Fmap%2Fme%22%2C%20%22id%22%3A%205%20%7D%2C%20%7B%20%22endpoint%22%3A%20%22%2Fpurchase%2Fbundle%2Fbundle%22%2C%20%22id%22%3A%206%20%7D%2C%20%7B%20%22endpoint%22%3A%20%22%2Ffinale%2Fprogress%22%2C%20%22id%22%3A%207%20%7D%2C%20%7B%20%22endpoint%22%3A%20%22%2Fpurchase%2Fbundle%2Fsingle%22%2C%20%22id%22%3A%208%20%7D%5D:
-2025-08-18T02:58:07.063853Z  INFO rocket::server::_: Matched: (aggregate) GET /yinmo/30/compose/aggregate?<calls>
-2025-08-18T02:58:07.064025Z  INFO Arcaea_server_rs::service::user: Authenticating token: CZE5Xn9Jh3jKu/WbWJitdjKKr1yIZFcckU4PTuMAJ+A=
-2025-08-18T02:58:07.072658Z  WARN Arcaea_server_rs::route::others: No data: Song download system not implemented
-2025-08-18T02:58:07.072730Z  INFO rocket::server::_: Outcome: Success(200 OK) 这是目前的情况，由于还没实现对应的接口，这个接口目前还不可用。python 版本是真实可用的，并且aggregate返回的 json 我已经放在 py_version/resp.json 中。由于这个 json 非常长，因此直接读取不太可行，你可以通过 jq 来获取你需要的信息。我希望你阅读对应的模块，帮我实现缺失的部分，并且补充现在 rust 代码中的 todo为真实实现。
 
 一些结构上的想法（已经初步实现，你需要保证与之前实现的一致性）：我希望你去阅读 python 版本的错误，并根据他的错误处理方式来专门给我产生处理错误的文件。我期望你使用 thiserror 来处理所有错误。所有 api 最后都返回 result T, ArcError 这里的 错误是 thiserror 的一个 enum。  除此之外，我希望我的整个项目是一个 service 和 route 分离的结构。我希望这样，一个 service 文件夹和一个 route 文件夹，以及一个对应的 model 文件，分别处理主要逻辑，路由以及数据库对应的结构。python 的代码是正确的实现，你只需要根据 python 的逻辑完成 rust 的重写即可。代码风格上保持和现有代码一致，我的一个要求是尽量把所有 struct 全部放在对应的 model 内， service 单文件不超过 1000 行。常量模块在 lib.rs 和 config.rs 里面均有定义，如需可查看。如果你需要获取客户端 ip，我已经完成了一个 ctx 可以让你作为 guard 直接使用，获取客户 ip 和其他信息，具体可以在 context.rs 查看。
 
@@ -28,7 +19,7 @@ python 版本在 py_version文件夹内，这个文件夹目前处于 gitignore 
      -H "Authorization: Basic Y2lhbGxvOjBkMDAwNzIx" \
      -d "grant_type=client_credentials" 可以获取到你需要的 token。
 
-我已经在后台跑起来一个最新的案例，你可以放心的直接 curl 来看看结果如何，无需自己运行实例。不要新开任何的 test 文件来写一毫无用处的测试。如果你认为你的 curl 足够简单，就像我给的案例这样，你可以放在 scripts 下面，每个 curl 一个sh文件，上面的案例在 register.sh 内。
+我已经在后台使用 cargo watch 跑起来一个最新的案例，保证能够编译就自然是最新的，你可以放心的直接 curl 来看看结果如何，不要自己运行实例。不要新开任何的 test 文件来写一些毫无用处的测试。如果你认为你的 curl 足够简单，就像我给的案例这样，你可以放在 scripts 下面，每个 curl 一个sh文件，上面的案例在 register.sh 内。不要写任何的echo... 一个 sh 文件不超过五个 curl命令，不超过 20 行。
 
 python 版本无论多复杂都不允许你做任何简化，除非你能保证最后逻辑结果完全一致，否则保持一模一样的实现，不要自作聪明。对于暂时无法完成的模块允许使用 todo 保留，但是尽量完成。
 
@@ -417,3 +408,7 @@ CREATE TABLE IF NOT EXISTS bundle_download_token (
   device_id VARCHAR(255)
 );
 这是所有数据库接口，你无需再阅读现有的数据库迁移。
+
+下面是我需要你帮我实现的目标：
+
+我已经初步实现 core 文件夹下的 others， user，download ，character 和 score 模块。 目前 others 中的 aggregate 函数已经简单的实现了接口，但是具体内容还没完全实现。python 版本是真实可用的，并且aggregate返回的 json 我已经放在 py_version/resp.json 中。由于这个 json 非常长，因此直接读取不太可行，你可以通过 jq 来获取你需要的信息。我希望你阅读对应的模块，帮我实现缺失的部分，并且补充现在 rust 代码中的 todo 为真实实现。而 rust 返回的信息在同一个文件夹下的 resp_rs.json，你可以对比缺失的部分，帮我实现具体的逻辑。另外我希望你先完成这样的任务：python 版本会自动把一些游戏基础数据写入数据库（在 py_version/database/init/下面有不少的 json 是游戏元数据，这些内容会在服务器启动时写入数据库，你需要查看怎么读取这些数据，怎么写入数据库，并复制这些 json 以及元数据到我 rust 合适的位置），我希望你读取它的实现，并在我的 rust 中实现这个功能，使用你认为适合 sqlx 的正确方法来实现这个任务。

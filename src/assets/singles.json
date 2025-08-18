@@ -1,0 +1,2120 @@
+[
+	{
+		"name": "testsingle",
+		"items": [
+			{
+				"id": "testsingle",
+				"type": "single",
+				"is_available": false
+			}
+		],
+		"price": 100,
+		"orig_price": 100
+	},
+	{
+		"name": "dataerror",
+		"items": [
+			{
+				"id": "dataerror",
+				"type": "single",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "yourvoiceso",
+		"items": [
+			{
+				"id": "yourvoiceso",
+				"type": "single",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "crosssoul",
+		"items": [
+			{
+				"id": "crosssoul",
+				"type": "single",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "impurebird",
+		"items": [
+			{
+				"type": "single",
+				"id": "impurebird",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "auxesia",
+		"items": [
+			{
+				"type": "single",
+				"id": "auxesia",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1520413239000,
+		"discount_to": 1521072000000
+	},
+	{
+		"name": "modelista",
+		"items": [
+			{
+				"type": "single",
+				"id": "modelista",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "yozakurafubuki",
+		"items": [
+			{
+				"type": "single",
+				"id": "yozakurafubuki",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "surrender",
+		"items": [
+			{
+				"type": "single",
+				"id": "surrender",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "metallicpunisher",
+		"items": [
+			{
+				"type": "single",
+				"id": "metallicpunisher",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100
+	},
+	{
+		"name": "carminescythe",
+		"items": [
+			{
+				"type": "single",
+				"id": "carminescythe",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100
+	},
+	{
+		"name": "bethere",
+		"items": [
+			{
+				"type": "single",
+				"id": "bethere",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "callmyname",
+		"items": [
+			{
+				"type": "single",
+				"id": "callmyname",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "fallensquare",
+		"items": [
+			{
+				"type": "single",
+				"id": "fallensquare",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "dropdead",
+		"items": [
+			{
+				"type": "single",
+				"id": "dropdead",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1615248000000,
+		"discount_to": 1615852799000
+	},
+	{
+		"name": "alexandrite",
+		"items": [
+			{
+				"type": "single",
+				"id": "alexandrite",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "astraltale",
+		"items": [
+			{
+				"type": "single",
+				"id": "astraltale",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "phantasia",
+		"items": [
+			{
+				"type": "single",
+				"id": "phantasia",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100
+	},
+	{
+		"name": "empireofwinter",
+		"items": [
+			{
+				"type": "single",
+				"id": "empireofwinter",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100
+	},
+	{
+		"name": "libertas",
+		"items": [
+			{
+				"type": "single",
+				"id": "libertas",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "dottodot",
+		"items": [
+			{
+				"type": "single",
+				"id": "dottodot",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "dreadnought",
+		"items": [
+			{
+				"type": "single",
+				"id": "dreadnought",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "mirzam",
+		"items": [
+			{
+				"type": "single",
+				"id": "mirzam",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "heavenlycaress",
+		"items": [
+			{
+				"type": "single",
+				"id": "heavenlycaress",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "filament",
+		"items": [
+			{
+				"type": "single",
+				"id": "filament",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "avantraze",
+		"items": [
+			{
+				"type": "single",
+				"id": "avantraze",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100
+	},
+	{
+		"name": "battlenoone",
+		"items": [
+			{
+				"type": "single",
+				"id": "battlenoone",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "saikyostronger",
+		"items": [
+			{
+				"type": "single",
+				"id": "saikyostronger",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100
+	},
+	{
+		"name": "izana",
+		"items": [
+			{
+				"type": "single",
+				"id": "izana",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "einherjar",
+		"items": [
+			{
+				"type": "single",
+				"id": "einherjar",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "laqryma",
+		"items": [
+			{
+				"type": "single",
+				"id": "laqryma",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "amygdata",
+		"items": [
+			{
+				"type": "single",
+				"id": "amygdata",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "altale",
+		"items": [
+			{
+				"type": "single",
+				"id": "altale",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "feelssoright",
+		"items": [
+			{
+				"type": "single",
+				"id": "feelssoright",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "scarletcage",
+		"items": [
+			{
+				"type": "single",
+				"id": "scarletcage",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100
+	},
+	{
+		"name": "teriqma",
+		"items": [
+			{
+				"type": "single",
+				"id": "teriqma",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100
+	},
+	{
+		"name": "mahoroba",
+		"items": [
+			{
+				"type": "single",
+				"id": "mahoroba",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "badtek",
+		"items": [
+			{
+				"type": "single",
+				"id": "badtek",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "maliciousmischance",
+		"items": [
+			{
+				"type": "single",
+				"id": "maliciousmischance",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100
+	},
+	{
+		"name": "buchigireberserker",
+		"items": [
+			{
+				"type": "single",
+				"id": "buchigireberserker",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100
+	},
+	{
+		"name": "galaxyfriends",
+		"items": [
+			{
+				"type": "single",
+				"id": "galaxyfriends",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "xeraphinite",
+		"items": [
+			{
+				"type": "single",
+				"id": "xeraphinite",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "xanatos",
+		"items": [
+			{
+				"type": "single",
+				"id": "xanatos",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"price": 100,
+		"orig_price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "attraqtia",
+		"items": [
+			{
+				"type": "single",
+				"id": "attraqtia",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "gimmedablood",
+		"items": [
+			{
+				"type": "single",
+				"id": "gimmedablood",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "bassline",
+		"items": [
+			{
+				"type": "single",
+				"id": "bassline",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "theultimacy",
+		"items": [
+			{
+				"type": "single",
+				"id": "theultimacy",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "rekkaresonanc",
+		"items": [
+			{
+				"type": "single",
+				"id": "rekkaresonanc",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "rekkaresonance",
+		"items": [
+			{
+				"type": "single",
+				"id": "rekkaresonance",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "sheriruthrmx",
+		"items": [
+			{
+				"type": "single",
+				"id": "sheriruthrmx",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "eveninginscarlet",
+		"items": [
+			{
+				"type": "single",
+				"id": "eveninginscarlet",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "lastendconductor",
+		"items": [
+			{
+				"type": "single",
+				"id": "lastendconductor",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "goldenslaughterer",
+		"items": [
+			{
+				"type": "single",
+				"id": "goldenslaughterer",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "redolentshape",
+		"items": [
+			{
+				"type": "single",
+				"id": "redolentshape",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100,
+		"discount_from": 1646784000000,
+		"discount_to": 1647388799000
+	},
+	{
+		"name": "summerfireworks",
+		"items": [
+			{
+				"type": "single",
+				"id": "summerfireworks",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "init",
+		"items": [
+			{
+				"type": "single",
+				"id": "init",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "kissinglucifer",
+		"items": [
+			{
+				"type": "single",
+				"id": "kissinglucifer",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "neowings",
+		"items": [
+			{
+				"type": "single",
+				"id": "neowings",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "macromod",
+		"items": [
+			{
+				"type": "single",
+				"id": "macromod",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "internetoverdose",
+		"items": [
+			{
+				"type": "single",
+				"id": "internetoverdose",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "aurgelmir",
+		"items": [
+			{
+				"type": "single",
+				"id": "aurgelmir",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "headbonkache",
+		"items": [
+			{
+				"type": "single",
+				"id": "headbonkache",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "picopicotranslation",
+		"items": [
+			{
+				"type": "single",
+				"id": "picopicotranslation",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "mu",
+		"items": [
+			{
+				"type": "single",
+				"id": "mu",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "pupa",
+		"items": [
+			{
+				"type": "single",
+				"id": "pupa",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "cocorocosmetic",
+		"items": [
+			{
+				"type": "single",
+				"id": "cocorocosmetic",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "freemyself",
+		"items": [
+			{
+				"type": "single",
+				"id": "freemyself",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "capella",
+		"items": [
+			{
+				"type": "single",
+				"id": "capella",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "nullapophenia",
+		"items": [
+			{
+				"type": "single",
+				"id": "nullapophenia",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "hiirogekka",
+		"items": [
+			{
+				"type": "single",
+				"id": "hiirogekka",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "manicjeer",
+		"items": [
+			{
+				"type": "single",
+				"id": "manicjeer",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "crimsonthrone",
+		"items": [
+			{
+				"type": "single",
+				"id": "crimsonthrone",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "primitivelights",
+		"items": [
+			{
+				"type": "single",
+				"id": "primitivelights",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "thesurvivor",
+		"items": [
+			{
+				"type": "single",
+				"id": "thesurvivor",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "newyorkbackraise",
+		"items": [
+			{
+				"type": "single",
+				"id": "newyorkbackraise",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "lostintheabyss",
+		"items": [
+			{
+				"type": "single",
+				"id": "lostintheabyss",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "galacticlove",
+		"items": [
+			{
+				"type": "single",
+				"id": "galacticlove",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "tothemilkyway",
+		"items": [
+			{
+				"type": "single",
+				"id": "tothemilkyway",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "internetyamero",
+		"items": [
+			{
+				"type": "single",
+				"id": "internetyamero",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "sacrifice",
+		"items": [
+			{
+				"type": "single",
+				"id": "sacrifice",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "tothefurthestdream",
+		"items": [
+			{
+				"type": "single",
+				"id": "tothefurthestdream",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "bbkkbkk",
+		"items": [
+			{
+				"type": "single",
+				"id": "bbkkbkk",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "wishuponasnow",
+		"items": [
+			{
+				"type": "single",
+				"id": "wishuponasnow",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "overdrive",
+		"items": [
+			{
+				"type": "single",
+				"id": "overdrive",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "lightmyway",
+		"items": [
+			{
+				"type": "single",
+				"id": "lightmyway",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "lunarossa",
+		"items": [
+			{
+				"type": "single",
+				"id": "lunarossa",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "ionostream",
+		"items": [
+			{
+				"type": "single",
+				"id": "ionostream",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "masqueradelegion",
+		"items": [
+			{
+				"type": "single",
+				"id": "masqueradelegion",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "kyorenromance",
+		"items": [
+			{
+				"type": "single",
+				"id": "kyorenromance",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "qovat",
+		"items": [
+			{
+				"type": "single",
+				"id": "qovat",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "mirinae",
+		"items": [
+			{
+				"type": "single",
+				"id": "mirinae",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "ultradiaxon",
+		"items": [
+			{
+				"type": "single",
+				"id": "ultradiaxon",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "distortedfate",
+		"items": [
+			{
+				"type": "single",
+				"id": "distortedfate",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "floatingworld",
+		"items": [
+			{
+				"type": "single",
+				"id": "floatingworld",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "chromafill",
+		"items": [
+			{
+				"type": "single",
+				"id": "chromafill",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "backtobasics",
+		"items": [
+			{
+				"type": "single",
+				"id": "backtobasics",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "tasogare",
+		"items": [
+			{
+				"type": "single",
+				"id": "tasogare",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "beautifuldreamer",
+		"items": [
+			{
+				"type": "single",
+				"id": "beautifuldreamer",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "hypervision",
+		"items": [
+			{
+				"type": "single",
+				"id": "hypervision",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "stargateextreme",
+		"items": [
+			{
+				"type": "single",
+				"id": "stargateextreme",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "shrink",
+		"items": [
+			{
+				"type": "single",
+				"id": "shrink",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "rainofconflict",
+		"items": [
+			{
+				"type": "single",
+				"id": "rainofconflict",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "gensounosatellite",
+		"items": [
+			{
+				"type": "single",
+				"id": "gensounosatellite",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "thirdsun",
+		"items": [
+			{
+				"type": "single",
+				"id": "thirdsun",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "crimsonquartz",
+		"items": [
+			{
+				"type": "single",
+				"id": "crimsonquartz",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "diesirae",
+		"items": [
+			{
+				"type": "single",
+				"id": "diesirae",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "spiritdauntless",
+		"items": [
+			{
+				"type": "single",
+				"id": "spiritdauntless",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "placebobattler",
+		"items": [
+			{
+				"type": "single",
+				"id": "placebobattler",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "megalovaniarmx",
+		"items": [
+			{
+				"type": "single",
+				"id": "megalovaniarmx",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "shinchoku",
+		"items": [
+			{
+				"type": "single",
+				"id": "shinchoku",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "dullblade",
+		"items": [
+			{
+				"type": "single",
+				"id": "dullblade",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "tictactoe",
+		"items": [
+			{
+				"type": "single",
+				"id": "tictactoe",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "dontdie",
+		"items": [
+			{
+				"type": "single",
+				"id": "dontdie",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "miles",
+		"items": [
+			{
+				"type": "single",
+				"id": "miles",
+				"is_available": true
+			},
+			{
+				"type": "core",
+				"amount": 1,
+				"id": "core_generic",
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	}
+]

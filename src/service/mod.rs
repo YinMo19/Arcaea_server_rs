@@ -1,4 +1,5 @@
 pub mod aggregate;
+pub mod asset_init;
 pub mod asset_manager;
 pub mod bundle;
 pub mod character;
@@ -12,6 +13,7 @@ pub mod user;
 pub mod world;
 
 // Re-export commonly used service types for convenience
+pub use asset_init::AssetInitService;
 pub use asset_manager::AssetManager;
 pub use bundle::BundleService;
 pub use character::CharacterService;

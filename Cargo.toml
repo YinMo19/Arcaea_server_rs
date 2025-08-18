@@ -2,6 +2,7 @@
 name = "Arcaea_server_rs"
 version = "0.1.0"
 edition = "2021"
+default-run = "Arcaea_server_rs"
 
 [dependencies]
 lazy_static = "1.5.0"
@@ -44,3 +45,7 @@ features = ["sqlx_mysql"]
 default = ["rustls"]
 rustls = ["dep:rustls"]
 openssl = ["dep:openssl"]
+
+[[bin]]
+name = "init_db"
+path = "src/bin/init_db.rs"
