@@ -1,6 +1,7 @@
 pub mod character;
 pub mod download;
 pub mod notification;
+pub mod others;
 pub mod present;
 pub mod purchase;
 pub mod score;
@@ -43,4 +44,9 @@ pub use purchase::{
 pub use world::{
     MapEnterResponse, MapParser, Stamina, StepItem, StepReward, UserMap, UserWorldEntry,
     WorldAllResponse, WorldMap, WorldMapInfo, WorldMapResponse, WorldStep,
+};
+
+pub use others::{
+    AggregateCall, AggregateResponse, AggregateValue, BundleResponse, GameInfo,
+    InsightCompleteResponse,
 };

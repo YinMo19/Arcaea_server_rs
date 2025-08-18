@@ -266,7 +266,7 @@ pub struct AuthResponse<'r> {
     pub access_token: String,
 }
 
-/// Implement Responder for ApiResponse
+/// Implement Responder for AuthResponse
 impl<'r> Responder<'r, 'static> for AuthResponse<'r> {
     fn respond_to(self, _: &'r Request<'_>) -> rocket::response::Result<'static> {
         let json = serde_json::to_string(&self).map_err(|_| Status::InternalServerError)?;

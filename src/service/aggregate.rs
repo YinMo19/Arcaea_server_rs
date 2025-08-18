@@ -5,7 +5,7 @@ use crate::service::{
     DownloadService, PresentService, PurchaseService, ScoreService, UserService, WorldService,
 };
 
-use crate::route::others::GameInfo;
+use crate::model::GameInfo;
 
 use std::collections::HashMap;
 

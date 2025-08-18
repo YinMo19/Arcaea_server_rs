@@ -1,6 +1,9 @@
 use crate::config::{ARCAEA_DATABASE_VERSION, ARCAEA_LOG_DATABASE_VERSION, ARCAEA_SERVER_VERSION};
 use crate::context::{ClientContext, VersionContext};
 use crate::error::ArcError;
+use crate::model::{
+    AggregateCall, AggregateResponse, AggregateValue, GameInfo, InsightCompleteResponse,
+};
 use crate::route::common::{success_return, AuthGuard, EmptyResponse, RouteResult};
 use crate::service::aggregate::*;
 use crate::service::bundle::BundleDownloadResponse;
@@ -14,77 +17,9 @@ use rocket::http::Status;
 use rocket::response::status;
 use rocket::serde::json::Json;
 use rocket::{get, post, routes, Route, State};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use url::Url;
 use urlencoding::decode;
-
-/// Game information response structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GameInfo {
-    pub version: String,
-    pub database_version: String,
-    pub log_database_version: String,
-}
-
-/// Notification response structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NotificationResponse {
-    pub id: String,
-    pub title: String,
-    pub message: String,
-    pub timestamp: i64,
-}
-
-/// Bundle download response structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BundleResponse {
-    #[serde(rename = "orderedResults")]
-    pub ordered_results: Vec<BundleItem>,
-}
-
-/// Bundle item structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BundleItem {
-    pub name: String,
-    pub version: String,
-    pub url: String,
-    pub size: u64,
-}
-
-/// Insight completion response
-#[derive(Debug, Serialize, Deserialize)]
-pub struct InsightCompleteResponse {
-    pub insight_state: i32,
-}
-
-/// Aggregate request structure
-#[derive(Debug, Deserialize)]
-pub struct AggregateCall {
-    pub endpoint: String,
-    pub id: Option<serde_json::Value>,
-}
-
-/// Aggregate response structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AggregateResponse {
-    pub success: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub value: Option<Vec<AggregateValue>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error_code: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub extra: Option<HashMap<String, serde_json::Value>>,
-}
-
-/// Aggregate value structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AggregateValue {
-    pub id: Option<serde_json::Value>,
-    pub value: serde_json::Value,
-}
 
 /// Game information endpoint
 ///
@@ -239,30 +174,30 @@ pub async fn aggregate(
     world_service: &State<WorldService>,
     purchase_service: &State<PurchaseService>,
     auth: AuthGuard,
-) -> RouteResult<AggregateResponse> {
+) -> Result<AggregateResponse, ArcError> {
     // Parse the calls parameter as JSON
     let call_list: Vec<AggregateCall> = match serde_json::from_str(&calls) {
         Ok(calls) => calls,
         Err(_) => {
-            return Ok(success_return(AggregateResponse {
+            return Ok(AggregateResponse {
                 success: false,
                 value: None,
                 error_code: Some(108),
                 id: None,
                 extra: None,
-            }));
+            });
         }
     };
 
     // Limit to 10 requests maximum
     if call_list.len() > 10 {
-        return Ok(success_return(AggregateResponse {
+        return Ok(AggregateResponse {
             success: false,
             value: None,
             error_code: Some(108),
             id: None,
             extra: None,
-        }));
+        });
     }
 
     let mut response_values = Vec::new();
@@ -312,13 +247,13 @@ pub async fn aggregate(
             }
             Err(e) => {
                 // Return error response immediately on first error
-                return Ok(success_return(AggregateResponse {
+                return Ok(AggregateResponse {
                     success: false,
                     value: None,
                     error_code: Some(e.error_code()),
                     id: call.id,
                     extra: e.extra_data().cloned(),
-                }));
+                });
             }
         }
     }
@@ -331,7 +266,7 @@ pub async fn aggregate(
         extra: None,
     };
 
-    Ok(success_return(response))
+    Ok(response)
 }
 
 /// Bundle download endpoint
