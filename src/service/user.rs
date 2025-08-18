@@ -506,6 +506,7 @@ impl UserService {
     ///
     /// Validates the access token and returns the associated user ID.
     pub async fn authenticate_token(&self, token: &str) -> ArcResult<i32> {
+        log::info!("Authenticating token: {}", token);
         let result = sqlx::query_as!(
             UserCodeMapping,
             "SELECT user_id FROM login WHERE access_token = ?",

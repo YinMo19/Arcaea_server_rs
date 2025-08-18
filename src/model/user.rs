@@ -2,6 +2,12 @@ use rocket::FromForm;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
+use rocket::http::{ContentType, Status};
+use rocket::response::Responder;
+use rocket::{Request, Response};
+use serde_json;
+use std::io::Cursor;
+
 /// User database model representing the user table
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct User {
@@ -252,8 +258,29 @@ pub struct LoginRequest {
 }
 
 /// Authentication response payload
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthResponse<'r> {
+    pub success: bool,
+    pub token_type: &'r str,
+    pub user_id: i32,
+    pub access_token: String,
+}
+
+/// Implement Responder for ApiResponse
+impl<'r> Responder<'r, 'static> for AuthResponse<'r> {
+    fn respond_to(self, _: &'r Request<'_>) -> rocket::response::Result<'static> {
+        let json = serde_json::to_string(&self).map_err(|_| Status::InternalServerError)?;
+
+        Response::build()
+            .status(Status::Ok)
+            .header(ContentType::JSON)
+            .sized_body(json.len(), Cursor::new(json))
+            .ok()
+    }
+}
+
 #[derive(Debug, Serialize)]
-pub struct AuthResponse {
+pub struct RegisterResponse {
     pub user_id: i32,
     pub access_token: String,
 }

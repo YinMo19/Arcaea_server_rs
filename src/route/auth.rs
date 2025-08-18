@@ -1,8 +1,8 @@
 use crate::context::ClientContext;
 use crate::model::UserLoginDto;
 use crate::model::{AuthResponse, LoginRequest};
-use crate::route::common::{success_return, RouteResult};
 use crate::service::UserService;
+use crate::ArcError;
 
 use rocket::form::Form;
 
@@ -14,11 +14,11 @@ use rocket::{post, routes, Route, State};
 /// Validates username/password, checks for bans, manages device
 /// sessions and generates a new access token.
 #[post("/login", data = "<request>")]
-pub async fn login(
+pub async fn login<'a>(
     user_service: &State<UserService>,
     request: Form<LoginRequest>,
     ctx: ClientContext<'_>,
-) -> RouteResult<AuthResponse> {
+) -> Result<AuthResponse<'a>, ArcError> {
     assert_eq!(request.grant_type, Some("client_credentials".to_string()));
 
     let auth_str = String::from_utf8(
@@ -46,11 +46,13 @@ pub async fn login(
     let user_auth = user_service.login_user(login_data, ip).await?;
 
     let response = AuthResponse {
+        success: true,
+        token_type: "Bearer",
         user_id: user_auth.user_id,
         access_token: user_auth.token,
     };
 
-    Ok(success_return(response))
+    Ok(response)
 }
 
 /// Get all others routes

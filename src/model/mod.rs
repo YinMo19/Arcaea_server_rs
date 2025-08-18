@@ -9,8 +9,8 @@ pub mod world;
 
 // Re-export commonly used types for convenience
 pub use user::{
-    AuthResponse, Login, LoginRequest, NewUser, User, UserAuth, UserCodeMapping, UserCredentials,
-    UserExists, UserInfo, UserLoginDevice, UserLoginDto, UserRegisterDto,
+    AuthResponse, Login, LoginRequest, NewUser, RegisterResponse, User, UserAuth, UserCodeMapping,
+    UserCredentials, UserExists, UserInfo, UserLoginDevice, UserLoginDto, UserRegisterDto,
 };
 
 pub use character::{

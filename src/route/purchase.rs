@@ -1,4 +1,3 @@
-use crate::error::ArcError;
 use crate::route::common::{success_return, AuthGuard, RouteResult};
 use crate::service::PurchaseService;
 use rocket::serde::json::Json;

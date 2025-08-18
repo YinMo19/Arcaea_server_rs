@@ -148,11 +148,7 @@ impl<'r> FromRequest<'r> for AuthGuard {
         match authorization {
             Some(token) => {
                 // Extract Bearer token
-                let token = if token.starts_with("Bearer ") {
-                    &token[7..]
-                } else {
-                    token
-                };
+                let token = &token[7..];
 
                 // Get UserService from Rocket state
                 let user_service = match request.rocket().state::<crate::service::UserService>() {

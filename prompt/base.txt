@@ -16,5 +16,11 @@ python 版本在 py_version文件夹内，这个文件夹目前处于 gitignore 
      -d "name=ciallo" \
      -d "password=0d000721" \
      -d "email=arcaea@yinmo19.top" \
-     -d "device_id=0ed5525d2a77e201" 这样的 curl 直接使用命令行测试，如果你需要 token，你可以使用账号为 ciallo, 密码为 0d000721 进行登录，从而获取到 token。我已经在后台跑起来一个最新的案例，你可以放心的直接 curl 来看看结果如何，无需自己运行实例。不要新开任何的 test 文件来写一毫无用处的测试。如果你认为你的 curl 足够简单，就像我给的案例这样，你可以放在 scripts 下面，每个 curl 一个sh文件，上面的案例在 register.sh 内。
- python 版本无论多复杂都不允许你做任何简化，除非你能保证最后逻辑结果完全一致，否则保持一模一样的实现，不要自作聪明。对于暂时无法完成的模块允许使用 todo 保留。
+     -d "device_id=0ed5525d2a77e201" 这样的 curl 直接使用命令行测试，如果你需要 token，curl -X POST "http://localhost:8090/auth/login" \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -H "Authorization: Basic Y2lhbGxvOjBkMDAwNzIx" \
+     -d "grant_type=client_credentials" 可以获取到你需要的 token。
+
+我已经在后台跑起来一个最新的案例，你可以放心的直接 curl 来看看结果如何，无需自己运行实例。不要新开任何的 test 文件来写一毫无用处的测试。如果你认为你的 curl 足够简单，就像我给的案例这样，你可以放在 scripts 下面，每个 curl 一个sh文件，上面的案例在 register.sh 内。
+
+python 版本无论多复杂都不允许你做任何简化，除非你能保证最后逻辑结果完全一致，否则保持一模一样的实现，不要自作聪明。对于暂时无法完成的模块允许使用 todo 保留，但是尽量完成。

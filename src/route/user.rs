@@ -1,6 +1,6 @@
 use crate::context::ClientContext;
 use crate::error::ArcError;
-use crate::model::{AuthResponse, UserRegisterDto};
+use crate::model::{RegisterResponse, UserRegisterDto};
 
 use crate::route::common::{success_return, AuthGuard, RouteResult};
 use crate::service::UserService;
@@ -29,7 +29,7 @@ pub async fn register(
     user_service: &State<UserService>,
     register_info: Form<RegisterRequest>,
     ctx: ClientContext<'_>,
-) -> RouteResult<AuthResponse> {
+) -> RouteResult<RegisterResponse> {
     let register_data = UserRegisterDto {
         name: register_info.name.clone(),
         password: register_info.password.clone(),
@@ -46,7 +46,7 @@ pub async fn register(
         .register_user(register_data, device_id, ip.map(|c| c.to_string()))
         .await?;
 
-    let response = AuthResponse {
+    let response = RegisterResponse {
         user_id: user_auth.user_id,
         access_token: user_auth.token,
     };
