@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO user_item VALUES (?, ?, ?, 1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "864e47606b511c836700c576b18e9e3be1bbe60a180af1827cdefe2c642de326"
+}

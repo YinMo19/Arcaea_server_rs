@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT EXISTS(SELECT 1 FROM item WHERE item_id = ? AND type = ?) as `exists`",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "char_set": 63,
+          "max_size": 1
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "64f2d17cd6a05bf090ea60ea471d5a7dff1c7a8d447af43e41b6fd9231bce7cd"
+}

@@ -166,11 +166,8 @@ pub async fn applog_me(_log_data: Json<serde_json::Value>) -> RouteResult<EmptyR
 pub async fn aggregate(
     calls: String,
     user_service: &State<UserService>,
-    character_service: &State<CharacterService>,
     score_service: &State<ScoreService>,
     download_service: &State<DownloadService>,
-    bundle_service: &State<BundleService>,
-    notification_service: &State<NotificationService>,
     present_service: &State<PresentService>,
     world_service: &State<WorldService>,
     purchase_service: &State<PurchaseService>,

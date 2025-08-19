@@ -2,8 +2,8 @@ use crate::config::{Constants, CONFIG};
 use crate::error::{ArcError, ArcResult};
 use crate::model::user::{UserCores, UserRecentScore};
 use crate::model::{
-    Character, UpdateCharacter, User, UserAuth, UserCodeMapping, UserCredentials, UserExists,
-    UserInfo, UserLoginDevice, UserLoginDto, UserRegisterDto,
+    UpdateCharacter, User, UserAuth, UserCodeMapping, UserCredentials, UserExists, UserInfo,
+    UserLoginDevice, UserLoginDto, UserRegisterDto,
 };
 use crate::service::CharacterService;
 use base64::{engine::general_purpose, Engine as _};
@@ -1145,5 +1145,60 @@ impl UserService {
     async fn get_user_cores_json(&self, user_id: i32) -> ArcResult<serde_json::Value> {
         let user_cores = self.get_user_cores(user_id).await?;
         Ok(serde_json::to_value(user_cores)?)
+    }
+
+    /// Update a single column for a user
+    ///
+    /// Updates a specific column in the user table with the provided value.
+    pub async fn update_user_one_column<T>(
+        &self,
+        user_id: i32,
+        column: &str,
+        value: &T,
+    ) -> ArcResult<()>
+    where
+        T: serde::Serialize + Send + Sync,
+    {
+        let value_str = serde_json::to_string(value)?;
+        let sql = format!("UPDATE user SET {} = ? WHERE user_id = ?", column);
+
+        sqlx::query(&sql)
+            .bind(value_str)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Add stamina to a user
+    ///
+    /// Increases the user's stamina by the specified amount.
+    pub async fn add_stamina(&self, user_id: i32, amount: i32) -> ArcResult<()> {
+        let current_stamina = sqlx::query!("SELECT stamina FROM user WHERE user_id = ?", user_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        match current_stamina {
+            Some(stamina_row) => {
+                let new_stamina = stamina_row.stamina.unwrap_or(0) + amount;
+                sqlx::query!(
+                    "UPDATE user SET stamina = ? WHERE user_id = ?",
+                    new_stamina,
+                    user_id
+                )
+                .execute(&self.pool)
+                .await?;
+            }
+            None => {
+                return Err(ArcError::no_data(
+                    "User not found for stamina update".to_string(),
+                    108,
+                    -121,
+                ));
+            }
+        }
+
+        Ok(())
     }
 }

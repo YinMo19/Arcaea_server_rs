@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT item_id FROM item WHERE type = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0239a2359a9505581f4fa854e855b97bc6d3325d73384ec659a497588c194417"
+}

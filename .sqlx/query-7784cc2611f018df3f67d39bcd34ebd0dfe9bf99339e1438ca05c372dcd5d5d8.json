@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT IGNORE INTO item VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "7784cc2611f018df3f67d39bcd34ebd0dfe9bf99339e1438ca05c372dcd5d5d8"
+}

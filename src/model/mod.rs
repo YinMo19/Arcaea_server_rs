@@ -1,5 +1,6 @@
 pub mod character;
 pub mod download;
+pub mod item;
 pub mod notification;
 pub mod others;
 pub mod present;
@@ -49,4 +50,10 @@ pub use world::{
 pub use others::{
     AggregateCall, AggregateResponse, AggregateValue, BundleResponse, GameInfo,
     InsightCompleteResponse,
+};
+
+pub use item::{
+    CharacterMapping, CollectionItem, CreateItemRequest, DbItem, DbUserItem, Item, ItemConfig,
+    ItemExists, ItemFactoryParams, ItemFromString, ItemTypes, NormalItemTypes, PositiveItemTypes,
+    SpecialItemTypes, UpdateItemRequest, UserItemListResponse, UserTicket,
 };

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user SET ticket = ? WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "46bcffa456ee6dbf5c8e7f691d1d7aa5ad8a38351e08812dd849e376007db811"
+}

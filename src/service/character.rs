@@ -4,6 +4,7 @@ use crate::model::{
     Character, CharacterValue, CoreItem, Level, Skill, UpdateCharacter, UserCharacter,
     UserCharacterInfo,
 };
+use serde_json::{json, Value};
 use sqlx::{MySqlPool, Row};
 
 /// Character service for managing character items and user character data
@@ -101,6 +102,7 @@ impl CharacterService {
     }
 
     /// Get user character statistics as JSON values for API response
+    /// This matches Python's UserCharacter.to_dict() method exactly
     pub async fn get_user_character_stats(
         &self,
         user_id: i32,
@@ -109,9 +111,10 @@ impl CharacterService {
 
         let query = format!(
             r#"
-            SELECT uc.character_id, uc.level, uc.exp, uc.is_uncapped, uc.is_uncapped_override,
-                   c.name, c.char_type, c.skill_id, c.skill_id_uncap, c.skill_unlock_level,
-                   c.skill_requires_uncap, c.prog30, c.overdrive30, c.frag30
+            SELECT uc.character_id, uc.level, uc.exp, uc.is_uncapped, uc.is_uncapped_override, uc.skill_flag,
+                   c.name, c.max_level, c.char_type, c.skill_id, c.skill_id_uncap, c.skill_unlock_level,
+                   c.skill_requires_uncap, c.frag1, c.frag20, c.frag30, c.prog1, c.prog20, c.prog30,
+                   c.overdrive1, c.overdrive20, c.overdrive30
             FROM {} uc
             JOIN `character` c ON uc.character_id = c.character_id
             WHERE uc.user_id = ?
@@ -129,29 +132,173 @@ impl CharacterService {
 
         for char_record in characters {
             let character_id: i32 = char_record.get("character_id");
+            let level: i32 = char_record.get::<Option<i32>, _>("level").unwrap_or(1);
+            let exp: f64 = char_record.get::<Option<f64>, _>("exp").unwrap_or(0.0);
+            let is_uncapped: bool =
+                char_record.get::<Option<i8>, _>("is_uncapped").unwrap_or(0) != 0;
+            let is_uncapped_override: bool = char_record
+                .get::<Option<i8>, _>("is_uncapped_override")
+                .unwrap_or(0)
+                != 0;
+            let skill_flag: bool =
+                char_record.get::<Option<i32>, _>("skill_flag").unwrap_or(0) != 0;
+
+            // Create level info
+            let mut level_info = Level::new();
+            level_info.level = level;
+            level_info.exp = exp;
+            level_info.max_level = char_record.get::<Option<i32>, _>("max_level").unwrap_or(20);
+
+            // Create character values
+            let mut frag = CharacterValue::new();
+            frag.set_parameter(
+                char_record.get::<Option<f64>, _>("frag1").unwrap_or(0.0),
+                char_record.get::<Option<f64>, _>("frag20").unwrap_or(0.0),
+                char_record.get::<Option<f64>, _>("frag30").unwrap_or(0.0),
+            );
+
+            let mut prog = CharacterValue::new();
+            prog.set_parameter(
+                char_record.get::<Option<f64>, _>("prog1").unwrap_or(0.0),
+                char_record.get::<Option<f64>, _>("prog20").unwrap_or(0.0),
+                char_record.get::<Option<f64>, _>("prog30").unwrap_or(0.0),
+            );
+
+            let mut overdrive = CharacterValue::new();
+            overdrive.set_parameter(
+                char_record
+                    .get::<Option<f64>, _>("overdrive1")
+                    .unwrap_or(0.0),
+                char_record
+                    .get::<Option<f64>, _>("overdrive20")
+                    .unwrap_or(0.0),
+                char_record
+                    .get::<Option<f64>, _>("overdrive30")
+                    .unwrap_or(0.0),
+            );
+
+            // Handle Fatalis special calculations (character 55)
+            let mut fatalis_is_limited = false;
+            if character_id == 55 {
+                let addition = if CONFIG.character_full_unlock {
+                    fatalis_is_limited = true;
+                    Constants::FATALIS_MAX_VALUE as f64
+                } else {
+                    // Get world step count from user_kvdata
+                    let steps = sqlx::query_scalar!(
+                        r#"SELECT value FROM user_kvdata WHERE user_id = ? AND class = 'world' AND `key` = 'total_step_count' AND idx = 0"#,
+                        user_id
+                    )
+                    .fetch_optional(&self.pool)
+                    .await?
+                    .and_then(|v| v.and_then(|s| s.parse::<i32>().ok()))
+                    .unwrap_or(0) as f64;
+
+                    let addition = steps / 30.0;
+                    if addition >= Constants::FATALIS_MAX_VALUE as f64 {
+                        fatalis_is_limited = true;
+                        Constants::FATALIS_MAX_VALUE as f64
+                    } else {
+                        addition
+                    }
+                };
+                prog.addition = addition;
+                overdrive.addition = addition;
+            }
 
             // Get uncap cores for this character
             let uncap_cores = self.get_character_uncap_cores(character_id).await?;
 
-            let character_stat = serde_json::json!({
-                "character_id": character_id,
-                "name": char_record.get::<Option<String>, _>("name").unwrap_or_default(),
-                "level": char_record.get::<i32, _>("level"),
-                "exp": char_record.get::<f64, _>("exp"),
-                "level_exp": char_record.get::<f64, _>("exp"),
-                "is_uncapped": char_record.get::<i8, _>("is_uncapped") != 0,
-                "is_uncapped_override": char_record.get::<i8, _>("is_uncapped_override") != 0,
-                "char_type": char_record.get::<Option<i32>, _>("char_type").unwrap_or(0),
-                "skill_id": char_record.get::<Option<String>, _>("skill_id").unwrap_or_default(),
-                "skill_id_uncap": char_record.get::<Option<String>, _>("skill_id_uncap").unwrap_or_default(),
-                "skill_unlock_level": char_record.get::<Option<i32>, _>("skill_unlock_level").unwrap_or(0),
-                "skill_requires_uncap": char_record.get::<Option<i8>, _>("skill_requires_uncap").unwrap_or(0) != 0,
-                "prog": char_record.get::<Option<f64>, _>("prog30").unwrap_or(0.0),
-                "overdrive": char_record.get::<Option<f64>, _>("overdrive30").unwrap_or(0.0),
-                "frag": char_record.get::<Option<f64>, _>("frag30").unwrap_or(0.0),
+            // Create skill info
+            let skill_id = char_record.get::<Option<String>, _>("skill_id");
+            let skill_id_uncap = char_record.get::<Option<String>, _>("skill_id_uncap");
+            let skill_unlock_level: i32 = char_record
+                .get::<Option<i32>, _>("skill_unlock_level")
+                .unwrap_or(1);
+            let skill_requires_uncap: bool = char_record
+                .get::<Option<i8>, _>("skill_requires_uncap")
+                .unwrap_or(0)
+                != 0;
+
+            // Calculate skill_id_displayed - matches Python logic exactly
+            let is_uncapped_displayed = if is_uncapped_override {
+                false
+            } else {
+                is_uncapped
+            };
+            let skill_id_displayed = if is_uncapped_displayed
+                && skill_id_uncap.is_some()
+                && !skill_id_uncap.as_ref().unwrap().is_empty()
+            {
+                skill_id_uncap.clone()
+            } else if skill_id.is_some()
+                && !skill_id.as_ref().unwrap().is_empty()
+                && level >= skill_unlock_level
+            {
+                skill_id.clone()
+            } else {
+                None
+            };
+
+            // Calculate skill_state - matches Python logic exactly
+            let skill_state = if skill_id_displayed.as_ref() == Some(&"skill_maya".to_string()) {
+                if skill_flag {
+                    Some("add_random".to_string())
+                } else {
+                    Some("remove_random".to_string())
+                }
+            } else {
+                None
+            };
+
+            // Build character stat matching Python's to_dict exactly
+            let mut character_stat = serde_json::json!({
+                "base_character": character_id == 1,
+                "is_uncapped_override": is_uncapped_override,
+                "is_uncapped": is_uncapped,
                 "uncap_cores": uncap_cores,
-                "base_character": false
+                "char_type": char_record.get::<Option<i32>, _>("char_type").unwrap_or(0),
+                "skill_id_uncap": skill_id_uncap.unwrap_or_default(),
+                "skill_requires_uncap": skill_requires_uncap,
+                "skill_unlock_level": skill_unlock_level,
+                "skill_id": skill_id.unwrap_or_default(),
+                "overdrive": overdrive.get_value(&level_info),
+                "prog": prog.get_value(&level_info),
+                "frag": frag.get_value(&level_info),
+                "level_exp": level_info.level_exp(),
+                "exp": exp,
+                "level": level,
+                "name": char_record.get::<Option<String>, _>("name").unwrap_or_default(),
+                "character_id": character_id
             });
+
+            // Add voice for specific characters (21, 46)
+            if [21, 46].contains(&character_id) {
+                if let Value::Object(ref mut map) = character_stat {
+                    map.insert("voice".to_string(), json!([0, 1, 2, 3, 100, 1000, 1001]));
+                }
+            }
+
+            // Add fatalis_is_limited for character 55
+            if character_id == 55 {
+                if let Value::Object(ref mut map) = character_stat {
+                    map.insert("fatalis_is_limited".to_string(), json!(fatalis_is_limited));
+                }
+            }
+
+            // Add base_character_id for specific characters [1, 6, 7, 17, 18, 24, 32, 35, 52]
+            if [1, 6, 7, 17, 18, 24, 32, 35, 52].contains(&character_id) {
+                if let Value::Object(ref mut map) = character_stat {
+                    map.insert("base_character_id".to_string(), json!(1));
+                }
+            }
+
+            // Add skill_state if present
+            if let Some(state) = skill_state {
+                if let Value::Object(ref mut map) = character_stat {
+                    map.insert("skill_state".to_string(), json!(state));
+                }
+            }
 
             character_stats.push(character_stat);
         }
@@ -465,13 +612,13 @@ impl CharacterService {
         Ok(user_char_info)
     }
 
-    /// Toggle uncap override state for a character
+    /// Toggle uncap override state for a character - matches Python change_uncap_override
     pub async fn toggle_character_uncap_override(
         &self,
         user_id: i32,
         character_id: i32,
     ) -> ArcResult<UserCharacterInfo> {
-        let _table_name = self.get_user_char_table();
+        let table_name = self.get_user_char_table();
 
         // Get current uncap condition
         let (is_uncapped, is_uncapped_override) = self
@@ -501,31 +648,22 @@ impl CharacterService {
         .await?;
 
         // Update character table
-        if CONFIG.character_full_unlock {
-            sqlx::query!(
-                "UPDATE user_char_full SET is_uncapped_override = ? WHERE user_id = ? AND character_id = ?",
-                if new_override { 1 } else { 0 },
-                user_id,
-                character_id
-            )
+        let query = format!(
+            "UPDATE {} SET is_uncapped_override = ? WHERE user_id = ? AND character_id = ?",
+            table_name
+        );
+        sqlx::query(&query)
+            .bind(if new_override { 1 } else { 0 })
+            .bind(user_id)
+            .bind(character_id)
             .execute(&self.pool)
             .await?;
-        } else {
-            sqlx::query!(
-                "UPDATE user_char SET is_uncapped_override = ? WHERE user_id = ? AND character_id = ?",
-                if new_override { 1 } else { 0 },
-                user_id,
-                character_id
-            )
-            .execute(&self.pool)
-            .await?;
-        }
 
         // Return updated character info
         self.get_user_character_info(user_id, character_id).await
     }
 
-    /// Perform character uncap (first time)
+    /// Perform character uncap (first time) - matches Python character_uncap
     pub async fn character_uncap(
         &self,
         user_id: i32,
@@ -609,20 +747,23 @@ impl CharacterService {
             }
         }
 
-        // Update character uncap state
-        sqlx::query!(
-            "UPDATE user_char SET is_uncapped = 1, is_uncapped_override = 0 WHERE user_id = ? AND character_id = ?",
-            user_id,
-            character_id
-        )
-        .execute(&self.pool)
-        .await?;
+        // Update character uncap state - use the correct table based on config
+        let table_name = self.get_user_char_table();
+        let query = format!(
+            "UPDATE {} SET is_uncapped = 1, is_uncapped_override = 0 WHERE user_id = ? AND character_id = ?",
+            table_name
+        );
+        sqlx::query(&query)
+            .bind(user_id)
+            .bind(character_id)
+            .execute(&self.pool)
+            .await?;
 
         // Return updated character info
         self.get_user_character_info(user_id, character_id).await
     }
 
-    /// Upgrade character with experience
+    /// Upgrade character with experience - matches Python upgrade
     pub async fn upgrade_character(
         &self,
         user_id: i32,
@@ -653,33 +794,23 @@ impl CharacterService {
         char_info.level.add_exp(exp_addition)?;
 
         // Update database
-        let _table_name = self.get_user_char_table();
-        if CONFIG.character_full_unlock {
-            sqlx::query!(
-                "UPDATE user_char_full SET level = ?, exp = ? WHERE user_id = ? AND character_id = ?",
-                char_info.level.level,
-                char_info.level.exp,
-                user_id,
-                character_id
-            )
+        let table_name = self.get_user_char_table();
+        let query = format!(
+            "UPDATE {} SET level = ?, exp = ? WHERE user_id = ? AND character_id = ?",
+            table_name
+        );
+        sqlx::query(&query)
+            .bind(char_info.level.level)
+            .bind(char_info.level.exp)
+            .bind(user_id)
+            .bind(character_id)
             .execute(&self.pool)
             .await?;
-        } else {
-            sqlx::query!(
-                "UPDATE user_char SET level = ?, exp = ? WHERE user_id = ? AND character_id = ?",
-                char_info.level.level,
-                char_info.level.exp,
-                user_id,
-                character_id
-            )
-            .execute(&self.pool)
-            .await?;
-        }
 
         Ok(char_info)
     }
 
-    /// Upgrade character using core items (ether drops)
+    /// Upgrade character using core items (ether drops) - matches Python upgrade_by_core
     pub async fn upgrade_character_by_core(
         &self,
         user_id: i32,
@@ -737,32 +868,24 @@ impl CharacterService {
             .await
     }
 
-    /// Change character skill state (for Maya)
+    /// Change character skill state (for Maya) - matches Python change_skill_state
     pub async fn change_character_skill_state(
         &self,
         user_id: i32,
         character_id: i32,
     ) -> ArcResult<()> {
-        let _table_name = self.get_user_char_table();
+        let table_name = self.get_user_char_table();
 
         // Toggle skill flag
-        if CONFIG.character_full_unlock {
-            sqlx::query!(
-                "UPDATE user_char_full SET skill_flag = 1 - skill_flag WHERE user_id = ? AND character_id = ?",
-                user_id,
-                character_id
-            )
+        let query = format!(
+            "UPDATE {} SET skill_flag = 1 - skill_flag WHERE user_id = ? AND character_id = ?",
+            table_name
+        );
+        sqlx::query(&query)
+            .bind(user_id)
+            .bind(character_id)
             .execute(&self.pool)
             .await?;
-        } else {
-            sqlx::query!(
-                "UPDATE user_char SET skill_flag = 1 - skill_flag WHERE user_id = ? AND character_id = ?",
-                user_id,
-                character_id
-            )
-            .execute(&self.pool)
-            .await?;
-        }
 
         Ok(())
     }
@@ -855,25 +978,17 @@ impl CharacterService {
 
     /// Remove a character from user (if needed for debugging or admin purposes)
     pub async fn remove_character(&self, user_id: i32, character_id: i32) -> ArcResult<()> {
-        let _table_name = self.get_user_char_table();
+        let table_name = self.get_user_char_table();
 
-        if CONFIG.character_full_unlock {
-            sqlx::query!(
-                "DELETE FROM user_char_full WHERE user_id = ? AND character_id = ?",
-                user_id,
-                character_id
-            )
+        let query = format!(
+            "DELETE FROM {} WHERE user_id = ? AND character_id = ?",
+            table_name
+        );
+        sqlx::query(&query)
+            .bind(user_id)
+            .bind(character_id)
             .execute(&self.pool)
             .await?;
-        } else {
-            sqlx::query!(
-                "DELETE FROM user_char WHERE user_id = ? AND character_id = ?",
-                user_id,
-                character_id
-            )
-            .execute(&self.pool)
-            .await?;
-        }
 
         Ok(())
     }

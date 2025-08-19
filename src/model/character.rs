@@ -31,35 +31,44 @@ impl Level {
         LEVEL_STEPS.get(&self.level).copied().unwrap_or(0)
     }
 
-    /// Add experience and calculate new level
+    /// Add experience and calculate new level - matches Python version exactly
     pub fn add_exp(&mut self, exp_addition: f64) -> ArcResult<()> {
-        let new_exp = self.exp + exp_addition;
+        let exp = self.exp + exp_addition;
 
         // Check if we've reached max level exp
         let max_level_exp = LEVEL_STEPS.get(&self.max_level).copied().unwrap_or(25000) as f64;
-        if new_exp >= max_level_exp {
+        if exp >= max_level_exp {
             self.exp = max_level_exp;
             self.level = self.max_level;
             return Ok(());
         }
 
-        // Handle negative exp (shouldn't happen in normal gameplay)
-        if new_exp < 0.0 {
-            return Err(ArcError::input("EXP value error"));
+        // Create arrays a (levels) and b (exp values) from LEVEL_STEPS - matches Python logic
+        let mut a: Vec<i32> = Vec::new();
+        let mut b: Vec<i32> = Vec::new();
+        for (&k, &v) in LEVEL_STEPS.iter() {
+            a.push(k);
+            b.push(v);
         }
 
-        // Find the appropriate level for this exp amount
-        let mut target_level = 1;
-        for (&level, &exp_req) in LEVEL_STEPS.iter() {
-            if level <= self.max_level && (exp_req as f64) <= new_exp {
-                target_level = level;
-            } else {
-                break;
-            }
+        // Sort by level to ensure proper order
+        let mut pairs: Vec<(i32, i32)> = a.into_iter().zip(b.into_iter()).collect();
+        pairs.sort_by_key(|&(level, _)| level);
+        let a: Vec<i32> = pairs.iter().map(|&(level, _)| level).collect();
+        let b: Vec<i32> = pairs.iter().map(|&(_, exp_val)| exp_val).collect();
+
+        if exp < b[0] as f64 {
+            // 向下溢出，是异常状态，不该被try捕获，不然数据库无法回滚
+            return Err(ArcError::input("EXP value error."));
         }
 
-        self.exp = new_exp;
-        self.level = target_level;
+        let mut i = a.len() - 1;
+        while exp < b[i] as f64 {
+            i -= 1;
+        }
+
+        self.exp = exp;
+        self.level = a[i];
         Ok(())
     }
 }
@@ -492,132 +501,60 @@ impl UserCharacterInfo {
         None
     }
 
-    /// Convert to dictionary format for API responses
-    pub fn to_dict(&self) -> HashMap<String, serde_json::Value> {
-        let mut result = HashMap::new();
-
-        result.insert(
-            "character_id".to_string(),
-            serde_json::Value::Number(self.character_id.into()),
-        );
-        result.insert(
-            "name".to_string(),
-            serde_json::Value::String(self.name.clone()),
-        );
-        result.insert(
-            "char_type".to_string(),
-            serde_json::Value::Number(self.char_type.into()),
-        );
-        result.insert(
-            "level".to_string(),
-            serde_json::Value::Number(self.level.level.into()),
-        );
-        result.insert(
-            "exp".to_string(),
-            serde_json::Value::Number(serde_json::Number::from_f64(self.level.exp).unwrap()),
-        );
-        result.insert(
-            "level_exp".to_string(),
-            serde_json::Value::Number(self.level.level_exp().into()),
-        );
-        result.insert(
-            "frag".to_string(),
-            serde_json::Value::Number(serde_json::Number::from_f64(self.frag_value()).unwrap()),
-        );
-        result.insert(
-            "prog".to_string(),
-            serde_json::Value::Number(serde_json::Number::from_f64(self.prog_value()).unwrap()),
-        );
-        result.insert(
-            "overdrive".to_string(),
-            serde_json::Value::Number(
-                serde_json::Number::from_f64(self.overdrive_value()).unwrap(),
-            ),
-        );
-
-        result.insert(
-            "is_uncapped".to_string(),
-            serde_json::Value::Bool(self.is_uncapped),
-        );
-        result.insert(
-            "is_uncapped_override".to_string(),
-            serde_json::Value::Bool(self.is_uncapped_override),
-        );
-        result.insert(
-            "base_character".to_string(),
-            serde_json::Value::Bool(self.is_base_character()),
-        );
-
-        result.insert(
-            "skill_id".to_string(),
-            self.skill
-                .skill_id
-                .as_ref()
-                .map(|s| serde_json::Value::String(s.clone()))
-                .unwrap_or(serde_json::Value::Null),
-        );
-        result.insert(
-            "skill_unlock_level".to_string(),
-            serde_json::Value::Number(self.skill.skill_unlock_level.into()),
-        );
-        result.insert(
-            "skill_requires_uncap".to_string(),
-            serde_json::Value::Bool(self.skill.skill_requires_uncap),
-        );
-        result.insert(
-            "skill_id_uncap".to_string(),
-            self.skill
-                .skill_id_uncap
-                .as_ref()
-                .map(|s| serde_json::Value::String(s.clone()))
-                .unwrap_or(serde_json::Value::Null),
-        );
-
-        // Add uncap cores
-        let cores_json: Vec<serde_json::Value> = self
-            .uncap_cores
-            .iter()
-            .map(|core| core.to_dict_character_format())
-            .collect();
-        result.insert(
-            "uncap_cores".to_string(),
-            serde_json::Value::Array(cores_json),
-        );
+    /// Convert to dictionary format for API responses - matches Python version exactly
+    pub fn to_dict(&self) -> serde_json::Value {
+        let mut r = serde_json::json!({
+            "base_character": self.is_base_character(),
+            "is_uncapped_override": self.is_uncapped_override,
+            "is_uncapped": self.is_uncapped,
+            "uncap_cores": self.uncap_cores.iter().map(|core| core.to_dict_character_format()).collect::<Vec<_>>(),
+            "char_type": self.char_type,
+            "skill_id_uncap": self.skill.skill_id_uncap.as_ref().unwrap_or(&String::new()).clone(),
+            "skill_requires_uncap": self.skill.skill_requires_uncap,
+            "skill_unlock_level": self.skill.skill_unlock_level,
+            "skill_id": self.skill.skill_id.as_ref().unwrap_or(&String::new()).clone(),
+            "overdrive": self.overdrive_value(),
+            "prog": self.prog_value(),
+            "frag": self.frag_value(),
+            "level_exp": self.level.level_exp(),
+            "exp": self.level.exp,
+            "level": self.level.level,
+            "name": self.name.clone(),
+            "character_id": self.character_id
+        });
 
         // Add voice data for specific characters
         if let Some(voice) = &self.voice {
-            let voice_json: Vec<serde_json::Value> = voice
-                .iter()
-                .map(|&v| serde_json::Value::Number(v.into()))
-                .collect();
-            result.insert("voice".to_string(), serde_json::Value::Array(voice_json));
+            if let serde_json::Value::Object(ref mut map) = r {
+                map.insert("voice".to_string(), serde_json::json!(voice));
+            }
         }
 
         // Add Fatalis specific data
         if self.character_id == 55 {
-            result.insert(
-                "fatalis_is_limited".to_string(),
-                serde_json::Value::Bool(self.fatalis_is_limited),
-            );
+            if let serde_json::Value::Object(ref mut map) = r {
+                map.insert(
+                    "fatalis_is_limited".to_string(),
+                    serde_json::json!(self.fatalis_is_limited),
+                );
+            }
         }
 
         // Add base character ID for specific characters
         if [1, 6, 7, 17, 18, 24, 32, 35, 52].contains(&self.character_id) {
-            result.insert(
-                "base_character_id".to_string(),
-                serde_json::Value::Number(1.into()),
-            );
+            if let serde_json::Value::Object(ref mut map) = r {
+                map.insert("base_character_id".to_string(), serde_json::json!(1));
+            }
         }
 
         // Add skill state
         if let Some(skill_state) = self.skill_state() {
-            result.insert(
-                "skill_state".to_string(),
-                serde_json::Value::String(skill_state),
-            );
+            if let serde_json::Value::Object(ref mut map) = r {
+                map.insert("skill_state".to_string(), serde_json::json!(skill_state));
+            }
         }
 
-        result
+        r
     }
 }
 

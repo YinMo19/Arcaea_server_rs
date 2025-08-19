@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE item SET is_available = ? WHERE item_id = ? AND type = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "7c6012586d22eeb912be8c1fb56e05380e15a5da8b99448c19a6ba270db07d0b"
+}

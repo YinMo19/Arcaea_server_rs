@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO user_char VALUES (?, ?, 1, 0, 0, 0, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "5a5e1ae6f49f182f42a6228997b26e2ec2982de30094bd8bf4d417b092f06a85"
+}

@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT is_available FROM item WHERE item_id = ? AND type = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "is_available",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 4
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "48293c99f01ff1e80c7973c84a4be7782cf6e499d82ec9046f970a1cd81c159c"
+}

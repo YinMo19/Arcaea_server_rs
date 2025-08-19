@@ -1,0 +1,36 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT item_id, amount FROM user_item WHERE type = ? AND user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "amount",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "4089b65b8064e771486bbab97cb478df8dfabe7646ce41c32a3cb3da94bf745d"
+}
