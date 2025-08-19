@@ -924,7 +924,7 @@ impl CharacterService {
         )
         .fetch_all(&self.pool)
         .await?;
-        let user_ids = sqlx::query_scalar!("SELECT user_id FROM user_char")
+        let user_ids = sqlx::query_scalar!("SELECT user_id FROM user")
             .fetch_all(&self.pool)
             .await?;
 
@@ -932,25 +932,21 @@ impl CharacterService {
             .execute(&self.pool)
             .await?;
 
-        let user_ids_len = user_ids.len();
-        for update_character in update_characters {
-            let exp = if update_character.max_level == Some(30) {
-                25000
-            } else {
-                10000
-            };
-
+        for user_id in user_ids {
             let query = format!(
                 "INSERT INTO user_char_full VALUES {}",
-                (0..user_ids_len)
+                (0..update_characters.len())
                     .map(|_| "(?, ?, ?, ?, ?, 0, 0)".to_string())
                     .collect::<Vec<String>>()
                     .join(", ")
             );
-
             let mut query_builder = sqlx::query(&query);
-
-            for user_id in user_ids.clone() {
+            for update_character in &update_characters {
+                let exp = if update_character.max_level == Some(30) {
+                    25000
+                } else {
+                    10000
+                };
                 query_builder = query_builder
                     .bind(user_id)
                     .bind(update_character.character_id)

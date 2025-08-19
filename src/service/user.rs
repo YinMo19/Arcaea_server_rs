@@ -2,8 +2,8 @@ use crate::config::{Constants, CONFIG};
 use crate::error::{ArcError, ArcResult};
 use crate::model::user::{UserCores, UserRecentScore};
 use crate::model::{
-    Character, User, UserAuth, UserCodeMapping, UserCredentials, UserExists, UserInfo,
-    UserLoginDevice, UserLoginDto, UserRegisterDto,
+    Character, UpdateCharacter, User, UserAuth, UserCodeMapping, UserCredentials, UserExists,
+    UserInfo, UserLoginDevice, UserLoginDto, UserRegisterDto,
 };
 use crate::service::CharacterService;
 use base64::{engine::general_purpose, Engine as _};
@@ -180,8 +180,8 @@ impl UserService {
 
         // Insert all characters into user_char_full
         let characters = sqlx::query_as!(
-            Character,
-            "SELECT character_id, name, max_level, frag1, prog1, overdrive1, frag20, prog20, overdrive20, frag30, prog30, overdrive30, skill_id, skill_unlock_level, skill_requires_uncap, skill_id_uncap, char_type, is_uncapped FROM `character`"
+            UpdateCharacter,
+            "SELECT character_id, max_level, is_uncapped FROM `character`"
         )
         .fetch_all(&self.pool)
         .await?;
