@@ -753,3 +753,11 @@ impl From<(Character, UserCharacterFull)> for CharacterInfo {
         }
     }
 }
+
+/// For update full character table
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct UpdateCharacter {
+    pub character_id: i32,
+    pub max_level: Option<i32>,
+    pub is_uncapped: Option<i8>,
+}

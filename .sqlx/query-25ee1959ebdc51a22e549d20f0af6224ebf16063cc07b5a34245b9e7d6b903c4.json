@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            INSERT INTO course (course_id, course_name, dan_name, style, gauge_requirement,\n                              flag_as_hidden_when_requirements_not_met, can_start)\n            VALUES (?, ?, ?, ?, ?, ?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "25ee1959ebdc51a22e549d20f0af6224ebf16063cc07b5a34245b9e7d6b903c4"
+}

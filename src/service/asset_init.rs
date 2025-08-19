@@ -60,18 +60,28 @@ pub struct CourseData {
     pub gauge_requirement: String,
     pub flag_as_hidden_when_requirements_not_met: bool,
     pub can_start: bool,
-    pub charts: Vec<CourseChart>,
-    pub requirements: Vec<String>,
-    pub items: Vec<PurchaseItemDetail>,
+    pub songs: Vec<CourseSong>,
+    pub requirements: Vec<Requirements>,
+    // pub items: Vec<PurchaseItemDetail>,
+    pub is_completed: bool,
+    pub high_score: i32,
+    pub best_clear_type: i32,
+    pub rewards: Vec<String>,
 }
 
-/// Course chart data
+/// requirements
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CourseChart {
-    pub song_id: String,
+pub struct Requirements {
+    pub value: String,
+    pub r#type: String,
+}
+
+/// Course song data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CourseSong {
+    pub id: String,
     pub difficulty: i32,
     pub flag_as_hidden: bool,
-    pub song_index: i32,
 }
 
 /// Character statistics at different levels
@@ -507,17 +517,17 @@ impl AssetInitService {
         .map_err(|e| ArcError::input(format!("Failed to insert course: {}", e)))?;
 
         // Insert course charts
-        for chart in course.charts {
+        for (index, chart) in course.songs.iter().enumerate() {
             query!(
                 r#"
                 INSERT INTO course_chart (course_id, song_id, difficulty, flag_as_hidden, song_index)
                 VALUES (?, ?, ?, ?, ?)
                 "#,
                 course.course_id,
-                chart.song_id,
+                chart.id,
                 chart.difficulty,
                 chart.flag_as_hidden,
-                chart.song_index
+                index as i32,
             )
             .execute(&self.pool)
             .await
@@ -529,7 +539,7 @@ impl AssetInitService {
             query!(
                 "INSERT INTO course_requirement (course_id, required_id) VALUES (?, ?)",
                 course.course_id,
-                requirement
+                requirement.value
             )
             .execute(&self.pool)
             .await
@@ -537,13 +547,31 @@ impl AssetInitService {
         }
 
         // Insert course items
-        for item in course.items {
+        for reward in course.rewards {
+            let (amount, item_id, item_type) = if reward.starts_with("fragment") {
+                (
+                    reward[8..].parse().unwrap_or(1),
+                    String::from("fragment"),
+                    String::from("fragment"),
+                )
+            } else if reward.starts_with("course_banner") {
+                (1, reward, String::from("course_banner"))
+            } else if reward.starts_with("core_generic_") {
+                (
+                    reward[13..].parse().unwrap_or(1),
+                    String::from("core_generic"),
+                    String::from("core"),
+                )
+            } else {
+                // unreachable!
+                panic!("Unknown reward type: {}", reward);
+            };
             query!(
                 "INSERT INTO course_item (course_id, item_id, type, amount) VALUES (?, ?, ?, ?)",
                 course.course_id,
-                item.id,
-                item.item_type,
-                item.amount.unwrap_or(1)
+                item_id,
+                item_type,
+                amount
             )
             .execute(&self.pool)
             .await

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO role_power (role_id, power_id) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "3a94d4167bc06125554c1f13ac325f9cd116e4d939902d808b3b89d6e4799a89"
+}

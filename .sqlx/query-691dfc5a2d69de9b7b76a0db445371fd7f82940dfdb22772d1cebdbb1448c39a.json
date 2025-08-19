@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT current_map FROM user WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "current_map",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "char_set": 224,
+          "max_size": 262140
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "691dfc5a2d69de9b7b76a0db445371fd7f82940dfdb22772d1cebdbb1448c39a"
+}

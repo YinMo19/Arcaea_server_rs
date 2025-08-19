@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM user_present WHERE user_id = ? AND present_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "3e02498d77f470e34ab997b01ba82863dc5ce2bc7daa211e78c00544944b4667"
+}

@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT character_id FROM user_char WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "character_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "char_set": 63,
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "10fc19e1d1106486d7f46fd703dcfbef6cef241151b685549e00f4b3dae3f558"
+}

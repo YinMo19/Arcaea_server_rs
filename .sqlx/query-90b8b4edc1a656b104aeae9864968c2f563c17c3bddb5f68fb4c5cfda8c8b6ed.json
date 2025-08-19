@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO power (power_id, caption) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "90b8b4edc1a656b104aeae9864968c2f563c17c3bddb5f68fb4c5cfda8c8b6ed"
+}

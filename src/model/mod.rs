@@ -16,7 +16,7 @@ pub use user::{
 
 pub use character::{
     Character, CharacterInfo, CharacterItem, CharacterValue, CoreItem, Level, NewUserCharacter,
-    Skill, UserCharacter, UserCharacterFull, UserCharacterInfo,
+    Skill, UpdateCharacter, UserCharacter, UserCharacterFull, UserCharacterInfo,
 };
 
 pub use download::{

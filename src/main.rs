@@ -76,6 +76,13 @@ async fn init_services(
     log::info!("Bundle service initialized successfully");
 
     let character_service = CharacterService::new(pool.clone());
+
+    // initialise all the character.
+    if let Err(e) = character_service.update_user_char_full().await {
+        log::error!("Failed to initialize full character: {}", e);
+        std::process::exit(1);
+    }
+
     let present_service = PresentService::new(pool.clone());
     let world_service = WorldService::new(pool.clone());
     let purchase_service = PurchaseService::new(pool.clone());

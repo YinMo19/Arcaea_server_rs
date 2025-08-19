@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO present (present_id, expire_ts, description) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "84e1d76188ac3391c792ca08fb2e99bf5808453db54f18b1f25e0de0492017db"
+}

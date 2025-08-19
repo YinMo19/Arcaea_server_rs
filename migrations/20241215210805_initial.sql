@@ -78,28 +78,6 @@ CREATE TABLE IF NOT EXISTS best_score (
   PRIMARY KEY (user_id, song_id, difficulty)
 );
 
-CREATE TABLE IF NOT EXISTS user_char (
-  user_id INT,
-  character_id INT,
-  level INT,
-  exp DOUBLE,
-  is_uncapped TINYINT,
-  is_uncapped_override TINYINT,
-  skill_flag INT,
-  PRIMARY KEY (user_id, character_id)
-);
-
-CREATE TABLE IF NOT EXISTS user_char_full (
-  user_id INT,
-  character_id INT,
-  level INT,
-  exp DOUBLE,
-  is_uncapped TINYINT,
-  is_uncapped_override TINYINT,
-  skill_flag INT,
-  PRIMARY KEY (user_id, character_id)
-);
-
 CREATE TABLE IF NOT EXISTS `character` (
   character_id INT PRIMARY KEY,
   name TEXT,
@@ -119,6 +97,30 @@ CREATE TABLE IF NOT EXISTS `character` (
   skill_id_uncap TEXT,
   char_type INT,
   is_uncapped TINYINT
+);
+
+CREATE TABLE IF NOT EXISTS user_char (
+  user_id INT NOT NULL,
+  character_id INT NOT NULL,
+  level INT,
+  exp DOUBLE,
+  is_uncapped TINYINT,
+  is_uncapped_override TINYINT,
+  skill_flag INT,
+  FOREIGN KEY (user_id) REFERENCES user (user_id),
+  FOREIGN KEY (character_id) REFERENCES `character` (character_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_char_full (
+  user_id INT NOT NULL,
+  character_id INT NOT NULL,
+  level INT,
+  exp DOUBLE,
+  is_uncapped TINYINT,
+  is_uncapped_override TINYINT,
+  skill_flag INT,
+  FOREIGN KEY (user_id) REFERENCES user (user_id),
+  FOREIGN KEY (character_id) REFERENCES `character` (character_id)
 );
 
 CREATE TABLE IF NOT EXISTS char_item (

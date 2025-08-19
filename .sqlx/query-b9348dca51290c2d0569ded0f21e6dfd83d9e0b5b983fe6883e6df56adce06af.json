@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT ticket FROM user WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ticket",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "b9348dca51290c2d0569ded0f21e6dfd83d9e0b5b983fe6883e6df56adce06af"
+}

@@ -1,7 +1,8 @@
 use crate::config::{Constants, CONFIG};
 use crate::error::{ArcError, ArcResult};
 use crate::model::{
-    Character, CharacterValue, CoreItem, Level, Skill, UserCharacter, UserCharacterInfo,
+    Character, CharacterValue, CoreItem, Level, Skill, UpdateCharacter, UserCharacter,
+    UserCharacterInfo,
 };
 use sqlx::{MySqlPool, Row};
 
@@ -913,5 +914,52 @@ impl CharacterService {
         };
 
         Ok(count)
+    }
+
+    /// upgrade user char full from character table
+    pub async fn update_user_char_full(&self) -> ArcResult<()> {
+        let update_characters = sqlx::query_as!(
+            UpdateCharacter,
+            "SELECT character_id, max_level, is_uncapped FROM `character`"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        let user_ids = sqlx::query_scalar!("SELECT user_id FROM user_char")
+            .fetch_all(&self.pool)
+            .await?;
+
+        sqlx::query!("DELETE FROM user_char_full")
+            .execute(&self.pool)
+            .await?;
+
+        let user_ids_len = user_ids.len();
+        for update_character in update_characters {
+            let exp = if update_character.max_level == Some(30) {
+                25000
+            } else {
+                10000
+            };
+
+            let query = format!(
+                "INSERT INTO user_char_full VALUES {}",
+                (0..user_ids_len)
+                    .map(|_| "(?, ?, ?, ?, ?, 0, 0)".to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            );
+
+            let mut query_builder = sqlx::query(&query);
+
+            for user_id in user_ids.clone() {
+                query_builder = query_builder
+                    .bind(user_id)
+                    .bind(update_character.character_id)
+                    .bind(update_character.max_level)
+                    .bind(exp)
+                    .bind(update_character.is_uncapped);
+            }
+            query_builder.execute(&self.pool).await?;
+        }
+        Ok(())
     }
 }

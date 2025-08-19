@@ -1,11 +1,11 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT item_id, amount FROM user_item WHERE user_id = ? AND type = 'core'",
+  "query": "\n            SELECT item_id as core_type, amount\n            FROM char_item\n            WHERE character_id = ? AND type = 'core'\n            ORDER BY item_id\n            ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "item_id",
+        "name": "core_type",
         "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
@@ -32,5 +32,5 @@
       true
     ]
   },
-  "hash": "fac9179c35c5ced1a439c3acb1dba08d71c2426cda0cde496bab051917ad02a1"
+  "hash": "8852a986a8244c613b3347bb20313db05e8d8f957b7449f27b49eff6efeb40d0"
 }

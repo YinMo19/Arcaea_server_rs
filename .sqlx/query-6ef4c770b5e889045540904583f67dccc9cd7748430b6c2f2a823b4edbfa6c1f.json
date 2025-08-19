@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            INSERT INTO purchase (purchase_name, price, orig_price, discount_from, discount_to, discount_reason)\n            VALUES (?, ?, ?, ?, ?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "6ef4c770b5e889045540904583f67dccc9cd7748430b6c2f2a823b4edbfa6c1f"
+}

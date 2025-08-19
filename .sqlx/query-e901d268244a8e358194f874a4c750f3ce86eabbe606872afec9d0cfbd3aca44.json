@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            INSERT INTO `character` (\n                character_id, name, max_level, frag1, prog1, overdrive1,\n                frag20, prog20, overdrive20, frag30, prog30, overdrive30,\n                skill_id, skill_unlock_level, skill_requires_uncap,\n                skill_id_uncap, char_type, is_uncapped\n            ) VALUES (99, 'shirahime', 20, 38, 33, 28, 66, 58, 50, 66, 58, 50, 'frags_preferred_song', 0, 0, '', 0, 0)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "e901d268244a8e358194f874a4c750f3ce86eabbe606872afec9d0cfbd3aca44"
+}

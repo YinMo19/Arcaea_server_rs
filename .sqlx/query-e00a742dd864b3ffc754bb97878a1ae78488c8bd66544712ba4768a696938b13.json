@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO user_role (user_id, role_id) VALUES (?, 'admin')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "e00a742dd864b3ffc754bb97878a1ae78488c8bd66544712ba4768a696938b13"
+}
