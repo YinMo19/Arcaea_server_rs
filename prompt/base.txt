@@ -2,7 +2,7 @@
 
 数据库方面，我打算使用 mariadb，并使用 sqlx 操作。我希望你尽量使用 query! query_as! query_scale!宏，在编译期判断 sql 正确性，并且尽可能的使用 struct 直接映射到 sql 内部的表格，而非使用 row.get 获取，因此我可以给你一个 mysql://arcaea:yinmo19sprivite@localhost:3306/arcaea_core 这样的实际可用的 mariadb 实例供参考。 另外数据库结构我已经设计好了（从 python 版本相似的结构） 我会在下面列出整个数据库迁移作为整个数据库结构, 你需要根据这个数据库结构来写 sql。另外我已经完成了迁移。
 
-python 版本在 py_version文件夹内，这个文件夹目前处于 gitignore 状态，你是用 function call 可能无法 grep 其中内容，想要查找文件或者查找内容直接使用命令行的 grep 和 find。你必须阅读 python 的代码 ，每一行和每一个实现都完全摸清了才能开始写 rust 版本的内容，由于提前约定好了 api，因此你必须保证 python 版本的 api 和 rust 版本的 api 完全一致，不能有任何区别，否则将会引起错误。
+python 版本在 py_version文件夹内，这个文件夹目前处于 gitignore 状态，你使用 function call 可能无法 grep 其中内容，想要查找文件或者查找内容直接使用命令行的 grep 和 find。你必须阅读 python 的代码 ，每一行和每一个实现都完全摸清了才能开始写 rust 版本的内容，由于提前约定好了 api，因此你必须保证 python 版本的 api 和 rust 版本的 api 完全一致，不能有任何区别，否则将会引起错误。
 
 关于 python 版本的结构，路由相关的文件在 server 文件夹下面，而核心逻辑在 core 下面。你必须要保证我的路由和 server 下面定义的路由完全一致，而我的 service 逻辑和 python 版本的 core 逻辑一致。
 
@@ -414,7 +414,7 @@ CREATE TABLE IF NOT EXISTS bundle_download_token (
 
 下面是我需要你帮我实现的目标：
 
-我希望你现在帮我根据 python 的 item 模块帮我完成 rust 的 item 模块。下面是 py_version/core/item.py 的全部内容
+我基于 python 的 item 模块实现了 rust 版本的 item 模块。这个模块并不提供 route，而是给购买和用户提供服务的一些接口。我希望你能帮我完善我的 user 和 purchase 以及 aggregate 模块（这个模块付属于 others 路由，在 services/下面）下面是 item.py的全部内容
 
 from .config_manager import Config
 from .error import (DataExist, InputError, ItemNotEnough, ItemUnavailable,
@@ -942,5 +942,4 @@ class CollectionItemMixin:
                            (i.amount, collection_id, i.item_id, i.item_type) for i in items])
         for i in items:
             collection_items[collection_items.index(i)].amount = i.amount
-
-我希望你在我的src/services/下面完成一个 item.rs ，实现和上面完全一致的功能。
+你需要*完整*阅读 user.py和我提到的 python 模块，然后根据调用关系看看我的代码有什么缺陷（例如本应该直接使用 item 模块的服务却在 user 服务中自己实现了一个简陋版本，那么删掉捡漏实现，直接调用 item 完整实现，又或者 user 模块有什么未实现功能，直接实现）。

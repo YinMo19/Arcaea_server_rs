@@ -8,6 +8,7 @@ use rocket::form::Form;
 use rocket::serde::json::Json;
 use rocket::{get, post, routes, FromForm, Route, State};
 use serde::Deserialize;
+use serde_json;
 use std::collections::HashMap;
 
 /// User registration request payload
@@ -17,6 +18,13 @@ pub struct RegisterRequest {
     pub password: String,
     pub email: String,
     pub device_id: Option<String>,
+}
+
+/// Friend management request payload
+#[derive(Debug, Deserialize, FromForm)]
+pub struct FriendRequest {
+    pub friend_user_code: Option<String>,
+    pub friend_id: Option<i32>,
 }
 
 /// User registration endpoint
@@ -418,11 +426,90 @@ pub async fn user_delete(
     Ok(success_return(response))
 }
 
+/// Add friend endpoint
+///
+/// Adds a user to the current user's friend list.
+/// Can use either friend_user_code or friend_id to identify the target user.
+#[post("/me/friend/add", data = "<request>")]
+pub async fn add_friend(
+    user_service: &State<UserService>,
+    auth: AuthGuard,
+    request: Form<FriendRequest>,
+) -> RouteResult<serde_json::Value> {
+    let friend_id = if let Some(friend_user_code) = &request.friend_user_code {
+        user_service.get_user_id_by_code(friend_user_code).await?
+    } else if let Some(fid) = request.friend_id {
+        fid
+    } else {
+        return Err(ArcError::input("friend_user_code or friend_id is required"));
+    };
+
+    user_service.add_friend(auth.user_id, friend_id).await?;
+
+    let response = serde_json::json!({
+        "user_id": auth.user_id,
+        "friend_id": friend_id
+    });
+
+    Ok(success_return(response))
+}
+
+/// Delete friend endpoint
+///
+/// Removes a user from the current user's friend list.
+#[post("/me/friend/delete", data = "<request>")]
+pub async fn delete_friend(
+    user_service: &State<UserService>,
+    auth: AuthGuard,
+    request: Form<FriendRequest>,
+) -> RouteResult<serde_json::Value> {
+    let friend_id = if let Some(friend_user_code) = &request.friend_user_code {
+        user_service.get_user_id_by_code(friend_user_code).await?
+    } else if let Some(fid) = request.friend_id {
+        fid
+    } else {
+        return Err(ArcError::input("friend_user_code or friend_id is required"));
+    };
+
+    user_service.delete_friend(auth.user_id, friend_id).await?;
+
+    let response = serde_json::json!({
+        "user_id": auth.user_id,
+        "friend_id": friend_id
+    });
+
+    Ok(success_return(response))
+}
+
+/// Get user friends endpoint
+///
+/// Returns the current user's friend list with detailed information.
+#[get("/me/friends")]
+pub async fn get_friends(
+    user_service: &State<UserService>,
+    auth: AuthGuard,
+) -> RouteResult<Vec<serde_json::Value>> {
+    let friends = user_service.get_user_friends(auth.user_id).await?;
+    Ok(success_return(friends))
+}
+
 /// Email verification resend endpoint
 ///
 /// Resends email verification (currently unavailable).
 #[post("/email/resend_verify")]
 pub async fn email_resend_verify() -> RouteResult<serde_json::Value> {
+    Err(ArcError::no_data(
+        "Email verification unavailable.",
+        151,
+        -1,
+    ))
+}
+
+/// Email verification status endpoint
+///
+/// Checks email verification status (currently unavailable).
+#[post("/verify")]
+pub async fn email_verify() -> RouteResult<serde_json::Value> {
     Err(ArcError::no_data(
         "Email verification unavailable.",
         151,
@@ -448,6 +535,10 @@ pub fn routes() -> Vec<Route> {
         cloud_post,
         sys_set,
         user_delete,
-        email_resend_verify
+        email_resend_verify,
+        email_verify,
+        add_friend,
+        delete_friend,
+        get_friends
     ]
 }

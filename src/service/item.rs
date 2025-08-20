@@ -603,6 +603,25 @@ impl ItemService {
 
         Ok(())
     }
+
+    /// Get user positive item amount
+    pub async fn get_user_positive_item_amount(
+        &self,
+        user_id: i32,
+        item_id: &str,
+        item_type: &str,
+    ) -> ArcResult<i32> {
+        let result = sqlx::query!(
+            "SELECT amount FROM user_item WHERE user_id = ? AND item_id = ? AND type = ?",
+            user_id,
+            item_id,
+            item_type
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result.and_then(|row| row.amount).unwrap_or(0))
+    }
 }
 
 /// Item factory for creating items of different types

@@ -263,6 +263,50 @@ impl ArcError {
         }
     }
 
+    /// Create a new friend error
+    pub fn friend<S: Into<String>>(message: S, error_code: i32, api_error_code: i32) -> Self {
+        Self::Friend {
+            message: message.into(),
+            error_code,
+            api_error_code,
+            extra_data: None,
+            status: 200,
+        }
+    }
+
+    /// Create a new ticket not enough error
+    pub fn ticket_not_enough<S: Into<String>>(message: S, api_error_code: i32) -> Self {
+        Self::TicketNotEnough {
+            message: message.into(),
+            error_code: 108,
+            api_error_code,
+            extra_data: None,
+            status: 200,
+        }
+    }
+
+    /// Create a new item unavailable error
+    pub fn item_unavailable<S: Into<String>>(message: S, error_code: i32) -> Self {
+        Self::ItemUnavailable {
+            message: message.into(),
+            error_code,
+            api_error_code: -121,
+            extra_data: None,
+            status: 200,
+        }
+    }
+
+    /// Create a new item not enough error
+    pub fn item_not_enough<S: Into<String>>(message: S) -> Self {
+        Self::ItemNotEnough {
+            message: message.into(),
+            error_code: 108,
+            api_error_code: -121,
+            extra_data: None,
+            status: 200,
+        }
+    }
+
     /// Create a rocket error
     pub fn rocket_err<S: Into<String>>(message: S) -> Self {
         Self::Rocket {

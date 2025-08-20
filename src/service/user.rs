@@ -1201,4 +1201,326 @@ impl UserService {
 
         Ok(())
     }
+
+    /// Add a friend to the user's friend list
+    ///
+    /// Creates a friendship relationship between the current user and the target user.
+    pub async fn add_friend(&self, user_id: i32, friend_id: i32) -> ArcResult<()> {
+        if user_id == friend_id {
+            return Err(ArcError::friend("Add yourself as a friend.", 604, -1));
+        }
+
+        // Check if friendship already exists
+        let exists = sqlx::query!(
+            "SELECT EXISTS(SELECT 1 FROM friend WHERE user_id_me = ? AND user_id_other = ?) as `exists`",
+            user_id,
+            friend_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        if exists.exists != 0 {
+            return Err(ArcError::friend("The user has been your friend.", 602, -1));
+        }
+
+        // Add friend relationship
+        sqlx::query!(
+            "INSERT INTO friend (user_id_me, user_id_other) VALUES (?, ?)",
+            user_id,
+            friend_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Remove a friend from the user's friend list
+    ///
+    /// Removes the friendship relationship between the current user and the target user.
+    pub async fn delete_friend(&self, user_id: i32, friend_id: i32) -> ArcResult<()> {
+        // Check if friendship exists
+        let exists = sqlx::query!(
+            "SELECT EXISTS(SELECT 1 FROM friend WHERE user_id_me = ? AND user_id_other = ?) as `exists`",
+            user_id,
+            friend_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        if exists.exists == 0 {
+            return Err(ArcError::friend(
+                "No user or the user is not your friend.",
+                401,
+                -1,
+            ));
+        }
+
+        // Remove friend relationship
+        sqlx::query!(
+            "DELETE FROM friend WHERE user_id_me = ? AND user_id_other = ?",
+            user_id,
+            friend_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get user's global ranking
+    ///
+    /// Returns the user's position in the global ranking based on world_rank_score.
+    /// Returns 0 if the user is not ranked or exceeds the maximum rank limit.
+    pub async fn get_global_rank(&self, user_id: i32) -> ArcResult<i32> {
+        // First get user's world_rank_score
+        let user_score = sqlx::query!(
+            "SELECT world_rank_score FROM user WHERE user_id = ?",
+            user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match user_score {
+            Some(score_row) => {
+                let world_rank_score = score_row.world_rank_score.unwrap_or(0);
+                if world_rank_score == 0 {
+                    return Ok(0);
+                }
+
+                // Count how many users have higher scores
+                let rank_result = sqlx::query!(
+                    "SELECT COUNT(*) as count FROM user WHERE world_rank_score > ?",
+                    world_rank_score
+                )
+                .fetch_one(&self.pool)
+                .await?;
+
+                let rank = rank_result.count as i32 + 1;
+                if rank <= CONFIG.world_rank_max {
+                    Ok(rank)
+                } else {
+                    Ok(0)
+                }
+            }
+            None => Ok(0),
+        }
+    }
+
+    /// Update user's global ranking score
+    ///
+    /// Calculates and updates the user's world_rank_score based on their best scores
+    /// across FTR, BYN, and ETR difficulties.
+    pub async fn update_global_rank(&self, user_id: i32) -> ArcResult<()> {
+        let score_result = sqlx::query!(
+            r#"
+            WITH user_scores AS (
+                SELECT song_id, difficulty, score_v2
+                FROM best_score
+                WHERE user_id = ? AND difficulty IN (2, 3, 4)
+            )
+            SELECT SUM(a) as total_score FROM (
+                SELECT SUM(score_v2) as a
+                FROM user_scores
+                WHERE difficulty = 2
+                AND song_id IN (SELECT song_id FROM chart WHERE rating_ftr > 0)
+                UNION
+                SELECT SUM(score_v2) as a
+                FROM user_scores
+                WHERE difficulty = 3
+                AND song_id IN (SELECT song_id FROM chart WHERE rating_byn > 0)
+                UNION
+                SELECT SUM(score_v2) as a
+                FROM user_scores
+                WHERE difficulty = 4
+                AND song_id IN (SELECT song_id FROM chart WHERE rating_etr > 0)
+            ) totals
+            "#,
+            user_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        if let Some(total_score) = score_result.total_score {
+            sqlx::query!(
+                "UPDATE user SET world_rank_score = ? WHERE user_id = ?",
+                total_score,
+                user_id
+            )
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Update user world mode completion information
+    ///
+    /// Updates user's world mode completion data for skill calculations.
+    pub async fn update_user_world_complete_info(&self, user_id: i32) -> ArcResult<()> {
+        // Note: This requires world map parsing logic and user_kvdata table operations
+        // For now, we'll implement a placeholder that can be extended later
+        // TODO: Implement full world mode completion tracking
+
+        // Get total step count for user
+        let step_result = sqlx::query!(
+            "SELECT CAST(COALESCE(SUM(curr_position), 0) + COUNT(*) AS SIGNED) as total_steps FROM user_world WHERE user_id = ?",
+            user_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Store in user_kvdata table for fatalis skill
+        if let Some(total_steps) = step_result.total_steps {
+            sqlx::query!(
+                r#"
+                INSERT INTO user_kvdata (user_id, class, `key`, idx, value)
+                VALUES (?, 'world', 'total_step_count', 0, ?)
+                ON DUPLICATE KEY UPDATE value = VALUES(value)
+                "#,
+                user_id,
+                total_steps.to_string()
+            )
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Change user's favorite character
+    ///
+    /// Updates the user's favorite character setting.
+    pub async fn change_favorite_character(
+        &self,
+        user_id: i32,
+        character_id: i32,
+    ) -> ArcResult<()> {
+        sqlx::query!(
+            "UPDATE user SET favorite_character = ? WHERE user_id = ?",
+            character_id,
+            user_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get user's friend list with detailed information
+    ///
+    /// Returns a list of friends with their characters and recent scores.
+    pub async fn get_user_friends(&self, user_id: i32) -> ArcResult<Vec<serde_json::Value>> {
+        let friend_ids = sqlx::query!(
+            "SELECT user_id_other FROM friend WHERE user_id_me = ?",
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut friends = Vec::new();
+
+        for friend_row in friend_ids {
+            let friend_id = friend_row.user_id_other;
+
+            // Check if mutual friendship exists
+            let is_mutual = sqlx::query!(
+                "SELECT EXISTS(SELECT 1 FROM friend WHERE user_id_me = ? AND user_id_other = ?) as `exists`",
+                friend_id,
+                user_id
+            )
+            .fetch_one(&self.pool)
+            .await?
+            .exists != 0;
+
+            // Get friend's basic info
+            let friend_info = sqlx::query!(
+                r#"
+                SELECT name, user_id, rating_ptt, is_hide_rating, join_date,
+                       character_id, is_skill_sealed, is_char_uncapped, is_char_uncapped_override,
+                       favorite_character, song_id, difficulty, score, shiny_perfect_count,
+                       perfect_count, near_count, miss_count, health, modifier, time_played, clear_type, rating
+                FROM user WHERE user_id = ?
+                "#,
+                friend_id
+            )
+            .fetch_optional(&self.pool)
+            .await?;
+
+            if let Some(friend) = friend_info {
+                let character_id = friend
+                    .favorite_character
+                    .unwrap_or(friend.character_id.unwrap_or(0));
+
+                // Get best clear type for recent score if exists
+                let best_clear_type = if let Some(ref song_id) = friend.song_id {
+                    let best_clear = sqlx::query!(
+                        "SELECT best_clear_type FROM best_score WHERE user_id = ? AND song_id = ? AND difficulty = ?",
+                        friend_id,
+                        song_id,
+                        friend.difficulty
+                    )
+                    .fetch_optional(&self.pool)
+                    .await?;
+                    best_clear
+                        .and_then(|bc| bc.best_clear_type)
+                        .unwrap_or(friend.clear_type.unwrap_or(0))
+                } else {
+                    friend.clear_type.unwrap_or(0)
+                };
+
+                let recent_score = if friend.song_id.is_some() {
+                    vec![serde_json::json!({
+                        "song_id": friend.song_id,
+                        "difficulty": friend.difficulty,
+                        "score": friend.score,
+                        "shiny_perfect_count": friend.shiny_perfect_count,
+                        "perfect_count": friend.perfect_count,
+                        "near_count": friend.near_count,
+                        "miss_count": friend.miss_count,
+                        "health": friend.health,
+                        "modifier": friend.modifier,
+                        "time_played": friend.time_played,
+                        "clear_type": friend.clear_type,
+                        "rating": friend.rating,
+                        "best_clear_type": best_clear_type
+                    })]
+                } else {
+                    Vec::new()
+                };
+
+                let friend_json = serde_json::json!({
+                    "is_mutual": is_mutual,
+                    "is_char_uncapped_override": friend.is_char_uncapped_override.unwrap_or(0) != 0,
+                    "is_char_uncapped": friend.is_char_uncapped.unwrap_or(0) != 0,
+                    "is_skill_sealed": friend.is_skill_sealed.unwrap_or(0) != 0,
+                    "rating": if friend.is_hide_rating.unwrap_or(0) != 0 { -1 } else { friend.rating_ptt.unwrap_or(0) },
+                    "join_date": friend.join_date,
+                    "character": character_id,
+                    "recent_score": recent_score,
+                    "name": friend.name,
+                    "user_id": friend.user_id
+                });
+
+                friends.push(friend_json);
+            }
+        }
+
+        // Sort by recent score time_played (most recent first)
+        friends.sort_by(|a, b| {
+            let time_a = a["recent_score"]
+                .as_array()
+                .and_then(|arr| arr.first())
+                .and_then(|score| score["time_played"].as_i64())
+                .unwrap_or(0);
+            let time_b = b["recent_score"]
+                .as_array()
+                .and_then(|arr| arr.first())
+                .and_then(|score| score["time_played"].as_i64())
+                .unwrap_or(0);
+            time_b.cmp(&time_a)
+        });
+
+        Ok(friends)
+    }
 }
