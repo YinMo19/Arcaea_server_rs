@@ -335,11 +335,7 @@ impl UnlockUserItem {
         .await?;
 
         if user_exists == 0 {
-            return Err(ArcError::no_data(
-                format!("No such user: {}", user_id),
-                -110,
-                -110,
-            ));
+            return Err(ArcError::no_data(format!("No such user: {}", user_id), -110));
         }
 
         // Get available items of specified types
@@ -476,11 +472,7 @@ impl OperationManager {
             "refresh_all_score_rating" => Box::new(RefreshAllScoreRating::new(self.pool.clone())),
             "unlock_user_item" => Box::new(UnlockUserItem::new(self.pool.clone())),
             _ => {
-                return Err(ArcError::no_data(
-                    format!("Unknown operation: {}", operation_name),
-                    404,
-                    -100,
-                ));
+                return Err(ArcError::no_data(format!("Unknown operation: {}", operation_name), 404));
             }
         };
 

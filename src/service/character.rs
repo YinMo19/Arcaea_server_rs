@@ -91,11 +91,7 @@ impl CharacterService {
         .await?;
 
         let character_id = character_id.ok_or_else(|| {
-            ArcError::no_data(
-                format!("No character with name: {}", character_name),
-                404,
-                -130,
-            )
+            ArcError::no_data(format!("No character with name: {}", character_name), 404)
         })?;
 
         self.grant_character_by_id(user_id, character_id).await
@@ -418,11 +414,7 @@ impl CharacterService {
         .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| {
-            ArcError::no_data(
-                format!("No such character: {}", character_id),
-                404,
-                -130,
-            )
+            ArcError::no_data(format!("No such character: {}", character_id), 404)
         })?;
 
         Ok(character)
@@ -489,7 +481,7 @@ impl CharacterService {
             )
             .fetch_optional(&self.pool)
             .await?
-            .ok_or_else(|| ArcError::no_data("The character of the user does not exist.", 404, -130))?;
+            .ok_or_else(|| ArcError::no_data("The character of the user does not exist.", 404))?;
 
             (
                 row.level.unwrap_or(1),
@@ -505,7 +497,7 @@ impl CharacterService {
             )
             .fetch_optional(&self.pool)
             .await?
-            .ok_or_else(|| ArcError::no_data("The character of the user does not exist.", 404, -130))?;
+            .ok_or_else(|| ArcError::no_data("The character of the user does not exist.", 404))?;
 
             (
                 row.level.unwrap_or(1),

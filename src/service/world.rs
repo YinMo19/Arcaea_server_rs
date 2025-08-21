@@ -240,7 +240,7 @@ impl WorldService {
         })?;
 
         let user_map_record =
-            user_map_record.ok_or_else(|| ArcError::no_data("Map not found for user", 404, -2))?;
+            user_map_record.ok_or_else(|| ArcError::no_data("Map not found for user", 404))?;
 
         let user_map = UserMapEntry {
             map_id: user_map_record.map_id,

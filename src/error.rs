@@ -216,11 +216,11 @@ impl ArcError {
     }
 
     /// Create a new no data error
-    pub fn no_data<S: Into<String>>(message: S, error_code: i32, api_error_code: i32) -> Self {
+    pub fn no_data<S: Into<String>>(message: S, error_code: i32) -> Self {
         Self::NoData {
             message: message.into(),
             error_code,
-            api_error_code,
+            api_error_code: -2,
             extra_data: None,
             status: 200,
         }
@@ -253,11 +253,11 @@ impl ArcError {
     }
 
     /// Create a new rate limit error
-    pub fn rate_limit<S: Into<String>>(message: S, error_code: i32, api_error_code: i32) -> Self {
+    pub fn rate_limit<S: Into<String>>(message: S, error_code: i32) -> Self {
         Self::RateLimit {
             message: message.into(),
             error_code,
-            api_error_code,
+            api_error_code: -999,
             extra_data: None,
             status: 429,
         }

@@ -98,7 +98,6 @@ pub async fn handle_download_song(
         return Err(ArcError::rate_limit(
             "You have reached the download limit.".to_string(),
             903,
-            -999,
         ));
     }
 

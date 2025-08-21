@@ -310,7 +310,6 @@ impl BundleService {
             ArcError::no_data(
                 format!("No bundles found for app version: {}", app_version),
                 404,
-                -2,
             )
         })?;
 
@@ -407,14 +406,10 @@ impl BundleService {
             }
         }
 
-        Err(ArcError::no_data(
-            format!(
-                "No update path found from {} to {}",
-                current_version, target_version
-            ),
-            404,
-            -2,
-        ))
+        Err(ArcError::no_data(format!(
+            "No update path found from {} to {}",
+            current_version, target_version
+        ), 404))
     }
 
     /// Generate a random download token
@@ -509,7 +504,7 @@ impl BundleService {
         let full_path = self.bundle_folder.join(file_path);
 
         if !full_path.exists() {
-            return Err(ArcError::no_data("File not found".to_string(), 404, -2));
+            return Err(ArcError::no_data("File not found".to_string(), 404));
         }
 
         let content = fs::read(&full_path).map_err(|e| ArcError::Io {
@@ -524,7 +519,7 @@ impl BundleService {
         let full_path = self.bundle_folder.join(file_path);
 
         if !full_path.exists() {
-            return Err(ArcError::no_data("File not found".to_string(), 404, -2));
+            return Err(ArcError::no_data("File not found".to_string(), 404));
         }
 
         Ok(full_path)

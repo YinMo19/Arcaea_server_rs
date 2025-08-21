@@ -54,7 +54,7 @@ impl PurchaseService {
     /// Get purchases by type with discount calculation
     async fn get_purchases_by_type(&self, user_id: i32, item_type: &str) -> ArcResult<Vec<Value>> {
         let purchase_names = sqlx::query!(
-            "SELECT DISTINCT purchase_name FROM purchase_item WHERE type = ?",
+            "SELECT purchase_name FROM purchase_item WHERE type = ?",
             item_type
         )
         .fetch_all(&self.pool)
@@ -94,11 +94,7 @@ impl PurchaseService {
         .await?;
 
         let purchase_info = purchase_info.ok_or_else(|| {
-            ArcError::no_data(
-                format!("Purchase `{}` does not exist.", purchase_name),
-                501,
-                -1,
-            )
+            ArcError::no_data(format!("Purchase `{}` does not exist.", purchase_name), 501)
         })?;
 
         // Get purchase items
@@ -228,11 +224,7 @@ impl PurchaseService {
         .await?;
 
         let purchase_info = purchase_info.ok_or_else(|| {
-            ArcError::no_data(
-                format!("Purchase `{}` does not exist.", purchase_name),
-                501,
-                -1,
-            )
+            ArcError::no_data(format!("Purchase `{}` does not exist.", purchase_name), 501)
         })?;
 
         // Get purchase items
@@ -250,7 +242,6 @@ impl PurchaseService {
                     purchase_name
                 ),
                 501,
-                -1,
             ));
         }
 
@@ -261,7 +252,7 @@ impl PurchaseService {
 
         let current_tickets = user_tickets
             .and_then(|row| row.ticket)
-            .ok_or_else(|| ArcError::no_data("User not found.", 108, -3))?;
+            .ok_or_else(|| ArcError::no_data("User not found.", 108))?;
 
         // Calculate actual price to pay
         let price_to_pay = self
@@ -345,7 +336,7 @@ impl PurchaseService {
 
         let current_tickets = user_tickets
             .and_then(|row| row.ticket)
-            .ok_or_else(|| ArcError::no_data("User not found.", 108, -3))?;
+            .ok_or_else(|| ArcError::no_data("User not found.", 108))?;
 
         // Check if user has enough tickets
         if current_tickets < fixed_price {
@@ -449,7 +440,7 @@ impl PurchaseService {
                 "next_fragstam_ts": next_ts,
                 "world_mode_locked_end_ts": -1
             })),
-            None => Err(ArcError::no_data("User not found.", 108, -3)),
+            None => Err(ArcError::no_data("User not found.", 108)),
         }
     }
 
@@ -467,7 +458,7 @@ impl PurchaseService {
 
         let _redeem_type = redeem_info
             .and_then(|row| row.redeem_type)
-            .ok_or_else(|| ArcError::no_data("Invalid redeem code.", 502, -1))?;
+            .ok_or_else(|| ArcError::no_data("Invalid redeem code.", 502))?;
 
         // Check if user has already redeemed this code
         let already_redeemed = sqlx::query!(

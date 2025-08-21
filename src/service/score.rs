@@ -198,11 +198,7 @@ impl ScoreService {
                             token = String::new();
                         }
                     } else {
-                        return Err(ArcError::no_data(
-                            "Invalid course state".to_string(),
-                            108,
-                            -100,
-                        ));
+                        return Err(ArcError::no_data("Invalid course state".to_string(), 108));
                     }
                 }
                 None => {
@@ -518,7 +514,7 @@ impl ScoreService {
         sqlx::query_as!(User, "SELECT * FROM user WHERE user_id = ?", user_id)
             .fetch_one(&self.pool)
             .await
-            .map_err(|_| ArcError::no_data("User not found".to_string(), 108, -100))
+            .map_err(|_| ArcError::no_data("User not found".to_string(), 108))
     }
 
     async fn get_play_state(&self, token: &str, user_id: i32) -> ArcResult<SongplayToken> {
@@ -529,7 +525,7 @@ impl ScoreService {
         )
         .fetch_one(&self.pool)
         .await
-        .map_err(|_| ArcError::no_data("Invalid token".to_string(), 108, -100))?;
+        .map_err(|_| ArcError::no_data("Invalid token".to_string(), 108))?;
 
         Ok(SongplayToken {
             token: result.token,

@@ -498,11 +498,7 @@ pub async fn get_friends(
 /// Resends email verification (currently unavailable).
 #[post("/email/resend_verify")]
 pub async fn email_resend_verify() -> RouteResult<serde_json::Value> {
-    Err(ArcError::no_data(
-        "Email verification unavailable.",
-        151,
-        -1,
-    ))
+    Err(ArcError::no_data("Email verification unavailable.", 151))
 }
 
 /// Email verification status endpoint
@@ -510,11 +506,7 @@ pub async fn email_resend_verify() -> RouteResult<serde_json::Value> {
 /// Checks email verification status (currently unavailable).
 #[post("/verify")]
 pub async fn email_verify() -> RouteResult<serde_json::Value> {
-    Err(ArcError::no_data(
-        "Email verification unavailable.",
-        151,
-        -1,
-    ))
+    Err(ArcError::no_data("Email verification unavailable.", 151))
 }
 
 /// Get all user routes

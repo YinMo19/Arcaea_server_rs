@@ -431,11 +431,10 @@ impl AssetManager {
         }
 
         let content = fs::read_to_string(&self.songlist_file_path)
-            .map_err(|e| ArcError::no_data(format!("Failed to read songlist: {}", e), 108, -100))?;
+            .map_err(|e| ArcError::no_data(format!("Failed to read songlist: {}", e), 108))?;
 
-        let songlist: Songlist = serde_json::from_str(&content).map_err(|e| {
-            ArcError::no_data(format!("Failed to parse songlist: {}", e), 108, -100)
-        })?;
+        let songlist: Songlist = serde_json::from_str(&content)
+            .map_err(|e| ArcError::no_data(format!("Failed to parse songlist: {}", e), 108))?;
 
         let mut cache = self.songlist_cache.write().unwrap();
         cache.has_songlist = true;

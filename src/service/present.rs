@@ -107,11 +107,7 @@ impl PresentService {
         })?;
 
         if user_present_exists == 0 {
-            return Err(ArcError::no_data(
-                &format!("Present '{}' not found for user {}", present_id, user_id),
-                404,
-                -2,
-            ));
+            return Err(ArcError::no_data(&format!("Present '{}' not found for user {}", present_id, user_id), 404));
         }
 
         // Get present info to check expiry
@@ -126,7 +122,7 @@ impl PresentService {
         })?;
 
         let present_record = present_record.ok_or_else(|| {
-            ArcError::no_data(&format!("Present '{}' does not exist", present_id), 404, -2)
+            ArcError::no_data(&format!("Present '{}' does not exist", present_id), 404)
         })?;
 
         // Check if present has expired
@@ -252,11 +248,7 @@ impl PresentService {
     ) -> Result<(), ArcError> {
         // Check if present exists
         if !self.present_exists(present_id).await? {
-            return Err(ArcError::no_data(
-                &format!("Present '{}' does not exist", present_id),
-                404,
-                -2,
-            ));
+            return Err(ArcError::no_data(&format!("Present '{}' does not exist", present_id), 404));
         }
 
         // Add present to user

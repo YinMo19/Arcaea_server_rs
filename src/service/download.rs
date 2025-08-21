@@ -205,7 +205,6 @@ impl DownloadService {
             return Err(ArcError::rate_limit(
                 "You have reached the download limit.".to_string(),
                 903,
-                -999,
             ));
         }
 

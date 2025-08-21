@@ -102,11 +102,7 @@ impl ItemService {
 
         match result {
             Some(row) => Ok(row.is_available.unwrap_or(0) != 0),
-            None => Err(ArcError::no_data(
-                format!("No such item `{}`: `{}`", item_type, item_id),
-                108,
-                -121,
-            )),
+            None => Err(ArcError::no_data(format!("No such item `{}`: `{}`", item_type, item_id), 108)),
         }
     }
 
@@ -154,7 +150,7 @@ impl ItemService {
                 true
             }
             Err(_) => {
-                return Err(ArcError::no_data("No item data.".to_string(), 108, -121));
+                return Err(ArcError::no_data("No item data.".to_string(), 108));
             }
         };
 
@@ -261,11 +257,7 @@ impl ItemService {
 
         match result {
             Some(mapping) => Ok(mapping.character_id),
-            None => Err(ArcError::no_data(
-                format!("No character `{}`.", character_id),
-                108,
-                -121,
-            )),
+            None => Err(ArcError::no_data(format!("No character `{}`.", character_id), 108)),
         }
     }
 
@@ -316,11 +308,7 @@ impl ItemService {
                 .await?;
             }
             None => {
-                return Err(ArcError::no_data(
-                    "The ticket of the user is null.".to_string(),
-                    108,
-                    -2,
-                ));
+                return Err(ArcError::no_data("The ticket of the user is null.".to_string(), 108));
             }
         }
 
@@ -522,11 +510,7 @@ impl ItemService {
             let _amount = item.amount.unwrap_or(1);
 
             if !self.select_exists(item_id, &item.item_type).await? {
-                return Err(ArcError::no_data(
-                    format!("No such item `{}`: `{}`", item.item_type, item_id),
-                    108,
-                    -121,
-                ));
+                return Err(ArcError::no_data(format!("No such item `{}`: `{}`", item.item_type, item_id), 108));
             }
         }
 

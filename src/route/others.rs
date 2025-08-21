@@ -63,7 +63,7 @@ pub async fn game_content_bundle(
 ) -> RouteResult<BundleDownloadResponse> {
     let app_version = match version_ctx.app_version {
         Some(version) => version,
-        None => return Err(ArcError::no_data("no app version provided", 404, -2)),
+        None => return Err(ArcError::no_data("no app version provided", 404)),
     };
     let ordered_results = bundle_service
         .get_bundle_list(
@@ -216,6 +216,11 @@ pub async fn aggregate(
         // Route to appropriate handler based on path
         let result = match path {
             "/user/me" => handle_user_me(user_service, item_service, auth.user_id).await,
+            "/purchase/bundle/pack" => handle_bundle_pack(purchase_service, auth.user_id).await,
+            "/serve/download/me/song" => {
+                handle_download_song(download_service, user_service, auth.user_id, &query_params)
+                    .await
+            }
             "/game/info" => handle_game_info().await,
             "/present/me" => handle_present_info(present_service, auth.user_id).await,
             "/world/map/me" => handle_world_all(world_service, auth.user_id).await,
@@ -223,19 +228,10 @@ pub async fn aggregate(
                 handle_song_score_friend(score_service, user_service, auth.user_id, &query_params)
                     .await
             }
-            "/serve/download/me/song" => {
-                handle_download_song(download_service, user_service, auth.user_id, &query_params)
-                    .await
-            }
-            "/purchase/bundle/pack" => handle_bundle_pack(purchase_service, auth.user_id).await,
             "/purchase/bundle/bundle" => handle_bundle_bundle().await,
-            "/purchase/bundle/single" => handle_bundle_single(purchase_service, auth.user_id).await,
             "/finale/progress" => handle_finale_progress().await,
-            _ => Err(ArcError::no_data(
-                "Endpoint not found in aggregate",
-                404,
-                -2,
-            )),
+            "/purchase/bundle/single" => handle_bundle_single(purchase_service, auth.user_id).await,
+            _ => Err(ArcError::no_data("Endpoint not found in aggregate", 404)),
         };
 
         match result {

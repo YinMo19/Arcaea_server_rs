@@ -421,11 +421,7 @@ impl UserService {
         .await?;
 
         let user = user.ok_or_else(|| {
-            ArcError::no_data(
-                format!("Username `{}` does not exist.", login_data.name),
-                104,
-                -1,
-            )
+            ArcError::no_data(format!("Username `{}` does not exist.", login_data.name), 104)
         })?;
 
         // Check for ban
@@ -533,7 +529,7 @@ impl UserService {
             .fetch_optional(&self.pool)
             .await?;
 
-        let user = user.ok_or_else(|| ArcError::no_data("User not found.", 401, -3))?;
+        let user = user.ok_or_else(|| ArcError::no_data("User not found.", 401))?;
 
         // Load additional user data
         let mut user_info = UserInfo::from(user);
@@ -579,7 +575,7 @@ impl UserService {
 
         result
             .map(|r| r.user_id)
-            .ok_or_else(|| ArcError::no_data("No user.", 401, -3))
+            .ok_or_else(|| ArcError::no_data("No user.", 401))
     }
 
     /// Update a single column for a user
@@ -657,7 +653,7 @@ impl UserService {
             sqlx::query!("SELECT insight_state FROM user WHERE user_id = ?", user_id)
                 .fetch_optional(&self.pool)
                 .await?
-                .ok_or_else(|| ArcError::no_data("No user.", 108, -3))?;
+                .ok_or_else(|| ArcError::no_data("No user.", 108))?;
 
         // Toggle insight state (4 -> 0 -> 1 -> 2 -> 3 -> 4)
         let insight_toggle_states = [4, 0, 1, 2, 3];
@@ -824,7 +820,7 @@ impl UserService {
             });
             Ok(response)
         } else {
-            Err(ArcError::no_data("User has no cloud save data", 108, -3))
+            Err(ArcError::no_data("User has no cloud save data", 108))
         }
     }
 
@@ -1063,7 +1059,7 @@ impl UserService {
     pub async fn delete_user_account(&self, user_id: i32) -> ArcResult<()> {
         // Check if account deletion is allowed based on config
         if !CONFIG.allow_self_account_delete {
-            return Err(ArcError::no_data("Cannot delete the account.", 151, -1));
+            return Err(ArcError::no_data("Cannot delete the account.", 151));
         }
 
         // Start a transaction for atomic deletion
@@ -1204,11 +1200,7 @@ impl UserService {
                 .await?;
             }
             None => {
-                return Err(ArcError::no_data(
-                    "User not found for stamina update".to_string(),
-                    108,
-                    -121,
-                ));
+                return Err(ArcError::no_data("User not found for stamina update".to_string(), 108));
             }
         }
 

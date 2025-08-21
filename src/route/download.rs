@@ -89,7 +89,7 @@ pub async fn serve_download_file(
     let file_path = format!("./songs/{}/{}", song_id, file_name);
     match std::fs::read(&file_path) {
         Ok(content) => Ok(content),
-        Err(_) => Err(ArcError::no_data("File not found".to_string(), 404, -100)),
+        Err(_) => Err(ArcError::no_data("File not found".to_string(), 404)),
     }
 }
 
