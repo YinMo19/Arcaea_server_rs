@@ -261,7 +261,7 @@ pub async fn aggregate(
         extra: None,
     };
 
-    log::info!("resp: {}", &serde_json::to_string(&response).unwrap());
+    // log::info!("resp: {}", &serde_json::to_string(&response).unwrap());
     Ok(response)
 }
 

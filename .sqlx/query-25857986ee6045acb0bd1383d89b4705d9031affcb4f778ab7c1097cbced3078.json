@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT next_fragstam_ts FROM user WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "next_fragstam_ts",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 20
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "25857986ee6045acb0bd1383d89b4705d9031affcb4f778ab7c1097cbced3078"
+}

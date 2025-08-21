@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT item_id, type, amount FROM redeem_item WHERE code = ?",
+  "query": "SELECT item_id, type as item_type, amount FROM redeem_item WHERE code = ?",
   "describe": {
     "columns": [
       {
@@ -15,7 +15,7 @@
       },
       {
         "ordinal": 1,
-        "name": "type",
+        "name": "item_type",
         "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
@@ -43,5 +43,5 @@
       true
     ]
   },
-  "hash": "78ecfff6d18bbfae6c7eeea276e0653a3abc1fafd12f5aaa752375ccb1148bb5"
+  "hash": "8b62fef2ac2e8798524e32d9b1163424d4fd0e938d164919df2702bdb3d2db29"
 }

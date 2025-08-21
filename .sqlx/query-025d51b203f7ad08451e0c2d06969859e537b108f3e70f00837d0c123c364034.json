@@ -1,11 +1,11 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT EXISTS(SELECT 1 FROM user_redeem WHERE user_id = ? AND code = ?)",
+  "query": "SELECT EXISTS(SELECT 1 FROM user_redeem WHERE user_id = ? AND code = ?) as `exists`",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "EXISTS(SELECT 1 FROM user_redeem WHERE user_id = ? AND code = ?)",
+        "name": "exists",
         "type_info": {
           "type": "Long",
           "flags": "NOT_NULL | BINARY",
@@ -21,5 +21,5 @@
       false
     ]
   },
-  "hash": "3102cef08423e2b3f0ecb72d7690ec433a4ec5b7b83c7829d07ee92817aa9e95"
+  "hash": "025d51b203f7ad08451e0c2d06969859e537b108f3e70f00837d0c123c364034"
 }

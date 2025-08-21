@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT purchase_name, price, orig_price, discount_from, discount_to, discount_reason FROM purchase WHERE purchase_name = ?",
+  "query": "SELECT * FROM purchase WHERE purchase_name = ?",
   "describe": {
     "columns": [
       {
@@ -76,5 +76,5 @@
       true
     ]
   },
-  "hash": "d87f444015ddabd4b11b77bbaa9a64c4a5f2a916fe8d402a956f7fa86f6aebbd"
+  "hash": "d9c3c2e0e4a4660eb0633b7e3b6207a908fcb874b29eb8b642ca53fa19b98d77"
 }

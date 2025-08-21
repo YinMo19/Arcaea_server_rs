@@ -1,16 +1,16 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT EXISTS(SELECT 1 FROM redeem WHERE code = ?)",
+  "query": "SELECT user_id_other FROM friend WHERE user_id_me = ?",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "EXISTS(SELECT 1 FROM redeem WHERE code = ?)",
+        "name": "user_id_other",
         "type_info": {
           "type": "Long",
-          "flags": "NOT_NULL | BINARY",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
           "char_set": 63,
-          "max_size": 1
+          "max_size": 11
         }
       }
     ],
@@ -21,5 +21,5 @@
       false
     ]
   },
-  "hash": "a01dc30196897ea37aa20d4783c7f87c05580d54e52533bf7620dc9792ee7c42"
+  "hash": "39a889d098dccebe306e4cae6abb80d636b7471037a162c4bd94658bebc33ffb"
 }

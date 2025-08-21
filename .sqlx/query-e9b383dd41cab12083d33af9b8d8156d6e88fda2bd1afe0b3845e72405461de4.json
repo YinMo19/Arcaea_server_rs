@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT item_id FROM item WHERE type = 'world_unlock'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e9b383dd41cab12083d33af9b8d8156d6e88fda2bd1afe0b3845e72405461de4"
+}

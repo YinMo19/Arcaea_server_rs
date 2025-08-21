@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            WITH user_scores AS (\n                SELECT song_id, difficulty, score_v2\n                FROM best_score\n                WHERE user_id = ? AND difficulty IN (2, 3, 4)\n            )\n            SELECT SUM(a) as total_score FROM (\n                SELECT SUM(score_v2) as a\n                FROM user_scores\n                WHERE difficulty = 2\n                AND song_id IN (SELECT song_id FROM chart WHERE rating_ftr > 0)\n                UNION\n                SELECT SUM(score_v2) as a\n                FROM user_scores\n                WHERE difficulty = 3\n                AND song_id IN (SELECT song_id FROM chart WHERE rating_byn > 0)\n                UNION\n                SELECT SUM(score_v2) as a\n                FROM user_scores\n                WHERE difficulty = 4\n                AND song_id IN (SELECT song_id FROM chart WHERE rating_etr > 0)\n            ) totals\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total_score",
+        "type_info": {
+          "type": "Double",
+          "flags": "BINARY",
+          "char_set": 63,
+          "max_size": 23
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "5ff0127a9c596177357a99873cb3b2f058900d26fc4320b629abd2d2b856f356"
+}

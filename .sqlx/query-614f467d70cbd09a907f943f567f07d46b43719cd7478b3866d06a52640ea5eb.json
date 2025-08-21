@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT best_clear_type FROM best_score WHERE user_id = ? AND song_id = ? AND difficulty = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "best_clear_type",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "614f467d70cbd09a907f943f567f07d46b43719cd7478b3866d06a52640ea5eb"
+}

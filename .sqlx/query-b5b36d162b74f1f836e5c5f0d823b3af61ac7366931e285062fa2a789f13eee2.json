@@ -1,10 +1,20 @@
 {
   "db_name": "MySQL",
-  "query": "\n            SELECT map_id, curr_position, curr_capture, is_locked\n            FROM user_world\n            WHERE user_id = ? AND map_id = ?\n            ",
+  "query": "\n            SELECT user_id, map_id, curr_position, curr_capture, is_locked\n            FROM user_world\n            WHERE user_id = ? AND map_id = ?\n            ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
+        "name": "user_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
         "name": "map_id",
         "type_info": {
           "type": "VarString",
@@ -14,7 +24,7 @@
         }
       },
       {
-        "ordinal": 1,
+        "ordinal": 2,
         "name": "curr_position",
         "type_info": {
           "type": "Long",
@@ -24,7 +34,7 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "curr_capture",
         "type_info": {
           "type": "Double",
@@ -34,7 +44,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "is_locked",
         "type_info": {
           "type": "Tiny",
@@ -49,10 +59,11 @@
     },
     "nullable": [
       false,
+      false,
       true,
       true,
       true
     ]
   },
-  "hash": "766af2cbd215811e58056d44543380b40738dc0568cfe0e29b71bea2efed2b67"
+  "hash": "b5b36d162b74f1f836e5c5f0d823b3af61ac7366931e285062fa2a789f13eee2"
 }

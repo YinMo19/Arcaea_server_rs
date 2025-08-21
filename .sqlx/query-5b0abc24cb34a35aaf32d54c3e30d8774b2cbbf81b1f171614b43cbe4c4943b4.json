@@ -1,11 +1,11 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT item_id FROM user_item WHERE user_id = ? AND type = ? AND amount > 0",
+  "query": "SELECT purchase_name FROM purchase_item WHERE type = ?",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "item_id",
+        "name": "purchase_name",
         "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
@@ -15,11 +15,11 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 1
     },
     "nullable": [
       false
     ]
   },
-  "hash": "ac7fdc0985c2e07864ecf925ab0070557b2cde1079a8f7249ef8833ed076fec7"
+  "hash": "5b0abc24cb34a35aaf32d54c3e30d8774b2cbbf81b1f171614b43cbe4c4943b4"
 }

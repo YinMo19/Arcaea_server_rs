@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT CAST(COALESCE(SUM(curr_position), 0) + COUNT(*) AS SIGNED) as total_steps FROM user_world WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total_steps",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "BINARY",
+          "char_set": 63,
+          "max_size": 21
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "a2e52b09731cd4a1d268d62709e082aa7bb0d23847d0e33036dc08acc777dab6"
+}

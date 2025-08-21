@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT type as redeem_type FROM redeem WHERE code = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "redeem_type",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "db5e06ccee7cbbac6b92db9a609522bd54b45e660ec5a01ab3befc3cc7ede108"
+}
