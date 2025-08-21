@@ -17,7 +17,6 @@ use rocket::http::Status;
 use rocket::response::status;
 use rocket::serde::json::Json;
 use rocket::{get, post, routes, Route, State};
-use serde_json::Value;
 use std::collections::HashMap;
 use url::Url;
 use urlencoding::decode;
@@ -170,7 +169,6 @@ pub async fn aggregate(
     download_service: &State<DownloadService>,
     present_service: &State<PresentService>,
     world_service: &State<WorldService>,
-    item_service: &State<ItemService>,
     purchase_service: &State<PurchaseService>,
     auth: AuthGuard,
 ) -> Result<AggregateResponse, ArcError> {
@@ -215,7 +213,7 @@ pub async fn aggregate(
 
         // Route to appropriate handler based on path
         let result = match path {
-            "/user/me" => handle_user_me(user_service, item_service, auth.user_id).await,
+            "/user/me" => handle_user_me(user_service, auth.user_id).await,
             "/purchase/bundle/pack" => handle_bundle_pack(purchase_service, auth.user_id).await,
             "/serve/download/me/song" => {
                 handle_download_song(download_service, user_service, auth.user_id, &query_params)
@@ -228,8 +226,8 @@ pub async fn aggregate(
                 handle_song_score_friend(score_service, user_service, auth.user_id, &query_params)
                     .await
             }
-            "/purchase/bundle/bundle" => handle_bundle_bundle().await,
             "/finale/progress" => handle_finale_progress().await,
+            "/purchase/bundle/bundle" => handle_bundle_bundle().await,
             "/purchase/bundle/single" => handle_bundle_single(purchase_service, auth.user_id).await,
             _ => Err(ArcError::no_data("Endpoint not found in aggregate", 404)),
         };

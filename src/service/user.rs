@@ -1,11 +1,11 @@
 use crate::config::{Constants, CONFIG};
 use crate::error::{ArcError, ArcResult};
-use crate::model::user::{UserCores, UserRecentScore};
+use crate::model::user::UserRecentScore;
 use crate::model::{
     Item, Stamina, UpdateCharacter, User, UserAuth, UserCodeMapping, UserCredentials, UserExists,
     UserInfo, UserLoginDevice, UserLoginDto, UserRegisterDto,
 };
-use crate::service::{CharacterService, ItemFactory, ItemService};
+use crate::service::{CharacterService, ItemService};
 use base64::{engine::general_purpose, Engine as _};
 use rand::Rng;
 use serde_json::Value;
@@ -421,7 +421,10 @@ impl UserService {
         .await?;
 
         let user = user.ok_or_else(|| {
-            ArcError::no_data(format!("Username `{}` does not exist.", login_data.name), 104)
+            ArcError::no_data(
+                format!("Username `{}` does not exist.", login_data.name),
+                104,
+            )
         })?;
 
         // Check for ban
@@ -1200,7 +1203,10 @@ impl UserService {
                 .await?;
             }
             None => {
-                return Err(ArcError::no_data("User not found for stamina update".to_string(), 108));
+                return Err(ArcError::no_data(
+                    "User not found for stamina update".to_string(),
+                    108,
+                ));
             }
         }
 

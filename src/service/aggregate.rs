@@ -1,19 +1,16 @@
-use crate::config::{ARCAEA_DATABASE_VERSION, ARCAEA_LOG_DATABASE_VERSION, ARCAEA_SERVER_VERSION};
 use crate::error::ArcError;
 
 use crate::service::{
-    DownloadService, ItemService, PresentService, PurchaseService, ScoreService, UserService,
-    WorldService,
+    DownloadService, PresentService, PurchaseService, ScoreService, UserService, WorldService,
 };
 
-use crate::model::GameInfo;
+use crate::Constants;
 
 use std::collections::HashMap;
 
 /// Handle /user/me endpoint
 pub async fn handle_user_me(
     user_service: &UserService,
-    item_service: &ItemService,
     user_id: i32,
 ) -> Result<serde_json::Value, ArcError> {
     let user_info = user_service.get_user_info(user_id).await?;
@@ -24,14 +21,20 @@ pub async fn handle_user_me(
 
 /// Handle /game/info endpoint
 pub async fn handle_game_info() -> Result<serde_json::Value, ArcError> {
-    let info = GameInfo {
-        version: ARCAEA_SERVER_VERSION.to_string(),
-        database_version: ARCAEA_DATABASE_VERSION.to_string(),
-        log_database_version: ARCAEA_LOG_DATABASE_VERSION.to_string(),
-    };
-    serde_json::to_value(&info).map_err(|e| ArcError::Json {
-        message: e.to_string(),
-    })
+    let level_step = Constants::get_level_steps();
+    let mut level_step: Vec<HashMap<&str, &i32>> = level_step
+        .iter()
+        .map(|(level, level_exp)| HashMap::from([("level", level), ("level_exp", level_exp)]))
+        .collect();
+    level_step.sort_by(|a, b| a["level"].cmp(&b["level"]));
+
+    Ok(serde_json::json!({"max_stamina": 12,
+    "stamina_recover_tick": 1800000,
+    "core_exp": 250,
+    "curr_ts": chrono::Utc::now().timestamp_millis(),
+    "level_steps": level_step,
+    "world_ranking_enabled": true,
+    "is_byd_chapter_unlocked": true}))
 }
 
 /// Handle /present/me endpoint

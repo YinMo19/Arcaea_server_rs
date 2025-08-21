@@ -85,8 +85,11 @@ pub struct Chart {
 /// Download file information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadFile {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub checksum: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub file_name: Option<String>,
 }
 
@@ -95,14 +98,18 @@ pub struct DownloadFile {
 pub struct DownloadSong {
     pub audio: Option<DownloadAudio>,
     pub chart: Option<std::collections::HashMap<String, DownloadFile>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub additional_files: Option<Vec<DownloadFile>>,
 }
 
 /// Download audio information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadAudio {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub checksum: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "3")]
     pub difficulty_3: Option<DownloadFile>,
 }

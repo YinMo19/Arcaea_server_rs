@@ -1,5 +1,5 @@
 use crate::error::ArcError;
-use crate::model::{Present, PresentItem, UserPresent};
+use crate::model::{Present, PresentItem};
 use sqlx::MySqlPool;
 
 /// Present service for handling user present/gift system
@@ -107,7 +107,10 @@ impl PresentService {
         })?;
 
         if user_present_exists == 0 {
-            return Err(ArcError::no_data(&format!("Present '{}' not found for user {}", present_id, user_id), 404));
+            return Err(ArcError::no_data(
+                &format!("Present '{}' not found for user {}", present_id, user_id),
+                404,
+            ));
         }
 
         // Get present info to check expiry
@@ -248,7 +251,10 @@ impl PresentService {
     ) -> Result<(), ArcError> {
         // Check if present exists
         if !self.present_exists(present_id).await? {
-            return Err(ArcError::no_data(&format!("Present '{}' does not exist", present_id), 404));
+            return Err(ArcError::no_data(
+                &format!("Present '{}' does not exist", present_id),
+                404,
+            ));
         }
 
         // Add present to user
