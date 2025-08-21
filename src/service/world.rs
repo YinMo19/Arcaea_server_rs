@@ -205,11 +205,11 @@ impl MapParser {
                 require_localunlock_songid: map_data
                     .get("require_localunlock_songid")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map_or(Some(String::from("")), |s| Some(s.to_string())),
                 require_localunlock_challengeid: map_data
                     .get("require_localunlock_challengeid")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map_or(Some(String::from("")), |s| Some(s.to_string())),
                 chain_info: map_data.get("chain_info").cloned(),
                 disable_over: map_data.get("disable_over").and_then(|v| v.as_bool()),
                 new_law: map_data
@@ -580,7 +580,7 @@ impl WorldService {
                 prev_position: user_map.prev_position,
                 prev_capture: user_map.prev_capture,
             };
-            maps.push(user_map_impl.to_dict(false, false, false));
+            maps.push(user_map_impl.to_dict(true, false, true));
         }
 
         Ok(maps)

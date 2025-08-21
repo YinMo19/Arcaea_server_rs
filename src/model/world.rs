@@ -125,7 +125,12 @@ impl UserMap {
                 result.as_object_mut().unwrap().remove("steps");
             }
             if has_rewards {
-                result["rewards"] = serde_json::json!(self.map.get_rewards());
+                result["rewards"] = serde_json::json!(self
+                    .map
+                    .get_rewards()
+                    .iter()
+                    .map(|r| r.to_dict())
+                    .collect::<Vec<_>>());
             }
 
             result
@@ -215,6 +220,7 @@ impl WorldStep {
 /// Step item structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StepItem {
+    #[serde(rename = "id")]
     pub item_id: String,
     #[serde(rename = "type")]
     pub item_type: String,
@@ -225,7 +231,7 @@ impl StepItem {
     /// Convert to dictionary format for API response
     pub fn to_dict(&self) -> serde_json::Value {
         serde_json::json!({
-            "item_id": self.item_id,
+            "id": self.item_id,
             "type": self.item_type,
             "amount": self.amount
         })
