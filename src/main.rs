@@ -11,8 +11,9 @@ use Arcaea_server_rs::error::{bad_request, forbidden, internal_error, not_found,
 use Arcaea_server_rs::route::others::bundle_download;
 use Arcaea_server_rs::route::CORS;
 use Arcaea_server_rs::service::{
-    AssetManager, BundleService, CharacterService, DownloadService, NotificationService,
-    OperationManager, PresentService, PurchaseService, ScoreService, UserService, WorldService,
+    AssetManager, BundleService, CharacterService, DownloadService, ItemService,
+    NotificationService, OperationManager, PresentService, PurchaseService, ScoreService,
+    UserService, WorldService,
 };
 use Arcaea_server_rs::{config, Database, DbPool};
 
@@ -31,6 +32,7 @@ async fn init_services(
     PresentService,
     WorldService,
     PurchaseService,
+    ItemService,
     std::sync::Arc<AssetManager>,
     OperationManager,
 ) {
@@ -61,6 +63,7 @@ async fn init_services(
     );
     let score_service = ScoreService::new(pool.clone());
     let notification_service = NotificationService::new(pool.clone());
+    let item_service = ItemService::new(pool.clone());
     let mut bundle_service = BundleService::new(
         pool.clone(),
         std::path::PathBuf::from("bundles"),
@@ -102,6 +105,7 @@ async fn init_services(
         present_service,
         world_service,
         purchase_service,
+        item_service,
         asset_manager,
         operation_manager,
     )
@@ -137,6 +141,7 @@ async fn configure_rocket() -> Rocket<Build> {
                 present_service,
                 world_service,
                 purchase_service,
+                item_service,
                 asset_manager,
                 operation_manager,
             ) = init_services(pool).await;
@@ -152,6 +157,7 @@ async fn configure_rocket() -> Rocket<Build> {
                 .manage(present_service)
                 .manage(world_service)
                 .manage(purchase_service)
+                .manage(item_service)
                 .manage(asset_manager)
                 .manage(operation_manager)
         }))

@@ -389,7 +389,7 @@ impl ItemService {
     /// Create item from dictionary
     pub fn create_item_from_dict(
         &self,
-        data: &HashMap<String, serde_json::Value>,
+        data: &HashMap<&str, serde_json::Value>,
     ) -> ArcResult<Item> {
         let item_type = data
             .get("item_type")
@@ -671,7 +671,7 @@ impl ItemFactory {
     }
 
     /// Create item from dictionary
-    pub fn from_dict(&self, data: &HashMap<String, serde_json::Value>) -> ArcResult<Item> {
+    pub fn from_dict(&self, data: &HashMap<&str, serde_json::Value>) -> ArcResult<Item> {
         self.service.create_item_from_dict(data)
     }
 

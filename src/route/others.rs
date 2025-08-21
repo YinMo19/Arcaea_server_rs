@@ -8,8 +8,8 @@ use crate::route::common::{success_return, AuthGuard, EmptyResponse, RouteResult
 use crate::service::aggregate::*;
 use crate::service::bundle::BundleDownloadResponse;
 use crate::service::{
-    BundleService, CharacterService, DownloadService, NotificationService, PresentService,
-    PurchaseService, ScoreService, UserService, WorldService,
+    BundleService, CharacterService, DownloadService, ItemService, NotificationService,
+    PresentService, PurchaseService, ScoreService, UserService, WorldService,
 };
 use rocket::fs::NamedFile;
 use rocket::http::Status;
@@ -170,6 +170,7 @@ pub async fn aggregate(
     download_service: &State<DownloadService>,
     present_service: &State<PresentService>,
     world_service: &State<WorldService>,
+    item_service: &State<ItemService>,
     purchase_service: &State<PurchaseService>,
     auth: AuthGuard,
 ) -> Result<AggregateResponse, ArcError> {
@@ -214,7 +215,7 @@ pub async fn aggregate(
 
         // Route to appropriate handler based on path
         let result = match path {
-            "/user/me" => handle_user_me(user_service, auth.user_id).await,
+            "/user/me" => handle_user_me(user_service, item_service, auth.user_id).await,
             "/game/info" => handle_game_info().await,
             "/present/me" => handle_present_info(present_service, auth.user_id).await,
             "/world/map/me" => handle_world_all(world_service, auth.user_id).await,

@@ -2,7 +2,8 @@ use crate::config::{ARCAEA_DATABASE_VERSION, ARCAEA_LOG_DATABASE_VERSION, ARCAEA
 use crate::error::ArcError;
 
 use crate::service::{
-    DownloadService, PresentService, PurchaseService, ScoreService, UserService, WorldService,
+    DownloadService, ItemService, PresentService, PurchaseService, ScoreService, UserService,
+    WorldService,
 };
 
 use crate::model::GameInfo;
@@ -12,6 +13,7 @@ use std::collections::HashMap;
 /// Handle /user/me endpoint
 pub async fn handle_user_me(
     user_service: &UserService,
+    item_service: &ItemService,
     user_id: i32,
 ) -> Result<serde_json::Value, ArcError> {
     let user_info = user_service.get_user_info(user_id).await?;

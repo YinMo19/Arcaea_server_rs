@@ -8,6 +8,8 @@ use rocket::{Request, Response};
 use serde_json;
 use std::io::Cursor;
 
+use crate::model::Item;
+
 /// User database model representing the user table
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct User {
@@ -224,7 +226,7 @@ pub struct UserInfo {
     pub user_missions: Vec<serde_json::Value>,
 
     // Items and scores
-    pub cores: UserCores,
+    pub cores: Vec<Item>,
     pub recent_score: Vec<UserRecentScore>,
 }
 
@@ -317,15 +319,15 @@ impl From<User> for UserInfo {
             next_fragstam_ts: user.next_fragstam_ts.unwrap_or(0),
             max_stamina_ts: user.max_stamina_ts.unwrap_or(0),
             stamina: user.stamina.unwrap_or(0),
-            world_mode_locked_end_ts: user.world_mode_locked_end_ts.unwrap_or(0),
+            world_mode_locked_end_ts: user.world_mode_locked_end_ts.unwrap_or(-1),
             insight_state: user.insight_state.unwrap_or(4),
-            is_aprilfools: false, // TODO: Get from config
-            max_friend: 50,       // TODO: Get from constants
+            is_aprilfools: true, // TODO: Get from config
+            max_friend: 50,      // TODO: Get from constants
             rating: user.rating_ptt.unwrap_or(0),
             join_date: user.join_date.unwrap_or(0),
-            global_rank: None,
-            country: None,
-            custom_banner: None,
+            global_rank: Some(0),
+            country: Some(String::new()),
+            custom_banner: Some(String::new()),
             course_banners: Vec::new(),
             locked_char_ids: Vec::new(),
             pick_ticket: 0,
@@ -348,8 +350,8 @@ impl From<User> for UserInfo {
             curr_available_maps: Vec::new(), // TODO: Load from world service
             user_missions: Vec::new(),       // TODO: Load from mission service
 
-            cores: UserCores::default(), // TODO: Load from user cores
-            recent_score: Vec::new(),    // TODO: Load from recent scores
+            cores: Vec::new(),        // TODO: Load from user cores
+            recent_score: Vec::new(), // TODO: Load from recent scores
         }
     }
 }
