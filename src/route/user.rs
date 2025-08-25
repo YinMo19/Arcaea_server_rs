@@ -8,7 +8,7 @@ use rocket::form::Form;
 use rocket::serde::json::Json;
 use rocket::{get, post, routes, FromForm, Route, State};
 use serde::Deserialize;
-use serde_json;
+use serde_json::{self, Value};
 use std::collections::HashMap;
 
 /// User registration request payload
@@ -75,10 +75,7 @@ pub async fn register(
 /// Returns detailed information about the authenticated user.
 /// Requires valid authentication token in Authorization header.
 #[get("/me")]
-pub async fn user_me(
-    user_service: &State<UserService>,
-    auth: AuthGuard,
-) -> RouteResult<serde_json::Value> {
+pub async fn user_me(user_service: &State<UserService>, auth: AuthGuard) -> RouteResult<Value> {
     let user_info = user_service.get_user_info(auth.user_id).await?;
 
     // Convert UserInfo to JSON for flexible response structure
@@ -97,13 +94,13 @@ pub async fn user_me(
 pub async fn logout(
     _user_service: &State<UserService>,
     _auth: AuthGuard,
-) -> RouteResult<HashMap<String, serde_json::Value>> {
+) -> RouteResult<HashMap<String, Value>> {
     // TODO: Implement token invalidation
     // For now, return empty success response
     let mut response = HashMap::new();
     response.insert(
         "message".to_string(),
-        serde_json::Value::String("Logged out successfully".to_string()),
+        Value::String("Logged out successfully".to_string()),
     );
 
     Ok(success_return(response))
@@ -117,7 +114,7 @@ pub async fn logout(
 pub async fn user_by_code(
     user_service: &State<UserService>,
     user_code: String,
-) -> RouteResult<serde_json::Value> {
+) -> RouteResult<Value> {
     let user_id = user_service.get_user_id_by_code(&user_code).await?;
     let user_info = user_service.get_user_info(user_id).await?;
 
@@ -135,8 +132,8 @@ pub async fn user_by_code(
 pub async fn update_user(
     user_service: &State<UserService>,
     auth: AuthGuard,
-    request: Json<HashMap<String, serde_json::Value>>,
-) -> RouteResult<HashMap<String, serde_json::Value>> {
+    request: Json<HashMap<String, Value>>,
+) -> RouteResult<HashMap<String, Value>> {
     let mut response = HashMap::new();
     let mut updated_fields = 0;
 
@@ -192,11 +189,11 @@ pub async fn update_user(
 
     response.insert(
         "updated_fields".to_string(),
-        serde_json::Value::Number(serde_json::Number::from(updated_fields)),
+        Value::Number(serde_json::Number::from(updated_fields)),
     );
     response.insert(
         "user_id".to_string(),
-        serde_json::Value::Number(serde_json::Number::from(auth.user_id)),
+        Value::Number(serde_json::Number::from(auth.user_id)),
     );
 
     Ok(success_return(response))
@@ -207,15 +204,15 @@ pub async fn update_user(
 /// Simple endpoint to test if authentication is working.
 /// Returns the authenticated user's ID.
 #[get("/auth/test")]
-pub async fn auth_test(auth: AuthGuard) -> RouteResult<HashMap<String, serde_json::Value>> {
+pub async fn auth_test(auth: AuthGuard) -> RouteResult<HashMap<String, Value>> {
     let mut response = HashMap::new();
     response.insert(
         "user_id".to_string(),
-        serde_json::Value::Number(serde_json::Number::from(auth.user_id)),
+        Value::Number(serde_json::Number::from(auth.user_id)),
     );
     response.insert(
         "message".to_string(),
-        serde_json::Value::String("Authentication successful".to_string()),
+        Value::String("Authentication successful".to_string()),
     );
 
     Ok(success_return(response))
@@ -228,15 +225,13 @@ pub async fn auth_test(auth: AuthGuard) -> RouteResult<HashMap<String, serde_jso
 pub async fn toggle_invasion(
     user_service: &State<UserService>,
     auth: AuthGuard,
-) -> RouteResult<serde_json::Value> {
+) -> RouteResult<Value> {
     let user_info = user_service.toggle_invasion(auth.user_id).await?;
 
-    let response = serde_json::json!({
+    Ok(success_return(serde_json::json!({
         "user_id": auth.user_id,
         "insight_state": user_info.insight_state
-    });
-
-    Ok(success_return(response))
+    })))
 }
 
 /// Character change endpoint
@@ -253,7 +248,7 @@ pub async fn character_change(
     user_service: &State<UserService>,
     auth: AuthGuard,
     request: Form<CharacterChangeRequest>,
-) -> RouteResult<serde_json::Value> {
+) -> RouteResult<Value> {
     let is_skill_sealed = request.skill_sealed == "true";
 
     user_service
@@ -276,7 +271,7 @@ pub async fn toggle_uncap(
     user_service: &State<UserService>,
     auth: AuthGuard,
     character_id: i32,
-) -> RouteResult<serde_json::Value> {
+) -> RouteResult<Value> {
     let character_info = user_service
         .toggle_character_uncap_override(auth.user_id, character_id)
         .await?;
@@ -297,7 +292,7 @@ pub async fn character_first_uncap(
     user_service: &State<UserService>,
     auth: AuthGuard,
     character_id: i32,
-) -> RouteResult<serde_json::Value> {
+) -> RouteResult<Value> {
     let (character_info, cores) = user_service
         .character_uncap(auth.user_id, character_id)
         .await?;
@@ -325,7 +320,7 @@ pub async fn character_exp(
     auth: AuthGuard,
     character_id: i32,
     request: Form<CharacterExpRequest>,
-) -> RouteResult<serde_json::Value> {
+) -> RouteResult<Value> {
     let (character_info, cores) = user_service
         .upgrade_character_by_core(auth.user_id, character_id, request.amount)
         .await?;
@@ -343,10 +338,7 @@ pub async fn character_exp(
 ///
 /// Retrieves user's cloud save data.
 #[get("/me/save")]
-pub async fn cloud_get(
-    user_service: &State<UserService>,
-    auth: AuthGuard,
-) -> RouteResult<serde_json::Value> {
+pub async fn cloud_get(user_service: &State<UserService>, auth: AuthGuard) -> RouteResult<Value> {
     let save_data = user_service.get_user_save_data(auth.user_id).await?;
     Ok(success_return(save_data))
 }
@@ -379,7 +371,7 @@ pub async fn cloud_post(
     user_service: &State<UserService>,
     auth: AuthGuard,
     request: Form<CloudSaveRequest>,
-) -> RouteResult<serde_json::Value> {
+) -> RouteResult<Value> {
     user_service
         .update_user_save_data(auth.user_id, &request)
         .await?;
@@ -405,7 +397,7 @@ pub async fn sys_set(
     auth: AuthGuard,
     set_arg: String,
     request: Form<SettingRequest>,
-) -> RouteResult<serde_json::Value> {
+) -> RouteResult<Value> {
     let user_info = user_service
         .update_user_setting(auth.user_id, &set_arg, &request.value)
         .await?;
@@ -421,10 +413,7 @@ pub async fn sys_set(
 ///
 /// Requests deletion of the user's account.
 #[post("/me/request_delete")]
-pub async fn user_delete(
-    user_service: &State<UserService>,
-    auth: AuthGuard,
-) -> RouteResult<serde_json::Value> {
+pub async fn user_delete(user_service: &State<UserService>, auth: AuthGuard) -> RouteResult<Value> {
     user_service.delete_user_account(auth.user_id).await?;
 
     let response = serde_json::json!({
@@ -443,7 +432,7 @@ pub async fn add_friend(
     user_service: &State<UserService>,
     auth: AuthGuard,
     request: Form<FriendRequest>,
-) -> RouteResult<serde_json::Value> {
+) -> RouteResult<Value> {
     let friend_id = if let Some(friend_user_code) = &request.friend_user_code {
         user_service.get_user_id_by_code(friend_user_code).await?
     } else if let Some(fid) = request.friend_id {
@@ -470,7 +459,7 @@ pub async fn delete_friend(
     user_service: &State<UserService>,
     auth: AuthGuard,
     request: Form<FriendRequest>,
-) -> RouteResult<serde_json::Value> {
+) -> RouteResult<Value> {
     let friend_id = if let Some(friend_user_code) = &request.friend_user_code {
         user_service.get_user_id_by_code(friend_user_code).await?
     } else if let Some(fid) = request.friend_id {
@@ -496,7 +485,7 @@ pub async fn delete_friend(
 pub async fn get_friends(
     user_service: &State<UserService>,
     auth: AuthGuard,
-) -> RouteResult<Vec<serde_json::Value>> {
+) -> RouteResult<Vec<Value>> {
     let friends = user_service.get_user_friends(auth.user_id).await?;
     Ok(success_return(friends))
 }
@@ -505,7 +494,7 @@ pub async fn get_friends(
 ///
 /// Resends email verification (currently unavailable).
 #[post("/email/resend_verify")]
-pub async fn email_resend_verify() -> RouteResult<serde_json::Value> {
+pub async fn email_resend_verify() -> RouteResult<Value> {
     Err(ArcError::no_data("Email verification unavailable.", 151))
 }
 
@@ -513,7 +502,7 @@ pub async fn email_resend_verify() -> RouteResult<serde_json::Value> {
 ///
 /// Checks email verification status (currently unavailable).
 #[post("/verify")]
-pub async fn email_verify() -> RouteResult<serde_json::Value> {
+pub async fn email_verify() -> RouteResult<Value> {
     Err(ArcError::no_data("Email verification unavailable.", 151))
 }
 

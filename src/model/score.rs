@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use std::collections::HashMap;
 
@@ -209,51 +210,24 @@ impl Score {
     /// Convert to dictionary representation
     pub fn to_dict(&self) -> HashMap<String, serde_json::Value> {
         let mut result = HashMap::new();
-        result.insert("rating".to_string(), serde_json::Value::from(self.rating));
-        result.insert(
-            "modifier".to_string(),
-            serde_json::Value::from(self.modifier),
-        );
-        result.insert(
-            "time_played".to_string(),
-            serde_json::Value::from(self.time_played),
-        );
-        result.insert("health".to_string(), serde_json::Value::from(self.health));
-        result.insert(
-            "clear_type".to_string(),
-            serde_json::Value::from(self.clear_type),
-        );
-        result.insert(
-            "miss_count".to_string(),
-            serde_json::Value::from(self.miss_count),
-        );
-        result.insert(
-            "near_count".to_string(),
-            serde_json::Value::from(self.near_count),
-        );
-        result.insert(
-            "perfect_count".to_string(),
-            serde_json::Value::from(self.perfect_count),
-        );
+        result.insert("rating".to_string(), Value::from(self.rating));
+        result.insert("modifier".to_string(), Value::from(self.modifier));
+        result.insert("time_played".to_string(), Value::from(self.time_played));
+        result.insert("health".to_string(), Value::from(self.health));
+        result.insert("clear_type".to_string(), Value::from(self.clear_type));
+        result.insert("miss_count".to_string(), Value::from(self.miss_count));
+        result.insert("near_count".to_string(), Value::from(self.near_count));
+        result.insert("perfect_count".to_string(), Value::from(self.perfect_count));
         result.insert(
             "shiny_perfect_count".to_string(),
-            serde_json::Value::from(self.shiny_perfect_count),
+            Value::from(self.shiny_perfect_count),
         );
-        result.insert("score".to_string(), serde_json::Value::from(self.score));
-        result.insert(
-            "difficulty".to_string(),
-            serde_json::Value::from(self.difficulty),
-        );
-        result.insert(
-            "song_id".to_string(),
-            serde_json::Value::from(self.song_id.clone()),
-        );
+        result.insert("score".to_string(), Value::from(self.score));
+        result.insert("difficulty".to_string(), Value::from(self.difficulty));
+        result.insert("song_id".to_string(), Value::from(self.song_id.clone()));
 
         if let Some(ref song_name) = self.song_name {
-            result.insert(
-                "song_name".to_string(),
-                serde_json::Value::from(song_name.clone()),
-            );
+            result.insert("song_name".to_string(), Value::from(song_name.clone()));
         }
 
         result
@@ -312,31 +286,25 @@ impl UserScore {
         let mut result = self.score.to_dict();
         result.insert(
             "best_clear_type".to_string(),
-            serde_json::Value::from(self.best_clear_type),
+            Value::from(self.best_clear_type),
         );
 
         if has_user_info {
-            result.insert("user_id".to_string(), serde_json::Value::from(self.user_id));
-            result.insert(
-                "name".to_string(),
-                serde_json::Value::from(self.name.clone()),
-            );
+            result.insert("user_id".to_string(), Value::from(self.user_id));
+            result.insert("name".to_string(), Value::from(self.name.clone()));
             result.insert(
                 "is_skill_sealed".to_string(),
-                serde_json::Value::from(self.is_skill_sealed),
+                Value::from(self.is_skill_sealed),
             );
             result.insert(
                 "is_char_uncapped".to_string(),
-                serde_json::Value::from(self.is_char_uncapped),
+                Value::from(self.is_char_uncapped),
             );
-            result.insert(
-                "character".to_string(),
-                serde_json::Value::from(self.character),
-            );
+            result.insert("character".to_string(), Value::from(self.character));
         }
 
         if let Some(rank) = self.rank {
-            result.insert("rank".to_string(), serde_json::Value::from(rank));
+            result.insert("rank".to_string(), Value::from(rank));
         }
 
         result
@@ -441,18 +409,15 @@ impl UserPlay {
         finale_play_value: f64,
     ) -> HashMap<String, serde_json::Value> {
         let mut result = HashMap::new();
-        result.insert(
-            "user_rating".to_string(),
-            serde_json::Value::from(user_rating_ptt),
-        );
+        result.insert("user_rating".to_string(), Value::from(user_rating_ptt));
         result.insert(
             "finale_challenge_higher".to_string(),
-            serde_json::Value::from(self.user_score.score.rating > self.get_potential_value()),
+            Value::from(self.user_score.score.rating > self.get_potential_value()),
         );
-        result.insert("global_rank".to_string(), serde_json::Value::Null); // TODO: implement global rank
+        result.insert("global_rank".to_string(), Value::Null); // TODO: implement global rank
         result.insert(
             "finale_play_value".to_string(),
-            serde_json::Value::from(finale_play_value),
+            Value::from(finale_play_value),
         );
         result
     }

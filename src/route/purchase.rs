@@ -3,6 +3,7 @@ use crate::service::PurchaseService;
 use rocket::serde::json::Json;
 use rocket::{get, post, routes, Route, State};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 /// Pack purchase response structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,7 +72,7 @@ pub struct RedeemRequest {
 pub async fn bundle_pack(
     purchase_service: &State<PurchaseService>,
     auth: AuthGuard,
-) -> RouteResult<Vec<serde_json::Value>> {
+) -> RouteResult<Vec<Value>> {
     let packs = purchase_service.get_pack_purchases(auth.user_id).await?;
     Ok(success_return(packs))
 }
@@ -83,7 +84,7 @@ pub async fn bundle_pack(
 pub async fn get_single(
     purchase_service: &State<PurchaseService>,
     auth: AuthGuard,
-) -> RouteResult<Vec<serde_json::Value>> {
+) -> RouteResult<Vec<Value>> {
     let singles = purchase_service.get_single_purchases(auth.user_id).await?;
     Ok(success_return(singles))
 }
@@ -92,9 +93,7 @@ pub async fn get_single(
 ///
 /// Returns bundle purchases (always empty as per Python implementation).
 #[get("/purchase/bundle/bundle")]
-pub async fn bundle_bundle(
-    purchase_service: &State<PurchaseService>,
-) -> RouteResult<Vec<serde_json::Value>> {
+pub async fn bundle_bundle(purchase_service: &State<PurchaseService>) -> RouteResult<Vec<Value>> {
     let bundles = purchase_service.get_bundle_purchases().await?;
     Ok(success_return(bundles))
 }
@@ -107,7 +106,7 @@ pub async fn buy_pack_or_single(
     purchase_service: &State<PurchaseService>,
     auth: AuthGuard,
     request: Json<PackSinglePurchaseRequest>,
-) -> RouteResult<serde_json::Value> {
+) -> RouteResult<Value> {
     let purchase_name = if let Some(ref pack_id) = request.pack_id {
         pack_id
     } else if let Some(ref single_id) = request.single_id {
@@ -132,7 +131,7 @@ pub async fn buy_special(
     purchase_service: &State<PurchaseService>,
     auth: AuthGuard,
     request: Json<SpecialItemPurchaseRequest>,
-) -> RouteResult<serde_json::Value> {
+) -> RouteResult<Value> {
     let result = purchase_service
         .buy_special_item(auth.user_id, &request.item_id)
         .await?;
@@ -147,7 +146,7 @@ pub async fn buy_special(
 pub async fn purchase_stamina(
     purchase_service: &State<PurchaseService>,
     auth: AuthGuard,
-) -> RouteResult<serde_json::Value> {
+) -> RouteResult<Value> {
     let result = purchase_service
         .purchase_stamina_with_fragment(auth.user_id)
         .await?;
@@ -163,7 +162,7 @@ pub async fn redeem(
     purchase_service: &State<PurchaseService>,
     auth: AuthGuard,
     request: Json<RedeemRequest>,
-) -> RouteResult<serde_json::Value> {
+) -> RouteResult<Value> {
     let result = purchase_service
         .redeem_code(auth.user_id, &request.code)
         .await?;

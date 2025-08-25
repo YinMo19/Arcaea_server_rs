@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
 use std::collections::HashMap;
 
 /// Base item structure
@@ -122,28 +124,19 @@ impl Item {
         let mut result = HashMap::new();
 
         if let Some(ref id) = self.item_id {
-            result.insert("id".to_string(), serde_json::Value::String(id.clone()));
+            result.insert("id".to_string(), Value::String(id.clone()));
         }
-        result.insert(
-            "type".to_string(),
-            serde_json::Value::String(self.item_type.clone()),
-        );
+        result.insert("type".to_string(), Value::String(self.item_type.clone()));
 
         if has_amount {
             if let Some(amount) = self.amount {
-                result.insert(
-                    "amount".to_string(),
-                    serde_json::Value::Number(amount.into()),
-                );
+                result.insert("amount".to_string(), Value::Number(amount.into()));
             }
         }
 
         if has_is_available {
             if let Some(available) = self.is_available {
-                result.insert(
-                    "is_available".to_string(),
-                    serde_json::Value::Bool(available),
-                );
+                result.insert("is_available".to_string(), Value::Bool(available));
             }
         }
 

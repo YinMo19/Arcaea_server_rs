@@ -322,7 +322,7 @@ impl UserService {
                     let mut extra_data = HashMap::new();
                     extra_data.insert(
                         "remaining_ts".to_string(),
-                        serde_json::Value::Number(serde_json::Number::from(remaining_ts)),
+                        Value::Number(serde_json::Number::from(remaining_ts)),
                     );
                     return Err(ArcError::user_ban(
                         "Too many devices logging in during 24 hours.",
@@ -434,7 +434,7 @@ impl UserService {
                             let mut extra_data = HashMap::new();
                             extra_data.insert(
                                 "remaining_ts".to_string(),
-                                serde_json::Value::Number(serde_json::Number::from(
+                                Value::Number(serde_json::Number::from(
                                     ban_timestamp - current_time,
                                 )),
                             );

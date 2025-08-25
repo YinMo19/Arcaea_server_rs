@@ -1,4 +1,6 @@
 use crate::error::{ArcError, ArcResult};
+use serde_json::Value;
+
 use crate::model::download::{
     BestScore, CourseTokenRequest, CourseTokenResponse, ScoreSubmission, SongplayToken,
     WorldTokenRequest, WorldTokenResponse,
@@ -132,17 +134,15 @@ impl ScoreService {
                     .collect();
                 play_parameters.insert(
                     skill_id,
-                    serde_json::Value::Array(
-                        values.into_iter().map(serde_json::Value::String).collect(),
-                    ),
+                    Value::Array(values.into_iter().map(Value::String).collect()),
                 );
             }
         }
 
         if invasion_flag == 1 {
-            play_parameters.insert("invasion_start".to_string(), serde_json::Value::Bool(true));
+            play_parameters.insert("invasion_start".to_string(), Value::Bool(true));
         } else if invasion_flag == 2 {
-            play_parameters.insert("invasion_hard".to_string(), serde_json::Value::Bool(true));
+            play_parameters.insert("invasion_hard".to_string(), Value::Bool(true));
         }
 
         let updated_user = self.get_user_info(user_id).await?;

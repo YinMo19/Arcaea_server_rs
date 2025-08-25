@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::FromRow;
 use std::collections::HashMap;
 
@@ -223,99 +224,78 @@ impl Character {
 
         result.insert(
             "character_id".to_string(),
-            serde_json::Value::Number(self.character_id.into()),
+            Value::Number(self.character_id.into()),
         );
         result.insert(
             "name".to_string(),
-            serde_json::Value::String(self.name.clone().unwrap_or_default()),
+            Value::String(self.name.clone().unwrap_or_default()),
         );
         result.insert(
             "char_type".to_string(),
-            serde_json::Value::Number(self.char_type.unwrap_or(0).into()),
+            Value::Number(self.char_type.unwrap_or(0).into()),
         );
-        result.insert(
-            "is_uncapped".to_string(),
-            serde_json::Value::Bool(self.is_uncapped()),
-        );
+        result.insert("is_uncapped".to_string(), Value::Bool(self.is_uncapped()));
         result.insert(
             "max_level".to_string(),
-            serde_json::Value::Number(self.max_level.unwrap_or(20).into()),
+            Value::Number(self.max_level.unwrap_or(20).into()),
         );
         result.insert(
             "skill_id".to_string(),
             self.skill_id
                 .as_ref()
-                .map(|s| serde_json::Value::String(s.clone()))
-                .unwrap_or(serde_json::Value::Null),
+                .map(|s| Value::String(s.clone()))
+                .unwrap_or(Value::Null),
         );
         result.insert(
             "skill_unlock_level".to_string(),
-            serde_json::Value::Number(self.skill_unlock_level.unwrap_or(1).into()),
+            Value::Number(self.skill_unlock_level.unwrap_or(1).into()),
         );
         result.insert(
             "skill_requires_uncap".to_string(),
-            serde_json::Value::Bool(self.skill_requires_uncap()),
+            Value::Bool(self.skill_requires_uncap()),
         );
         result.insert(
             "skill_id_uncap".to_string(),
             self.skill_id_uncap
                 .as_ref()
-                .map(|s| serde_json::Value::String(s.clone()))
-                .unwrap_or(serde_json::Value::Null),
+                .map(|s| Value::String(s.clone()))
+                .unwrap_or(Value::Null),
         );
         result.insert(
             "frag1".to_string(),
-            serde_json::Value::Number(
-                serde_json::Number::from_f64(self.frag1.unwrap_or(0.0)).unwrap(),
-            ),
+            Value::Number(serde_json::Number::from_f64(self.frag1.unwrap_or(0.0)).unwrap()),
         );
         result.insert(
             "frag20".to_string(),
-            serde_json::Value::Number(
-                serde_json::Number::from_f64(self.frag20.unwrap_or(0.0)).unwrap(),
-            ),
+            Value::Number(serde_json::Number::from_f64(self.frag20.unwrap_or(0.0)).unwrap()),
         );
         result.insert(
             "frag30".to_string(),
-            serde_json::Value::Number(
-                serde_json::Number::from_f64(self.frag30.unwrap_or(0.0)).unwrap(),
-            ),
+            Value::Number(serde_json::Number::from_f64(self.frag30.unwrap_or(0.0)).unwrap()),
         );
         result.insert(
             "prog1".to_string(),
-            serde_json::Value::Number(
-                serde_json::Number::from_f64(self.prog1.unwrap_or(0.0)).unwrap(),
-            ),
+            Value::Number(serde_json::Number::from_f64(self.prog1.unwrap_or(0.0)).unwrap()),
         );
         result.insert(
             "prog20".to_string(),
-            serde_json::Value::Number(
-                serde_json::Number::from_f64(self.prog20.unwrap_or(0.0)).unwrap(),
-            ),
+            Value::Number(serde_json::Number::from_f64(self.prog20.unwrap_or(0.0)).unwrap()),
         );
         result.insert(
             "prog30".to_string(),
-            serde_json::Value::Number(
-                serde_json::Number::from_f64(self.prog30.unwrap_or(0.0)).unwrap(),
-            ),
+            Value::Number(serde_json::Number::from_f64(self.prog30.unwrap_or(0.0)).unwrap()),
         );
         result.insert(
             "overdrive1".to_string(),
-            serde_json::Value::Number(
-                serde_json::Number::from_f64(self.overdrive1.unwrap_or(0.0)).unwrap(),
-            ),
+            Value::Number(serde_json::Number::from_f64(self.overdrive1.unwrap_or(0.0)).unwrap()),
         );
         result.insert(
             "overdrive20".to_string(),
-            serde_json::Value::Number(
-                serde_json::Number::from_f64(self.overdrive20.unwrap_or(0.0)).unwrap(),
-            ),
+            Value::Number(serde_json::Number::from_f64(self.overdrive20.unwrap_or(0.0)).unwrap()),
         );
         result.insert(
             "overdrive30".to_string(),
-            serde_json::Value::Number(
-                serde_json::Number::from_f64(self.overdrive30.unwrap_or(0.0)).unwrap(),
-            ),
+            Value::Number(serde_json::Number::from_f64(self.overdrive30.unwrap_or(0.0)).unwrap()),
         );
 
         if has_cores {
@@ -324,10 +304,7 @@ impl Character {
                     .into_iter()
                     .map(|core| core.to_dict_character_format())
                     .collect();
-                result.insert(
-                    "uncap_cores".to_string(),
-                    serde_json::Value::Array(cores_json),
-                );
+                result.insert("uncap_cores".to_string(), Value::Array(cores_json));
             }
         }
 
@@ -525,14 +502,14 @@ impl UserCharacterInfo {
 
         // Add voice data for specific characters
         if let Some(voice) = &self.voice {
-            if let serde_json::Value::Object(ref mut map) = r {
+            if let Value::Object(ref mut map) = r {
                 map.insert("voice".to_string(), serde_json::json!(voice));
             }
         }
 
         // Add Fatalis specific data
         if self.character_id == 55 {
-            if let serde_json::Value::Object(ref mut map) = r {
+            if let Value::Object(ref mut map) = r {
                 map.insert(
                     "fatalis_is_limited".to_string(),
                     serde_json::json!(self.fatalis_is_limited),
@@ -542,14 +519,14 @@ impl UserCharacterInfo {
 
         // Add base character ID for specific characters
         if [1, 6, 7, 17, 18, 24, 32, 35, 52].contains(&self.character_id) {
-            if let serde_json::Value::Object(ref mut map) = r {
+            if let Value::Object(ref mut map) = r {
                 map.insert("base_character_id".to_string(), serde_json::json!(1));
             }
         }
 
         // Add skill state
         if let Some(skill_state) = self.skill_state() {
-            if let serde_json::Value::Object(ref mut map) = r {
+            if let Value::Object(ref mut map) = r {
                 map.insert("skill_state".to_string(), serde_json::json!(skill_state));
             }
         }
