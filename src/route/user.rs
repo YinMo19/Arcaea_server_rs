@@ -199,25 +199,6 @@ pub async fn update_user(
     Ok(success_return(response))
 }
 
-/// Authentication test endpoint
-///
-/// Simple endpoint to test if authentication is working.
-/// Returns the authenticated user's ID.
-#[get("/auth/test")]
-pub async fn auth_test(auth: AuthGuard) -> RouteResult<HashMap<String, Value>> {
-    let mut response = HashMap::new();
-    response.insert(
-        "user_id".to_string(),
-        Value::Number(serde_json::Number::from(auth.user_id)),
-    );
-    response.insert(
-        "message".to_string(),
-        Value::String("Authentication successful".to_string()),
-    );
-
-    Ok(success_return(response))
-}
-
 /// Toggle insight/invasion skill endpoint
 ///
 /// Toggles the user's insight state for invasion skill.
@@ -255,12 +236,10 @@ pub async fn character_change(
         .change_character(auth.user_id, request.character, is_skill_sealed)
         .await?;
 
-    let response = serde_json::json!({
+    Ok(success_return(serde_json::json!({
         "user_id": auth.user_id,
         "character": request.character
-    });
-
-    Ok(success_return(response))
+    })))
 }
 
 /// Toggle character uncap override endpoint
@@ -276,12 +255,10 @@ pub async fn toggle_uncap(
         .toggle_character_uncap_override(auth.user_id, character_id)
         .await?;
 
-    let response = serde_json::json!({
+    Ok(success_return(serde_json::json!({
         "user_id": auth.user_id,
         "character": [character_info]
-    });
-
-    Ok(success_return(response))
+    })))
 }
 
 /// Character first uncap endpoint
@@ -514,7 +491,6 @@ pub fn routes() -> Vec<Route> {
         logout,
         user_by_code,
         update_user,
-        auth_test,
         toggle_invasion,
         character_change,
         toggle_uncap,
