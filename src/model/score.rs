@@ -186,8 +186,8 @@ impl Score {
         let score_ratio = (perfect_count as f64 + near_count as f64 / 2.0) / all_note as f64
             + shiny_perfect_count as f64 / 10000000.0;
 
-        let acc_rating = (shiny_ratio - 0.9).min(0.095).max(0.0) / 9.5 * 25.0;
-        let score_rating = (score_ratio - 0.99).min(0.01).max(0.0) * 75.0;
+        let acc_rating = (shiny_ratio - 0.9).clamp(0.0, 0.095) / 9.5 * 25.0;
+        let score_rating = (score_ratio - 0.99).clamp(0.0, 0.01) * 75.0;
 
         defnum * (acc_rating + score_rating)
     }

@@ -291,21 +291,20 @@ impl UserService {
 
         let mut should_delete_num = device_list.len() as i32 + 1 - CONFIG.login_device_number_limit;
 
-        if !CONFIG.allow_login_same_device
-            && device_list.contains(&device_id.to_string()) {
-                // Delete existing sessions for the same device
-                sqlx::query!(
-                    "DELETE FROM login WHERE login_device = ? AND user_id = ?",
-                    device_id,
-                    user_id
-                )
-                .execute(&self.pool)
-                .await?;
+        if !CONFIG.allow_login_same_device && device_list.contains(&device_id.to_string()) {
+            // Delete existing sessions for the same device
+            sqlx::query!(
+                "DELETE FROM login WHERE login_device = ? AND user_id = ?",
+                device_id,
+                user_id
+            )
+            .execute(&self.pool)
+            .await?;
 
-                should_delete_num = device_list.len() as i32 + 1
-                    - device_list.iter().filter(|&d| d == device_id).count() as i32
-                    - CONFIG.login_device_number_limit;
-            }
+            should_delete_num = device_list.len() as i32 + 1
+                - device_list.iter().filter(|&d| d == device_id).count() as i32
+                - CONFIG.login_device_number_limit;
+        }
 
         if should_delete_num >= 1 {
             if !CONFIG.allow_login_same_device && CONFIG.allow_ban_multidevice_user_auto {
@@ -400,10 +399,10 @@ impl UserService {
     ///
     /// Validates username and password, checks for bans,
     /// manages device sessions and generates access token.
-    pub async fn login_user<'r>(
+    pub async fn login_user(
         &self,
         login_data: UserLoginDto,
-        ip: Option<&'r str>,
+        ip: Option<&str>,
     ) -> ArcResult<UserAuth> {
         // TODO: Implement rate limiting
         // self.check_login_rate_limit(&login_data.name).await?;

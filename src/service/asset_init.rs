@@ -173,9 +173,7 @@ impl AssetInitService {
             .execute(&self.pool)
             .await
             .map_err(|e| {
-                ArcError::input(format!(
-                    "Failed to insert character {character_id}: {e}"
-                ))
+                ArcError::input(format!("Failed to insert character {character_id}: {e}"))
             })?;
         }
 
@@ -547,24 +545,25 @@ impl AssetInitService {
 
         // Insert course items
         for reward in course.rewards {
-            let (amount, item_id, item_type) = if reward.starts_with("fragment") {
-                (
-                    reward[8..].parse().unwrap_or(1),
-                    String::from("fragment"),
-                    String::from("fragment"),
-                )
-            } else if reward.starts_with("course_banner") {
-                (1, reward, String::from("course_banner"))
-            } else if reward.starts_with("core_generic_") {
-                (
-                    reward[13..].parse().unwrap_or(1),
-                    String::from("core_generic"),
-                    String::from("core"),
-                )
-            } else {
-                // unreachable!
-                panic!("Unknown reward type: {reward}");
-            };
+            let (amount, item_id, item_type) =
+                if let Some(fragment_str) = reward.strip_prefix("fragment") {
+                    (
+                        fragment_str.parse().unwrap_or(1),
+                        String::from("fragment"),
+                        String::from("fragment"),
+                    )
+                } else if reward.starts_with("course_banner") {
+                    (1, reward, String::from("course_banner"))
+                } else if let Some(reward) = reward.strip_prefix("core_generic_") {
+                    (
+                        reward.parse().unwrap_or(1),
+                        String::from("core_generic"),
+                        String::from("core"),
+                    )
+                } else {
+                    // unreachable!
+                    panic!("Unknown reward type: {reward}");
+                };
             query!(
                 "INSERT INTO course_item (course_id, item_id, type, amount) VALUES (?, ?, ?, ?)",
                 course.course_id,

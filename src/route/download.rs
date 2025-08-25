@@ -26,11 +26,7 @@ pub async fn download_song(
     url: Option<String>,
 ) -> RouteResult<Value> {
     // Parse the url parameter, default to true
-    let include_urls = match url.as_deref() {
-        Some("false") => false,
-        Some("0") => false,
-        _ => true,
-    };
+    let include_urls = !matches!(url.as_deref(), Some("false") | Some("0"));
 
     // Get user information
     let user = user_service.get_user_info(user_auth.user_id).await?;
