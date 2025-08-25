@@ -26,7 +26,7 @@ async fn main() {
             pool
         }
         Err(e) => {
-            log::error!("Failed to connect to database: {}", e);
+            log::error!("Failed to connect to database: {e}");
             process::exit(1);
         }
     };
@@ -39,15 +39,14 @@ async fn main() {
     {
         Ok(count) => count,
         Err(e) => {
-            log::error!("Failed to check character table: {}", e);
+            log::error!("Failed to check character table: {e}");
             process::exit(1);
         }
     };
 
     if character_count > 0 {
         log::warn!(
-            "Database appears to already contain data ({} characters found)",
-            character_count
+            "Database appears to already contain data ({character_count} characters found)"
         );
         log::warn!("This will add duplicate data or may cause errors.");
         print!("Continue anyway? (y/N): ");
@@ -85,7 +84,7 @@ async fn main() {
             log::info!("You can now start the Arcaea server!");
         }
         Err(e) => {
-            log::error!("Database initialization failed: {}", e);
+            log::error!("Database initialization failed: {e}");
             log::error!("Please check the error above and try again");
             process::exit(1);
         }

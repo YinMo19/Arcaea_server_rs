@@ -28,21 +28,13 @@ pub trait Operation: Send + Sync {
 
 /// Parameters that can be passed to operations
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct OperationParams {
     pub user_id: Option<i32>,
     pub song_ids: Option<Vec<String>>,
     pub other: Option<serde_json::Value>,
 }
 
-impl Default for OperationParams {
-    fn default() -> Self {
-        Self {
-            user_id: None,
-            song_ids: None,
-            other: None,
-        }
-    }
-}
 
 /// Operation to refresh song file cache
 /// Equivalent to Python's RefreshSongFileCache
@@ -143,8 +135,7 @@ impl Operation for RefreshAllScoreRating {
             // Reset ratings for songs not in chart table
             let placeholders = vec!["?"; song_ids.len()].join(",");
             let query = format!(
-                "UPDATE best_score SET rating = 0 WHERE song_id NOT IN ({})",
-                placeholders
+                "UPDATE best_score SET rating = 0 WHERE song_id NOT IN ({placeholders})"
             );
 
             let mut query_builder = sqlx::query(&query);
@@ -335,14 +326,13 @@ impl UnlockUserItem {
         .await?;
 
         if user_exists == 0 {
-            return Err(ArcError::no_data(format!("No such user: {}", user_id), -110));
+            return Err(ArcError::no_data(format!("No such user: {user_id}"), -110));
         }
 
         // Get available items of specified types
         let placeholders = vec!["?"; self.item_types.len()].join(",");
         let query = format!(
-            "SELECT item_id, type FROM item WHERE type IN ({})",
-            placeholders
+            "SELECT item_id, type FROM item WHERE type IN ({placeholders})"
         );
 
         let mut query_builder = sqlx::query_as::<_, (String, String)>(&query);
@@ -371,8 +361,7 @@ impl UnlockUserItem {
     async fn lock_for_user(&self, user_id: i32) -> ArcResult<()> {
         let placeholders = vec!["?"; self.item_types.len()].join(",");
         let query = format!(
-            "DELETE FROM user_item WHERE user_id = ? AND type IN ({})",
-            placeholders
+            "DELETE FROM user_item WHERE user_id = ? AND type IN ({placeholders})"
         );
 
         let mut query_builder = sqlx::query(&query).bind(user_id);
@@ -393,8 +382,7 @@ impl UnlockUserItem {
         // Get all items of specified types
         let placeholders = vec!["?"; self.item_types.len()].join(",");
         let query = format!(
-            "SELECT item_id, type FROM item WHERE type IN ({})",
-            placeholders
+            "SELECT item_id, type FROM item WHERE type IN ({placeholders})"
         );
 
         let mut query_builder = sqlx::query_as::<_, (String, String)>(&query);
@@ -424,7 +412,7 @@ impl UnlockUserItem {
 
     async fn lock_for_all_users(&self) -> ArcResult<()> {
         let placeholders = vec!["?"; self.item_types.len()].join(",");
-        let query = format!("DELETE FROM user_item WHERE type IN ({})", placeholders);
+        let query = format!("DELETE FROM user_item WHERE type IN ({placeholders})");
 
         let mut query_builder = sqlx::query(&query);
         for item_type in &self.item_types {
@@ -472,7 +460,7 @@ impl OperationManager {
             "refresh_all_score_rating" => Box::new(RefreshAllScoreRating::new(self.pool.clone())),
             "unlock_user_item" => Box::new(UnlockUserItem::new(self.pool.clone())),
             _ => {
-                return Err(ArcError::no_data(format!("Unknown operation: {}", operation_name), 404));
+                return Err(ArcError::no_data(format!("Unknown operation: {operation_name}"), 404));
             }
         };
 

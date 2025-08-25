@@ -142,7 +142,7 @@ pub async fn insight_complete(
             3
         }
         _ => {
-            return Err(ArcError::input(format!("Invalid pack_id: {}", pack_id)));
+            return Err(ArcError::input(format!("Invalid pack_id: {pack_id}")));
         }
     };
 
@@ -244,7 +244,7 @@ pub async fn aggregate(
                 });
             }
             Err(e) => {
-                log::warn!("{}", e);
+                log::warn!("{e}");
                 // Return error response immediately on first error
                 return Ok(AggregateResponse {
                     success: false,
@@ -280,10 +280,10 @@ pub async fn bundle_download(
     ctx: ClientContext<'_>,
 ) -> Result<NamedFile, status::Custom<String>> {
     // Get client IP for rate limiting
-    let client_ip = ctx.get_client_ip().unwrap_or_else(|| "127.0.0.1");
+    let client_ip = ctx.get_client_ip().unwrap_or("127.0.0.1");
 
     match bundle_service
-        .get_file_path_by_token(&token, client_ip)
+        .get_file_path_by_token(token, client_ip)
         .await
     {
         Ok(file_path) => {

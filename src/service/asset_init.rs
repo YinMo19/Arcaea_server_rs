@@ -174,8 +174,7 @@ impl AssetInitService {
             .await
             .map_err(|e| {
                 ArcError::input(format!(
-                    "Failed to insert character {}: {}",
-                    character_id, e
+                    "Failed to insert character {character_id}: {e}"
                 ))
             })?;
         }
@@ -193,7 +192,7 @@ impl AssetInitService {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| ArcError::input(format!("Failed to insert shirahime character: {}", e)))?;
+        .map_err(|e| ArcError::input(format!("Failed to insert shirahime character: {e}")))?;
 
         log::info!("Characters initialized successfully");
         Ok(())
@@ -215,7 +214,7 @@ impl AssetInitService {
                 )
                 .execute(&self.pool)
                 .await
-                .map_err(|e| ArcError::input(format!("Failed to insert character core: {}", e)))?;
+                .map_err(|e| ArcError::input(format!("Failed to insert character core: {e}")))?;
             }
         }
 
@@ -236,7 +235,7 @@ impl AssetInitService {
             )
             .execute(&self.pool)
             .await
-            .map_err(|e| ArcError::input(format!("Failed to insert core item: {}", e)))?;
+            .map_err(|e| ArcError::input(format!("Failed to insert core item: {e}")))?;
         }
 
         // Initialize world songs
@@ -248,7 +247,7 @@ impl AssetInitService {
             )
             .execute(&self.pool)
             .await
-            .map_err(|e| ArcError::input(format!("Failed to insert world song: {}", e)))?;
+            .map_err(|e| ArcError::input(format!("Failed to insert world song: {e}")))?;
         }
 
         // Initialize world unlocks
@@ -260,7 +259,7 @@ impl AssetInitService {
             )
             .execute(&self.pool)
             .await
-            .map_err(|e| ArcError::input(format!("Failed to insert world unlock: {}", e)))?;
+            .map_err(|e| ArcError::input(format!("Failed to insert world unlock: {e}")))?;
         }
 
         // Initialize course banners
@@ -272,7 +271,7 @@ impl AssetInitService {
             )
             .execute(&self.pool)
             .await
-            .map_err(|e| ArcError::input(format!("Failed to insert course banner: {}", e)))?;
+            .map_err(|e| ArcError::input(format!("Failed to insert course banner: {e}")))?;
         }
 
         // Initialize basic items
@@ -292,7 +291,7 @@ impl AssetInitService {
             )
             .execute(&self.pool)
             .await
-            .map_err(|e| ArcError::input(format!("Failed to insert basic item: {}", e)))?;
+            .map_err(|e| ArcError::input(format!("Failed to insert basic item: {e}")))?;
         }
 
         log::info!("Items initialized successfully");
@@ -305,7 +304,7 @@ impl AssetInitService {
 
         let packs_data = include_str!("../assets/packs.json");
         let packs: Vec<PurchaseItem> = serde_json::from_str(packs_data)
-            .map_err(|e| ArcError::input(format!("Failed to parse packs.json: {}", e)))?;
+            .map_err(|e| ArcError::input(format!("Failed to parse packs.json: {e}")))?;
 
         for pack in packs {
             self.insert_purchase_item(pack).await?;
@@ -321,7 +320,7 @@ impl AssetInitService {
 
         let singles_data = include_str!("../assets/singles.json");
         let singles: Vec<PurchaseItem> = serde_json::from_str(singles_data)
-            .map_err(|e| ArcError::input(format!("Failed to parse singles.json: {}", e)))?;
+            .map_err(|e| ArcError::input(format!("Failed to parse singles.json: {e}")))?;
 
         for single in singles {
             self.insert_purchase_item(single).await?;
@@ -337,7 +336,7 @@ impl AssetInitService {
 
         let courses_data = include_str!("../assets/courses.json");
         let courses: Vec<CourseData> = serde_json::from_str(courses_data)
-            .map_err(|e| ArcError::input(format!("Failed to parse courses.json: {}", e)))?;
+            .map_err(|e| ArcError::input(format!("Failed to parse courses.json: {e}")))?;
 
         for course in courses {
             self.insert_course(course).await?;
@@ -364,7 +363,7 @@ impl AssetInitService {
             )
             .execute(&self.pool)
             .await
-            .map_err(|e| ArcError::input(format!("Failed to insert role: {}", e)))?;
+            .map_err(|e| ArcError::input(format!("Failed to insert role: {e}")))?;
         }
 
         // Insert powers
@@ -376,7 +375,7 @@ impl AssetInitService {
             )
             .execute(&self.pool)
             .await
-            .map_err(|e| ArcError::input(format!("Failed to insert power: {}", e)))?;
+            .map_err(|e| ArcError::input(format!("Failed to insert power: {e}")))?;
         }
 
         // Insert role-power relationships
@@ -389,7 +388,7 @@ impl AssetInitService {
                 )
                 .execute(&self.pool)
                 .await
-                .map_err(|e| ArcError::input(format!("Failed to insert role power: {}", e)))?;
+                .map_err(|e| ArcError::input(format!("Failed to insert role power: {e}")))?;
             }
         }
 
@@ -429,7 +428,7 @@ impl AssetInitService {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| ArcError::input(format!("Failed to insert admin user: {}", e)))?;
+        .map_err(|e| ArcError::input(format!("Failed to insert admin user: {e}")))?;
 
         // Insert user characters for admin
         for character_id in 0..90 {
@@ -443,7 +442,7 @@ impl AssetInitService {
             )
             .execute(&self.pool)
             .await
-            .map_err(|e| ArcError::input(format!("Failed to insert user character: {}", e)))?;
+            .map_err(|e| ArcError::input(format!("Failed to insert user character: {e}")))?;
         }
 
         // Assign admin role
@@ -453,7 +452,7 @@ impl AssetInitService {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| ArcError::input(format!("Failed to assign admin role: {}", e)))?;
+        .map_err(|e| ArcError::input(format!("Failed to assign admin role: {e}")))?;
 
         log::info!("Admin account initialized successfully");
         Ok(())
@@ -476,7 +475,7 @@ impl AssetInitService {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| ArcError::input(format!("Failed to insert purchase: {}", e)))?;
+        .map_err(|e| ArcError::input(format!("Failed to insert purchase: {e}")))?;
 
         // Insert purchase items
         for item in purchase.items {
@@ -489,7 +488,7 @@ impl AssetInitService {
             )
             .execute(&self.pool)
             .await
-            .map_err(|e| ArcError::input(format!("Failed to insert purchase item: {}", e)))?;
+            .map_err(|e| ArcError::input(format!("Failed to insert purchase item: {e}")))?;
         }
 
         Ok(())
@@ -514,7 +513,7 @@ impl AssetInitService {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| ArcError::input(format!("Failed to insert course: {}", e)))?;
+        .map_err(|e| ArcError::input(format!("Failed to insert course: {e}")))?;
 
         // Insert course charts
         for (index, chart) in course.songs.iter().enumerate() {
@@ -531,7 +530,7 @@ impl AssetInitService {
             )
             .execute(&self.pool)
             .await
-            .map_err(|e| ArcError::input(format!("Failed to insert course chart: {}", e)))?;
+            .map_err(|e| ArcError::input(format!("Failed to insert course chart: {e}")))?;
         }
 
         // Insert course requirements
@@ -543,7 +542,7 @@ impl AssetInitService {
             )
             .execute(&self.pool)
             .await
-            .map_err(|e| ArcError::input(format!("Failed to insert course requirement: {}", e)))?;
+            .map_err(|e| ArcError::input(format!("Failed to insert course requirement: {e}")))?;
         }
 
         // Insert course items
@@ -564,7 +563,7 @@ impl AssetInitService {
                 )
             } else {
                 // unreachable!
-                panic!("Unknown reward type: {}", reward);
+                panic!("Unknown reward type: {reward}");
             };
             query!(
                 "INSERT INTO course_item (course_id, item_id, type, amount) VALUES (?, ?, ?, ?)",
@@ -575,7 +574,7 @@ impl AssetInitService {
             )
             .execute(&self.pool)
             .await
-            .map_err(|e| ArcError::input(format!("Failed to insert course item: {}", e)))?;
+            .map_err(|e| ArcError::input(format!("Failed to insert course item: {e}")))?;
         }
 
         Ok(())
@@ -1461,7 +1460,7 @@ impl AssetInitService {
 
     /// Get course banner IDs
     fn get_course_banners() -> Vec<String> {
-        (1..=11).map(|i| format!("course_banner_{}", i)).collect()
+        (1..=11).map(|i| format!("course_banner_{i}")).collect()
     }
 
     /// Get roles data

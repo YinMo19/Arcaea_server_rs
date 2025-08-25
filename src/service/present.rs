@@ -34,7 +34,7 @@ impl PresentService {
         .fetch_all(&self.pool)
         .await
         .map_err(|e| ArcError::Database {
-            message: format!("Failed to get user presents: {}", e),
+            message: format!("Failed to get user presents: {e}"),
         })?;
 
         // Get items for each present
@@ -66,7 +66,7 @@ impl PresentService {
         .fetch_all(&self.pool)
         .await
         .map_err(|e| ArcError::Database {
-            message: format!("Failed to get present items: {}", e),
+            message: format!("Failed to get present items: {e}"),
         })?;
 
         let items = item_records
@@ -91,7 +91,7 @@ impl PresentService {
     /// 4. Grant all items in the present to the user
     pub async fn claim_present(&self, user_id: i32, present_id: &str) -> Result<(), ArcError> {
         let mut tx = self.pool.begin().await.map_err(|e| ArcError::Database {
-            message: format!("Failed to start transaction: {}", e),
+            message: format!("Failed to start transaction: {e}"),
         })?;
 
         // Check if user has this present
@@ -103,12 +103,12 @@ impl PresentService {
         .fetch_one(&mut *tx)
         .await
         .map_err(|e| ArcError::Database {
-            message: format!("Failed to check user present existence: {}", e),
+            message: format!("Failed to check user present existence: {e}"),
         })?;
 
         if user_present_exists == 0 {
             return Err(ArcError::no_data(
-                &format!("Present '{}' not found for user {}", present_id, user_id),
+                format!("Present '{present_id}' not found for user {user_id}"),
                 404,
             ));
         }
@@ -121,11 +121,11 @@ impl PresentService {
         .fetch_optional(&mut *tx)
         .await
         .map_err(|e| ArcError::Database {
-            message: format!("Failed to get present info: {}", e),
+            message: format!("Failed to get present info: {e}"),
         })?;
 
         let present_record = present_record.ok_or_else(|| {
-            ArcError::no_data(&format!("Present '{}' does not exist", present_id), 404)
+            ArcError::no_data(format!("Present '{present_id}' does not exist"), 404)
         })?;
 
         // Check if present has expired
@@ -133,8 +133,7 @@ impl PresentService {
             let current_ts = chrono::Utc::now().timestamp_millis();
             if expire_ts < current_ts {
                 return Err(ArcError::input(format!(
-                    "Present '{}' has expired",
-                    present_id
+                    "Present '{present_id}' has expired"
                 )));
             }
         }
@@ -151,7 +150,7 @@ impl PresentService {
         .fetch_all(&mut *tx)
         .await
         .map_err(|e| ArcError::Database {
-            message: format!("Failed to get present items: {}", e),
+            message: format!("Failed to get present items: {e}"),
         })?;
 
         let items: Vec<PresentItem> = item_records
@@ -173,7 +172,7 @@ impl PresentService {
         .execute(&mut *tx)
         .await
         .map_err(|e| ArcError::Database {
-            message: format!("Failed to remove user present: {}", e),
+            message: format!("Failed to remove user present: {e}"),
         })?;
 
         // Grant items to user
@@ -189,7 +188,7 @@ impl PresentService {
         }
 
         tx.commit().await.map_err(|e| ArcError::Database {
-            message: format!("Failed to commit transaction: {}", e),
+            message: format!("Failed to commit transaction: {e}"),
         })?;
 
         Ok(())
@@ -219,7 +218,7 @@ impl PresentService {
         .execute(&mut **tx)
         .await
         .map_err(|e| ArcError::Database {
-            message: format!("Failed to grant item to user: {}", e),
+            message: format!("Failed to grant item to user: {e}"),
         })?;
 
         Ok(())
@@ -234,7 +233,7 @@ impl PresentService {
         .fetch_one(&self.pool)
         .await
         .map_err(|e| ArcError::Database {
-            message: format!("Failed to check present existence: {}", e),
+            message: format!("Failed to check present existence: {e}"),
         })?;
 
         Ok(exists == 1)
@@ -252,7 +251,7 @@ impl PresentService {
         // Check if present exists
         if !self.present_exists(present_id).await? {
             return Err(ArcError::no_data(
-                &format!("Present '{}' does not exist", present_id),
+                format!("Present '{present_id}' does not exist"),
                 404,
             ));
         }
@@ -266,7 +265,7 @@ impl PresentService {
         .execute(&self.pool)
         .await
         .map_err(|e| ArcError::Database {
-            message: format!("Failed to add present to user: {}", e),
+            message: format!("Failed to add present to user: {e}"),
         })?;
 
         Ok(())
@@ -284,7 +283,7 @@ impl PresentService {
         user_id: i32,
     ) -> Result<(), ArcError> {
         let mut tx = self.pool.begin().await.map_err(|e| ArcError::Database {
-            message: format!("Failed to start transaction: {}", e),
+            message: format!("Failed to start transaction: {e}"),
         })?;
 
         // Insert present
@@ -297,7 +296,7 @@ impl PresentService {
         .execute(&mut *tx)
         .await
         .map_err(|e| ArcError::Database {
-            message: format!("Failed to create present: {}", e),
+            message: format!("Failed to create present: {e}"),
         })?;
 
         // Insert present items
@@ -311,7 +310,7 @@ impl PresentService {
             .execute(&mut *tx)
             .await
             .map_err(|e| ArcError::Database {
-                message: format!("Failed to insert item: {}", e),
+                message: format!("Failed to insert item: {e}"),
             })?;
 
             // Insert present item
@@ -325,7 +324,7 @@ impl PresentService {
             .execute(&mut *tx)
             .await
             .map_err(|e| ArcError::Database {
-                message: format!("Failed to insert present item: {}", e),
+                message: format!("Failed to insert present item: {e}"),
             })?;
         }
 
@@ -338,11 +337,11 @@ impl PresentService {
         .execute(&mut *tx)
         .await
         .map_err(|e| ArcError::Database {
-            message: format!("Failed to add present to user: {}", e),
+            message: format!("Failed to add present to user: {e}"),
         })?;
 
         tx.commit().await.map_err(|e| ArcError::Database {
-            message: format!("Failed to commit transaction: {}", e),
+            message: format!("Failed to commit transaction: {e}"),
         })?;
 
         Ok(())

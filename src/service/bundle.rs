@@ -24,7 +24,7 @@ impl ContentBundle {
     /// Parse version string into tuple for comparison
     pub fn parse_version(version: &str) -> (u32, u32, u32) {
         let parts: Vec<&str> = version.split('.').collect();
-        let major = parts.get(0).and_then(|s| s.parse().ok()).unwrap_or(0);
+        let major = parts.first().and_then(|s| s.parse().ok()).unwrap_or(0);
         let minor = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
         let patch = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
         (major, minor, patch)
@@ -64,13 +64,13 @@ impl ContentBundle {
         // Calculate file sizes
         let json_size = fs::metadata(&json_path)
             .map_err(|e| ArcError::Io {
-                message: format!("Failed to get JSON file size: {}", e),
+                message: format!("Failed to get JSON file size: {e}"),
             })?
             .len();
 
         let bundle_size = fs::metadata(&bundle_path)
             .map_err(|e| ArcError::Io {
-                message: format!("Failed to get bundle file size: {}", e),
+                message: format!("Failed to get bundle file size: {e}"),
             })?
             .len();
 
@@ -149,7 +149,7 @@ impl BundleService {
             next_versions: HashMap::new(),
             version_tuple_bundles: HashMap::new(),
             strict_mode: false,
-            download_prefix: download_prefix,
+            download_prefix,
         }
     }
 
@@ -187,7 +187,7 @@ impl BundleService {
 
         // Sort bundles by version and set max versions
         for (app_version, bundles) in self.bundles.iter_mut() {
-            bundles.sort_by(|a, b| a.version_tuple().cmp(&b.version_tuple()));
+            bundles.sort_by_key(|a| a.version_tuple());
             if let Some(last_bundle) = bundles.last() {
                 self.max_bundle_version
                     .insert(app_version.clone(), last_bundle.version.clone());
@@ -204,12 +204,12 @@ impl BundleService {
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ArcResult<()>> + Send + 'a>> {
         Box::pin(async move {
             let entries = fs::read_dir(dir).map_err(|e| ArcError::Io {
-                message: format!("Failed to read directory: {}", e),
+                message: format!("Failed to read directory: {e}"),
             })?;
 
             for entry in entries {
                 let entry = entry.map_err(|e| ArcError::Io {
-                    message: format!("Failed to read directory entry: {}", e),
+                    message: format!("Failed to read directory entry: {e}"),
                 })?;
                 let path = entry.path();
 
@@ -229,7 +229,7 @@ impl BundleService {
     /// Process a bundle JSON file
     async fn process_bundle_json(&mut self, json_path: &Path) -> ArcResult<()> {
         let json_content = fs::read_to_string(json_path).map_err(|e| ArcError::Io {
-            message: format!("Failed to read JSON file: {}", e),
+            message: format!("Failed to read JSON file: {e}"),
         })?;
 
         let json_data: serde_json::Value = serde_json::from_str(&json_content)?;
@@ -238,8 +238,7 @@ impl BundleService {
         let bundle_path = json_path.with_extension("cb");
         if !bundle_path.exists() {
             return Err(ArcError::input(format!(
-                "Bundle file not found: {:?}",
-                bundle_path
+                "Bundle file not found: {bundle_path:?}"
             )));
         }
 
@@ -271,7 +270,7 @@ impl BundleService {
         // Add to collections
         self.bundles
             .entry(bundle.app_version.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(bundle_with_rel_paths.clone());
 
         let prev_version = bundle
@@ -285,7 +284,7 @@ impl BundleService {
 
         self.next_versions
             .entry(prev_version.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(bundle.version);
 
         Ok(())
@@ -308,7 +307,7 @@ impl BundleService {
 
         let target_version = self.max_bundle_version.get(app_version).ok_or_else(|| {
             ArcError::no_data(
-                format!("No bundles found for app version: {}", app_version),
+                format!("No bundles found for app version: {app_version}"),
                 404,
             )
         })?;
@@ -364,8 +363,7 @@ impl BundleService {
 
                 let response = bundle_with_urls.to_response();
                 results.push(response);
-            } else {
-            }
+            } 
         }
 
         Ok(results)
@@ -407,8 +405,7 @@ impl BundleService {
         }
 
         Err(ArcError::no_data(format!(
-            "No update path found from {} to {}",
-            current_version, target_version
+            "No update path found from {current_version} to {target_version}"
         ), 404))
     }
 
@@ -449,10 +446,10 @@ impl BundleService {
             if !url.ends_with('/') {
                 url.push('/');
             }
-            format!("{}{}", url, token)
+            format!("{url}{token}")
         } else {
             // Default to relative URL
-            format!("/bundle_download/{}", token)
+            format!("/bundle_download/{token}")
         }
     }
 
@@ -508,7 +505,7 @@ impl BundleService {
         }
 
         let content = fs::read(&full_path).map_err(|e| ArcError::Io {
-            message: format!("Failed to read file: {}", e),
+            message: format!("Failed to read file: {e}"),
         })?;
 
         Ok(content)

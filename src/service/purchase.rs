@@ -70,7 +70,7 @@ impl PurchaseService {
             {
                 Ok(purchase_data) => purchases.push(purchase_data),
                 Err(e) => {
-                    log::warn!("Failed to get purchase {}: {}", purchase_name, e);
+                    log::warn!("Failed to get purchase {purchase_name}: {e}");
                     continue;
                 }
             }
@@ -94,7 +94,7 @@ impl PurchaseService {
         .await?;
 
         let purchase_info = purchase_info.ok_or_else(|| {
-            ArcError::no_data(format!("Purchase `{}` does not exist.", purchase_name), 501)
+            ArcError::no_data(format!("Purchase `{purchase_name}` does not exist."), 501)
         })?;
 
         // Get purchase items
@@ -136,7 +136,7 @@ impl PurchaseService {
                 purchase_info.orig_price.unwrap_or(0),
                 purchase_info.discount_from.unwrap_or(-1),
                 purchase_info.discount_to.unwrap_or(-1),
-                &purchase_info.discount_reason.as_deref().unwrap_or(""),
+                purchase_info.discount_reason.as_deref().unwrap_or(""),
                 user_id,
             )
             .await?;
@@ -224,7 +224,7 @@ impl PurchaseService {
         .await?;
 
         let purchase_info = purchase_info.ok_or_else(|| {
-            ArcError::no_data(format!("Purchase `{}` does not exist.", purchase_name), 501)
+            ArcError::no_data(format!("Purchase `{purchase_name}` does not exist."), 501)
         })?;
 
         // Get purchase items
@@ -238,8 +238,7 @@ impl PurchaseService {
         if purchase_items.is_empty() {
             return Err(ArcError::no_data(
                 format!(
-                    "The items of the purchase `{}` do not exist.",
-                    purchase_name
+                    "The items of the purchase `{purchase_name}` do not exist."
                 ),
                 501,
             ));
@@ -261,7 +260,7 @@ impl PurchaseService {
                 purchase_info.orig_price.unwrap_or(0),
                 purchase_info.discount_from.unwrap_or(-1),
                 purchase_info.discount_to.unwrap_or(-1),
-                &purchase_info.discount_reason.as_deref().unwrap_or(""),
+                purchase_info.discount_reason.as_deref().unwrap_or(""),
                 user_id,
             )
             .await?;
@@ -510,7 +509,7 @@ impl PurchaseService {
 
         // Return response with fragment info
         let coupon = if fragment_amount > 0 {
-            format!("fragment{}", fragment_amount)
+            format!("fragment{fragment_amount}")
         } else {
             String::new()
         };

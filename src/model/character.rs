@@ -52,7 +52,7 @@ impl Level {
         }
 
         // Sort by level to ensure proper order
-        let mut pairs: Vec<(i32, i32)> = a.into_iter().zip(b.into_iter()).collect();
+        let mut pairs: Vec<(i32, i32)> = a.into_iter().zip(b).collect();
         pairs.sort_by_key(|&(level, _)| level);
         let a: Vec<i32> = pairs.iter().map(|&(level, _)| level).collect();
         let b: Vec<i32> = pairs.iter().map(|&(_, exp_val)| exp_val).collect();

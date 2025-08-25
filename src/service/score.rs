@@ -181,7 +181,7 @@ impl ScoreService {
                 Some(row) => {
                     let course_state = row.course_state;
                     if let Some(state) = course_state {
-                        if state >= 0 && state <= 3 {
+                        if (0..=3).contains(&state) {
                             // Update token
                             token = generate_course_token();
                             sqlx::query!(
@@ -859,7 +859,7 @@ fn generate_song_token() -> String {
     let mut random_bytes = [0u8; 64];
     use rand::RngCore;
     rand::thread_rng().fill_bytes(&mut random_bytes);
-    general_purpose::STANDARD.encode(&random_bytes)
+    general_purpose::STANDARD.encode(random_bytes)
 }
 
 /// Generate a random course token
@@ -867,7 +867,7 @@ fn generate_course_token() -> String {
     let mut random_bytes = [0u8; 64];
     use rand::RngCore;
     rand::thread_rng().fill_bytes(&mut random_bytes);
-    format!("c_{}", general_purpose::STANDARD.encode(&random_bytes))
+    format!("c_{}", general_purpose::STANDARD.encode(random_bytes))
 }
 
 /// Generate a random skill flag with specified length

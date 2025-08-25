@@ -102,7 +102,7 @@ impl ItemService {
 
         match result {
             Some(row) => Ok(row.is_available.unwrap_or(0) != 0),
-            None => Err(ArcError::no_data(format!("No such item `{}`: `{}`", item_type, item_id), 108)),
+            None => Err(ArcError::no_data(format!("No such item `{item_type}`: `{item_id}`"), 108)),
         }
     }
 
@@ -191,7 +191,7 @@ impl ItemService {
         if current_amount > 0 {
             if current_amount + amount < 0 {
                 return Err(ArcError::ItemNotEnough {
-                    message: format!("The user does not have enough `{}`.", item_id),
+                    message: format!("The user does not have enough `{item_id}`."),
                     error_code: 108,
                     api_error_code: -122,
                     extra_data: None,
@@ -210,8 +210,7 @@ impl ItemService {
         } else {
             if amount < 0 {
                 return Err(ArcError::input(format!(
-                    "The amount of `{}` is wrong.",
-                    item_id
+                    "The amount of `{item_id}` is wrong."
                 )));
             }
             sqlx::query!(
@@ -257,7 +256,7 @@ impl ItemService {
 
         match result {
             Some(mapping) => Ok(mapping.character_id),
-            None => Err(ArcError::no_data(format!("No character `{}`.", character_id), 108)),
+            None => Err(ArcError::no_data(format!("No character `{character_id}`."), 108)),
         }
     }
 
@@ -368,8 +367,7 @@ impl ItemService {
             ItemTypes::STAMINA6 => self.claim_stamina6_item(user_id).await,
             ItemTypes::STAMINA => self.claim_stamina_item(user_id, amount).await,
             _ => Err(ArcError::input(format!(
-                "The item type `{}` is invalid.",
-                item_type
+                "The item type `{item_type}` is invalid."
             ))),
         }
     }
@@ -518,7 +516,7 @@ impl ItemService {
             let item_id = item.item_id.as_ref().unwrap();
             let amount = item.amount.unwrap_or(1);
 
-            sqlx::query(&format!("INSERT INTO {} VALUES (?, ?, ?, ?)", table_name))
+            sqlx::query(&format!("INSERT INTO {table_name} VALUES (?, ?, ?, ?)"))
                 .bind(collection_id)
                 .bind(item_id)
                 .bind(&item.item_type)
@@ -545,8 +543,7 @@ impl ItemService {
                 .ok_or_else(|| ArcError::input("Item ID is required for collection operations"))?;
 
             sqlx::query(&format!(
-                "DELETE FROM {} WHERE {} = ? AND item_id = ? AND type = ?",
-                table_name, table_primary_key
+                "DELETE FROM {table_name} WHERE {table_primary_key} = ? AND item_id = ? AND type = ?"
             ))
             .bind(collection_id)
             .bind(item_id)
@@ -574,8 +571,7 @@ impl ItemService {
             let amount = item.amount.unwrap_or(1);
 
             sqlx::query(&format!(
-                "UPDATE {} SET amount = ? WHERE {} = ? AND item_id = ? AND type = ?",
-                table_name, table_primary_key
+                "UPDATE {table_name} SET amount = ? WHERE {table_primary_key} = ? AND item_id = ? AND type = ?"
             ))
             .bind(amount)
             .bind(collection_id)
@@ -640,8 +636,7 @@ impl ItemFactory {
             ItemTypes::COURSE_BANNER => (1, true),
             _ => {
                 return Err(ArcError::input(format!(
-                    "The item type `{}` is invalid.",
-                    item_type
+                    "The item type `{item_type}` is invalid."
                 )));
             }
         };

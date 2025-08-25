@@ -381,7 +381,7 @@ pub async fn cloud_post(
     request: Form<CloudSaveRequest>,
 ) -> RouteResult<serde_json::Value> {
     user_service
-        .update_user_save_data(auth.user_id, &*request)
+        .update_user_save_data(auth.user_id, &request)
         .await?;
 
     let response = serde_json::json!({

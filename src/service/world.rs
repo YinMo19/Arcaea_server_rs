@@ -50,13 +50,13 @@ impl MapParser {
                             if let Some(chapter) = map_data.chapter {
                                 self.chapter_info
                                     .entry(chapter)
-                                    .or_insert_with(Vec::new)
+                                    .or_default()
                                     .push(map_id.clone());
 
                                 if !map_data.is_repeatable {
                                     self.chapter_info_without_repeatable
                                         .entry(chapter)
-                                        .or_insert_with(Vec::new)
+                                        .or_default()
                                         .push(map_id.clone());
                                 }
                             }
@@ -77,12 +77,12 @@ impl MapParser {
 
         if let Some(path) = self.map_id_path.get(map_id) {
             let content = std::fs::read_to_string(path).map_err(|e| ArcError::Database {
-                message: format!("Failed to read map file {}: {}", path, e),
+                message: format!("Failed to read map file {path}: {e}"),
             })?;
 
             let map_data: serde_json::Value =
                 serde_json::from_str(&content).map_err(|e| ArcError::Database {
-                    message: format!("Failed to parse map JSON {}: {}", path, e),
+                    message: format!("Failed to parse map JSON {path}: {e}"),
                 })?;
 
             let world_map_info = WorldMapInfo {
@@ -113,19 +113,19 @@ impl MapParser {
             return Ok(world_map_info);
         }
 
-        Err(ArcError::no_data(&format!("Map {} not found", map_id), 404))
+        Err(ArcError::no_data(format!("Map {map_id} not found"), 404))
     }
 
     /// Load full world map data from JSON file
     pub fn load_world_map(&self, map_id: &str) -> Result<WorldMap, ArcError> {
         if let Some(path) = self.map_id_path.get(map_id) {
             let content = std::fs::read_to_string(path).map_err(|e| ArcError::Database {
-                message: format!("Failed to read map file {}: {}", path, e),
+                message: format!("Failed to read map file {path}: {e}"),
             })?;
 
             let map_data: serde_json::Value =
                 serde_json::from_str(&content).map_err(|e| ArcError::Database {
-                    message: format!("Failed to parse map JSON {}: {}", path, e),
+                    message: format!("Failed to parse map JSON {path}: {e}"),
                 })?;
 
             let mut world_map = WorldMap {
@@ -218,8 +218,7 @@ impl MapParser {
                     .map(|s| s.to_string()),
                 requires_any: map_data
                     .get("requires_any")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| arr.clone()),
+                    .and_then(|v| v.as_array()).cloned(),
                 steps: Vec::new(),
             };
 
@@ -314,7 +313,7 @@ impl MapParser {
             return Ok(world_map);
         }
 
-        Err(ArcError::no_data(&format!("Map {} not found", map_id), 404))
+        Err(ArcError::no_data(format!("Map {map_id} not found"), 404))
     }
 
     /// Get all map IDs
@@ -331,7 +330,7 @@ impl Default for MapParser {
 
 /// Get the global map parser instance
 pub fn get_map_parser() -> &'static MapParser {
-    MAP_PARSER.get_or_init(|| MapParser::new())
+    MAP_PARSER.get_or_init(MapParser::new)
 }
 
 /// User map implementation with climbing logic
@@ -556,7 +555,7 @@ impl WorldService {
                 .fetch_optional(&self.pool)
                 .await
                 .map_err(|e| ArcError::Database {
-                    message: format!("Failed to get user current map: {}", e),
+                    message: format!("Failed to get user current map: {e}"),
                 })?;
 
         Ok(current_map
@@ -604,7 +603,7 @@ impl WorldService {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| ArcError::Database {
-            message: format!("Failed to get user world progress: {}", e),
+            message: format!("Failed to get user world progress: {e}"),
         })?;
 
         let (curr_position, curr_capture, is_locked) = if let Some(record) = user_world {
@@ -623,7 +622,7 @@ impl WorldService {
             .execute(&self.pool)
             .await
             .map_err(|e| ArcError::Database {
-                message: format!("Failed to initialize user map: {}", e),
+                message: format!("Failed to initialize user map: {e}"),
             })?;
 
             (0, 0, true)
@@ -681,7 +680,7 @@ impl WorldService {
         .execute(&self.pool)
         .await
         .map_err(|e| ArcError::Database {
-            message: format!("Failed to set user current map: {}", e),
+            message: format!("Failed to set user current map: {e}"),
         })?;
 
         Ok(())
@@ -697,7 +696,7 @@ impl WorldService {
         map_id: &str,
     ) -> Result<serde_json::Value, ArcError> {
         let mut tx = self.pool.begin().await.map_err(|e| ArcError::Database {
-            message: format!("Failed to start transaction: {}", e),
+            message: format!("Failed to start transaction: {e}"),
         })?;
 
         let mut user_map = self.load_user_map(user_id, map_id).await?;
@@ -718,13 +717,13 @@ impl WorldService {
                 .execute(&mut *tx)
                 .await
                 .map_err(|e| ArcError::Database {
-                    message: format!("Failed to unlock map: {}", e),
+                    message: format!("Failed to unlock map: {e}"),
                 })?;
             }
         }
 
         tx.commit().await.map_err(|e| ArcError::Database {
-            message: format!("Failed to commit transaction: {}", e),
+            message: format!("Failed to commit transaction: {e}"),
         })?;
 
         Ok(serde_json::json!({
@@ -757,7 +756,7 @@ impl WorldService {
                     .fetch_optional(&self.pool)
                     .await
                     .map_err(|e| ArcError::Database {
-                        message: format!("Failed to check item requirement: {}", e),
+                        message: format!("Failed to check item requirement: {e}"),
                     })?;
 
                     if item_count.flatten().unwrap_or(0) <= 0 {

@@ -229,10 +229,6 @@ pub struct GameInfoResponse {
 
 /// Empty response for endpoints that don't return data
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct EmptyResponse {}
 
-impl Default for EmptyResponse {
-    fn default() -> Self {
-        Self {}
-    }
-}

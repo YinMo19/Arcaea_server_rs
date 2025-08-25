@@ -64,7 +64,7 @@ impl DownloadService {
             song_id,
             file_name,
             current_time,
-            base64::engine::general_purpose::STANDARD.encode(&random_bytes)
+            base64::engine::general_purpose::STANDARD.encode(random_bytes)
         );
 
         format!("{:x}", md5::compute(token_data.as_bytes()))
@@ -126,7 +126,7 @@ impl DownloadService {
                 let token_time = row.time.unwrap_or(0);
                 if current_time - token_time > self.download_time_gap_limit {
                     return Err(ArcError::no_access(
-                        format!("The token `{}` has expired.", token),
+                        format!("The token `{token}` has expired."),
                         403,
                     ));
                 }
@@ -134,7 +134,7 @@ impl DownloadService {
                 Ok((row.user_id, token_time))
             }
             None => Err(ArcError::no_access(
-                format!("The token `{}` is not valid.", token),
+                format!("The token `{token}` is not valid."),
                 403,
             )),
         }
@@ -169,12 +169,12 @@ impl DownloadService {
             let prefix = if prefix.ends_with('/') {
                 prefix.clone()
             } else {
-                format!("{}/", prefix)
+                format!("{prefix}/")
             };
-            format!("{}{}/{}?t={}", prefix, song_id, file_name, token)
+            format!("{prefix}{song_id}/{file_name}?t={token}")
         } else {
             // Use relative URL pattern similar to Python's url_for
-            format!("/download/{}/{}?t={}", song_id, file_name, token)
+            format!("/download/{song_id}/{file_name}?t={token}")
         }
     }
 

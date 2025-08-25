@@ -22,6 +22,12 @@ pub struct Score {
     pub song_name: Option<String>,
 }
 
+impl Default for Score {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Score {
     /// Create a new Score instance
     pub fn new() -> Self {

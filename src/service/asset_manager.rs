@@ -66,6 +66,7 @@ pub struct Songlist {
 
 /// Cached songlist data
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct SonglistCache {
     /// Mapping of song_id to file availability bitmap
     pub songs: HashMap<String, u32>,
@@ -79,17 +80,6 @@ pub struct SonglistCache {
     pub has_songlist: bool,
 }
 
-impl Default for SonglistCache {
-    fn default() -> Self {
-        Self {
-            songs: HashMap::new(),
-            pack_info: HashMap::new(),
-            free_songs: HashSet::new(),
-            world_songs: HashSet::new(),
-            has_songlist: false,
-        }
-    }
-}
 
 impl SonglistCache {
     /// Check if a file is available for download for a given song
@@ -200,7 +190,7 @@ impl SonglistCache {
             // Add Beyond difficulty as world song if available
             if let Some(ref difficulties) = song.difficulties {
                 if difficulties.iter().any(|d| d.rating_class == 3) {
-                    self.world_songs.insert(format!("{}3", song_id));
+                    self.world_songs.insert(format!("{song_id}3"));
                 }
             }
             return;
@@ -220,7 +210,7 @@ impl SonglistCache {
         if let Some(ref set_name) = song.set {
             self.pack_info
                 .entry(set_name.clone())
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(song_id.clone());
         }
     }
@@ -228,6 +218,7 @@ impl SonglistCache {
 
 /// File cache for MD5 hashes and file listings
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct FileCache {
     /// Cache of file MD5 hashes: (song_id, file_name) -> md5_hash
     pub file_md5_cache: HashMap<(String, String), Option<String>>,
@@ -237,15 +228,6 @@ pub struct FileCache {
     pub all_song_ids: Option<Vec<String>>,
 }
 
-impl Default for FileCache {
-    fn default() -> Self {
-        Self {
-            file_md5_cache: HashMap::new(),
-            song_files_cache: HashMap::new(),
-            all_song_ids: None,
-        }
-    }
-}
 
 impl FileCache {
     /// Clear all cached data
@@ -431,10 +413,10 @@ impl AssetManager {
         }
 
         let content = fs::read_to_string(&self.songlist_file_path)
-            .map_err(|e| ArcError::no_data(format!("Failed to read songlist: {}", e), 108))?;
+            .map_err(|e| ArcError::no_data(format!("Failed to read songlist: {e}"), 108))?;
 
         let songlist: Songlist = serde_json::from_str(&content)
-            .map_err(|e| ArcError::no_data(format!("Failed to parse songlist: {}", e), 108))?;
+            .map_err(|e| ArcError::no_data(format!("Failed to parse songlist: {e}"), 108))?;
 
         let mut cache = self.songlist_cache.write().unwrap();
         cache.has_songlist = true;

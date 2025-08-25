@@ -89,7 +89,7 @@ impl CharacterService {
         .await?;
 
         let character_id = character_id.ok_or_else(|| {
-            ArcError::no_data(format!("No character with name: {}", character_name), 404)
+            ArcError::no_data(format!("No character with name: {character_name}"), 404)
         })?;
 
         self.grant_character_by_id(user_id, character_id).await
@@ -109,12 +109,11 @@ impl CharacterService {
                    c.name, c.max_level, c.char_type, c.skill_id, c.skill_id_uncap, c.skill_unlock_level,
                    c.skill_requires_uncap, c.frag1, c.frag20, c.frag30, c.prog1, c.prog20, c.prog30,
                    c.overdrive1, c.overdrive20, c.overdrive30
-            FROM {} uc
+            FROM {table_name} uc
             JOIN `character` c ON uc.character_id = c.character_id
             WHERE uc.user_id = ?
             ORDER BY uc.character_id
-            "#,
-            table_name
+            "#
         );
 
         let characters = sqlx::query(&query)
@@ -412,7 +411,7 @@ impl CharacterService {
         .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| {
-            ArcError::no_data(format!("No such character: {}", character_id), 404)
+            ArcError::no_data(format!("No such character: {character_id}"), 404)
         })?;
 
         Ok(character)
@@ -639,8 +638,7 @@ impl CharacterService {
 
         // Update character table
         let query = format!(
-            "UPDATE {} SET is_uncapped_override = ? WHERE user_id = ? AND character_id = ?",
-            table_name
+            "UPDATE {table_name} SET is_uncapped_override = ? WHERE user_id = ? AND character_id = ?"
         );
         sqlx::query(&query)
             .bind(if new_override { 1 } else { 0 })
@@ -740,8 +738,7 @@ impl CharacterService {
         // Update character uncap state - use the correct table based on config
         let table_name = self.get_user_char_table();
         let query = format!(
-            "UPDATE {} SET is_uncapped = 1, is_uncapped_override = 0 WHERE user_id = ? AND character_id = ?",
-            table_name
+            "UPDATE {table_name} SET is_uncapped = 1, is_uncapped_override = 0 WHERE user_id = ? AND character_id = ?"
         );
         sqlx::query(&query)
             .bind(user_id)
@@ -786,8 +783,7 @@ impl CharacterService {
         // Update database
         let table_name = self.get_user_char_table();
         let query = format!(
-            "UPDATE {} SET level = ?, exp = ? WHERE user_id = ? AND character_id = ?",
-            table_name
+            "UPDATE {table_name} SET level = ?, exp = ? WHERE user_id = ? AND character_id = ?"
         );
         sqlx::query(&query)
             .bind(char_info.level.level)
@@ -868,8 +864,7 @@ impl CharacterService {
 
         // Toggle skill flag
         let query = format!(
-            "UPDATE {} SET skill_flag = 1 - skill_flag WHERE user_id = ? AND character_id = ?",
-            table_name
+            "UPDATE {table_name} SET skill_flag = 1 - skill_flag WHERE user_id = ? AND character_id = ?"
         );
         sqlx::query(&query)
             .bind(user_id)
@@ -896,8 +891,8 @@ impl CharacterService {
                     character_id: row.character_id,
                     level: row.level.unwrap_or(1),
                     exp: row.exp.unwrap_or(0.0),
-                    is_uncapped: row.is_uncapped.unwrap_or(0) as i8,
-                    is_uncapped_override: row.is_uncapped_override.unwrap_or(0) as i8,
+                    is_uncapped: row.is_uncapped.unwrap_or(0),
+                    is_uncapped_override: row.is_uncapped_override.unwrap_or(0),
                     skill_flag: row.skill_flag.unwrap_or(0),
                 })
                 .collect()
@@ -915,8 +910,8 @@ impl CharacterService {
                     character_id: row.character_id,
                     level: row.level.unwrap_or(1),
                     exp: row.exp.unwrap_or(0.0),
-                    is_uncapped: row.is_uncapped.unwrap_or(0) as i8,
-                    is_uncapped_override: row.is_uncapped_override.unwrap_or(0) as i8,
+                    is_uncapped: row.is_uncapped.unwrap_or(0),
+                    is_uncapped_override: row.is_uncapped_override.unwrap_or(0),
                     skill_flag: row.skill_flag.unwrap_or(0),
                 })
                 .collect()
@@ -971,8 +966,7 @@ impl CharacterService {
         let table_name = self.get_user_char_table();
 
         let query = format!(
-            "DELETE FROM {} WHERE user_id = ? AND character_id = ?",
-            table_name
+            "DELETE FROM {table_name} WHERE user_id = ? AND character_id = ?"
         );
         sqlx::query(&query)
             .bind(user_id)

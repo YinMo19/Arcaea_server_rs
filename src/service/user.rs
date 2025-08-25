@@ -51,8 +51,8 @@ impl UserService {
     /// Generate access token using SHA-256 and random data
     fn generate_token(user_id: i32, timestamp: i64) -> String {
         let mut hasher = Sha256::new();
-        hasher.update(format!("{}{}", user_id, timestamp).as_bytes());
-        hasher.update(&rand::thread_rng().gen::<[u8; 8]>());
+        hasher.update(format!("{user_id}{timestamp}").as_bytes());
+        hasher.update(rand::thread_rng().gen::<[u8; 8]>());
         general_purpose::STANDARD.encode(hasher.finalize())
     }
 
@@ -291,8 +291,8 @@ impl UserService {
 
         let mut should_delete_num = device_list.len() as i32 + 1 - CONFIG.login_device_number_limit;
 
-        if !CONFIG.allow_login_same_device {
-            if device_list.contains(&device_id.to_string()) {
+        if !CONFIG.allow_login_same_device
+            && device_list.contains(&device_id.to_string()) {
                 // Delete existing sessions for the same device
                 sqlx::query!(
                     "DELETE FROM login WHERE login_device = ? AND user_id = ?",
@@ -306,7 +306,6 @@ impl UserService {
                     - device_list.iter().filter(|&d| d == device_id).count() as i32
                     - CONFIG.login_device_number_limit;
             }
-        }
 
         if should_delete_num >= 1 {
             if !CONFIG.allow_login_same_device && CONFIG.allow_ban_multidevice_user_auto {
@@ -384,7 +383,7 @@ impl UserService {
         };
 
         let ban_end_time = current_time + (ban_time as i64 * 86400000);
-        let ban_flag = format!("{}:{}", ban_time, ban_end_time);
+        let ban_flag = format!("{ban_time}:{ban_end_time}");
 
         sqlx::query!(
             "UPDATE user SET ban_flag = ? WHERE user_id = ?",
@@ -510,7 +509,7 @@ impl UserService {
     ///
     /// Validates the access token and returns the associated user ID.
     pub async fn authenticate_token(&self, token: &str) -> ArcResult<i32> {
-        log::info!("Authenticating token: {}", token);
+        log::info!("Authenticating token: {token}");
         let result = sqlx::query_as!(
             UserCodeMapping,
             "SELECT user_id FROM login WHERE access_token = ?",
@@ -593,7 +592,7 @@ impl UserService {
         // Note: This is potentially unsafe due to SQL injection risk
         // In a real implementation, you should validate the column name
         // and use a match statement or enum for allowed columns
-        let query = format!("UPDATE user SET {} = ? WHERE user_id = ?", column);
+        let query = format!("UPDATE user SET {column} = ? WHERE user_id = ?");
         sqlx::query(&query)
             .bind(value)
             .bind(user_id)
@@ -840,7 +839,7 @@ impl UserService {
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(cores
+        cores
             .into_iter()
             .map(|core| {
                 let amount = core.amount.unwrap_or(1);
@@ -850,7 +849,7 @@ impl UserService {
                     ("item_type", Value::from("core")),
                 ]))
             })
-            .collect::<ArcResult<Vec<Item>>>()?)
+            .collect::<ArcResult<Vec<Item>>>()
     }
 
     /// Get user pack unlocks
@@ -1172,7 +1171,7 @@ impl UserService {
         T: serde::Serialize + Send + Sync,
     {
         let value_str = serde_json::to_string(value)?;
-        let sql = format!("UPDATE user SET {} = ? WHERE user_id = ?", column);
+        let sql = format!("UPDATE user SET {column} = ? WHERE user_id = ?");
 
         sqlx::query(&sql)
             .bind(value_str)

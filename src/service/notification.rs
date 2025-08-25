@@ -55,7 +55,7 @@ impl NotificationService {
         // Filter out expired notifications and convert to responses
         for notification in notifications {
             if !self.is_notification_expired(notification.timestamp, current_time)
-                && notification.notification_type == String::from("room_inv")
+                && notification.notification_type == "room_inv"
             {
                 responses.push(NotificationResponse::from(notification));
             }

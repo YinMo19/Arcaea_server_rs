@@ -167,9 +167,7 @@ impl IpContext {
 
     /// Get the client IP address as a string, with fallback
     pub fn get_ip_string(&self) -> String {
-        self.ip
-            .as_ref()
-            .map(|s| s.clone())
+        self.ip.clone()
             .unwrap_or_else(|| "unknown".to_string())
     }
 }
@@ -243,9 +241,9 @@ impl<'r> FromRequest<'r> for VersionContext<'r> {
         let device_id = request.headers().get_one("DeviceId");
 
         Outcome::Success(VersionContext {
-            app_version: app_version,
-            bundle_version: bundle_version,
-            device_id: device_id,
+            app_version,
+            bundle_version,
+            device_id,
         })
     }
 }

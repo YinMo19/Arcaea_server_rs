@@ -48,7 +48,7 @@ async fn init_services(
     // Initialize asset cache on startup
     log::info!("Initializing asset cache...");
     if let Err(e) = asset_manager.initialize_cache().await {
-        log::error!("Failed to initialize asset cache: {}", e);
+        log::error!("Failed to initialize asset cache: {e}");
         std::process::exit(1);
     }
     log::info!("Asset cache initialized successfully");
@@ -73,7 +73,7 @@ async fn init_services(
     // Initialize bundle service
     log::info!("Initializing bundle service...");
     if let Err(e) = bundle_service.initialize().await {
-        log::error!("Failed to initialize bundle service: {}", e);
+        log::error!("Failed to initialize bundle service: {e}");
         std::process::exit(1);
     }
     log::info!("Bundle service initialized successfully");
@@ -82,7 +82,7 @@ async fn init_services(
 
     // initialise all the character.
     if let Err(e) = character_service.update_user_char_full().await {
-        log::error!("Failed to initialize full character: {}", e);
+        log::error!("Failed to initialize full character: {e}");
         std::process::exit(1);
     }
 
@@ -124,7 +124,7 @@ async fn configure_rocket() -> Rocket<Build> {
                     rocket.manage(pool)
                 }
                 Err(e) => {
-                    log::error!("Failed to connect to database: {}", e);
+                    log::error!("Failed to connect to database: {e}");
                     std::process::exit(1);
                 }
             }

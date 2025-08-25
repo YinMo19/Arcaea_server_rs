@@ -25,7 +25,7 @@ pub async fn login<'a>(
         base64::Engine::decode(
             &base64::engine::general_purpose::STANDARD,
             // Authorization: Basic xxxxx
-            ctx.clone().authorization.unwrap()[6..].to_string(),
+            &ctx.clone().authorization.unwrap()[6..],
         )
         .unwrap(),
     )

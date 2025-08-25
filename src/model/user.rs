@@ -142,6 +142,7 @@ pub struct UserRecentScore {
 
 /// User core information
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct UserCores {
     pub core_generic: i32,
     pub core_chunithm: i32,
@@ -157,24 +158,6 @@ pub struct UserCores {
     pub core_course: i32,
 }
 
-impl Default for UserCores {
-    fn default() -> Self {
-        Self {
-            core_generic: 0,
-            core_chunithm: 0,
-            core_desolate: 0,
-            core_hollow: 0,
-            core_crimson: 0,
-            core_ambivalent: 0,
-            core_scarlet: 0,
-            core_groove: 0,
-            core_azure: 0,
-            core_binary: 0,
-            core_colorful: 0,
-            core_course: 0,
-        }
-    }
-}
 
 /// User basic info for API responses matching Python implementation
 #[derive(Debug, Clone, Serialize, Deserialize)]

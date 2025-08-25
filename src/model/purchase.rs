@@ -72,7 +72,7 @@ impl Purchase {
                 result["discount_to"] = serde_json::json!(to);
 
                 if !show_real_price
-                    || (self.discount_reason.as_ref().map_or(false, |r| {
+                    || (self.discount_reason.as_ref().is_some_and(|r| {
                         (r == "anni5tix" || r == "pick_ticket") && price == 0
                     }))
                 {
@@ -198,6 +198,12 @@ impl PurchaseItem {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PurchaseList {
     pub purchases: Vec<Purchase>,
+}
+
+impl Default for PurchaseList {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PurchaseList {

@@ -337,6 +337,12 @@ pub struct MapParser {
     pub chapter_info_without_repeatable: HashMap<i32, Vec<String>>,
 }
 
+impl Default for MapParser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MapParser {
     /// Create new map parser instance
     pub fn new() -> Self {

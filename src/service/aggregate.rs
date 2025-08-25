@@ -26,7 +26,7 @@ pub async fn handle_game_info() -> Result<serde_json::Value, ArcError> {
         .iter()
         .map(|(level, level_exp)| HashMap::from([("level", level), ("level_exp", level_exp)]))
         .collect();
-    level_step.sort_by(|a, b| a["level"].cmp(&b["level"]));
+    level_step.sort_by(|a, b| a["level"].cmp(b["level"]));
 
     Ok(serde_json::json!({"max_stamina": 12,
     "stamina_recover_tick": 1800000,
