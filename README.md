@@ -50,3 +50,71 @@ cargo build --release
 目前 linkplay 怎么写还没想好，不过车到山前必有路，实在不会问 ai。关于怎么 pua ai，我在 prompt目录下放了一个 txt，有兴趣可以看看这个文件以及这个文件的历史，里面是关于我 pua ai 帮我改代码的提示词。内容不少，挺好使的。
 
 关于客户端的事情不要问我，请上网查找，真的很多的相信我。憋不住了可以给我发邮件 arcaea@yinmo19.top，但是我也不一定能解决。
+
+代码架构
+---
+相信你看完我的 prompt 已经对这个项目有一些了解了，下面讲讲我对 rust 写 crud 的理解。采用的 rocket 框架确实是一个非常好写的框架，我们采用依赖注入的方式直接实现对各种 service 的全局管理，需要的地方直接注入到对应的路由使用就行了。但是我才用了类似于 django（但不同）的三级分层，route service model 层。虽然我采用的不是 orm 架构，但是我依然把所有的数据结构专门用一个 model 层存起来。这一层专门用于对应数据库结构，以及构建一些返回体，实现一些模型相关的方法。路由层和服务层想来不言自明。
+
+rust 的 sqlx 框架一个最大的优点，别的语言都没有的是利用 rust 的宏可以实现编译期检查 sql 语句的正确性。他会在编译期连接一个真实的数据库，通过模拟代码中使用的 sql 来判断语句正确性。几乎可以这样说，只要能通过编译，那么写出来的 sql 语句就没有语法错误（但是性能/正确性两说，这些烂了谁也救不了）。又比如
+```rs
+/// get user's stamina
+async fn get_user_stamina(&self, user_id: i32) -> ArcResult<i32> {
+    let stamina_info = sqlx::query!(
+        "select max_stamina_ts, stamina from user where user_id = ?",
+        user_id
+    )
+    .fetch_one(&self.pool)
+    .await?;
+
+    let stamina = Stamina {
+        stamina: stamina_info.stamina.unwrap_or(12),
+        max_stamina_ts: stamina_info.max_stamina_ts.unwrap_or(0),
+    };
+
+    Ok(stamina.calculate_current_stamina(12, 1800000))
+}
+```
+这段代码中，使用 `sqlx::query!` 宏可以静态检查这句 sql 语句的返回值，他会自动把 stamina_info 作为一个结构体，里面的元素为 `max_stamina_ts, stamina` 类型则通过数据库中的字段类型来标注。如果数据库中没有指定非 null，那么这个字段则会被自动认为是 `Option<T>`。这也算强类型的好处，因为在 python 中可能就得
+```py
+def select(self):
+    '''获取用户体力信息'''
+    self.c.execute('''select max_stamina_ts, staminafrom user where user_id = :a''',
+                    {'a': self.user.user_id})
+    x = self.c.fetchone()
+    if not x:
+        raise NoData('The user does not exist.')
+    self.set_value(x[0], x[1])
+```
+使用 `x[0], x[1]` 这样的字段来借代，实际上的可阅读性在这里反而 rust 会更高一些。
+
+另外一个不错的点是错误类型。使用 thiserror 库可以实现很优秀的错误类型管理。只需要实现统一返回类型，并实现了每种可能出现的 error 到自定义 error 的 From 方法，那么使用起来就非常轻松。只需要在代码里面抛问号，最后就会留给框架自动序列化为特定的错误 json 丢回去给前端，这些所有内容都是可预见的，并且易于实现的。例如上面的案例中数据库查询最后 `.await?` 在失败的时候会抛出 `sqlx::Error`，但是
+```rs
+/// Main error type for the Arcaea server
+#[derive(Error, Debug)]
+pub enum ArcError {
+    ...
+
+    /// Database error
+    #[error("Database error: {message}")]
+    Database { message: String },
+
+    ...
+}
+
+impl From<sqlx::Error> for ArcError {
+    fn from(err: sqlx::Error) -> Self {
+        Self::Database {
+            message: err.to_string(),
+        }
+    }
+}
+```
+既然已经实现了 From 方法，直接丢问号就行，自动就会序列化成我想要的模样。这也是强类型的一种好处吧。
+
+最后是一个关于鉴权的内容。这是 rocket 提供的 auth 方案，他通过实现请求守卫的方式来进行所有需要对请求头的解析操作以及鉴权操作。这是一个非常有意思的点，因为实际上这样在使用上非常方便。例如我已经实现了对已登录用户的可访问守卫，那么对于任何想要让用户访问的 api，只需要在路由函数的参数中加上这个守卫就自动可以完成这个功能。又比如一些路由需要获取客户端 ip 和一些从 header 解析的信息，专门实现这种请求头之后直接在需要的函数参数中调用即可。这点和 python 的装饰器有点类似，不过这是 rust 的 rocket 框架的宏提供的功能，只能说宏还是太魔法了。
+
+关于代码大概也就讲这些内容吧..... 这是我写过最大的后端项目，也是第一次采取这样的结构进行管理，也算是一种新的尝试。我以前写过 django，虽然并不喜欢，但是在新的项目中不自觉的带上了那样的思维模式。虽然后端项目想来也大同小异，不过我自觉这样的代码写起来也算能看且实用，hah
+
+最后，如果看到咕咕了大概率是我在忙忙，等我忙完了可能想起来就会继续更。这个暑假更了万多行代码，也算不错的进展了。
+
+By YinMo19.
