@@ -495,3 +495,5 @@ pub fn forbidden() -> Value {
         "message": "Forbidden"
     })
 }
+
+// https://arcapi-v3.lowiro.com/summerfestival/36

@@ -31,7 +31,7 @@ impl NotificationService {
 
         // Get all notifications for the user
         let notification_rows = sqlx::query!(
-            "SELECT user_id, id, type, content, sender_user_id, sender_name, timestamp
+            "SELECT type, content, sender_user_id, sender_name, timestamp
              FROM notification WHERE user_id = ?",
             user_id
         )
@@ -41,8 +41,6 @@ impl NotificationService {
         let notifications: Vec<Notification> = notification_rows
             .into_iter()
             .map(|row| Notification {
-                user_id: row.user_id,
-                id: row.id,
                 notification_type: row.r#type.unwrap_or_default(),
                 content: row.content.unwrap_or_default(),
                 sender_user_id: row.sender_user_id.unwrap_or(0),
@@ -56,7 +54,9 @@ impl NotificationService {
 
         // Filter out expired notifications and convert to responses
         for notification in notifications {
-            if !self.is_notification_expired(notification.timestamp, current_time) {
+            if !self.is_notification_expired(notification.timestamp, current_time)
+                && notification.notification_type == String::from("room_inv")
+            {
                 responses.push(NotificationResponse::from(notification));
             }
         }

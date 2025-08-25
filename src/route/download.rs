@@ -1,16 +1,10 @@
 use crate::error::{ArcError, ArcResult};
 use crate::route::common::AuthGuard;
+use crate::route::{success_return, RouteResult};
 use crate::service::download::DownloadService;
 use crate::service::user::UserService;
-use rocket::serde::json::Json;
 use rocket::{get, routes, Route, State};
 use serde_json::Value;
-use std::collections::HashMap;
-
-/// Download routes
-pub fn routes() -> Vec<Route> {
-    routes![download_song]
-}
 
 /// Download songs for authenticated user
 ///
@@ -30,7 +24,7 @@ pub async fn download_song(
     user_service: &State<UserService>,
     sid: Option<Vec<String>>,
     url: Option<String>,
-) -> ArcResult<Json<HashMap<String, Value>>> {
+) -> RouteResult<Value> {
     // Parse the url parameter, default to true
     let include_urls = match url.as_deref() {
         Some("false") => false,
@@ -46,12 +40,7 @@ pub async fn download_song(
         .generate_download_list(&user, sid, include_urls)
         .await?;
 
-    // Convert to the expected JSON format
-    let mut response = HashMap::new();
-    response.insert("success".to_string(), Value::Bool(true));
-    response.insert("value".to_string(), serde_json::to_value(download_data)?);
-
-    Ok(Json(response))
+    Ok(success_return(serde_json::json!(download_data)))
 }
 
 /// Handle download file request with token validation
@@ -93,32 +82,7 @@ pub async fn serve_download_file(
     }
 }
 
-/// Get finale progress (world boss health bar)
-///
-/// This endpoint returns the current progress of the finale event.
-/// Currently returns a fixed value of 100000 (100%).
-#[get("/finale/progress")]
-pub async fn finale_progress() -> ArcResult<Json<HashMap<String, Value>>> {
-    let mut response = HashMap::new();
-    response.insert("success".to_string(), Value::Bool(true));
-
-    let mut value = HashMap::new();
-    value.insert("percentage".to_string(), Value::Number(100000.into()));
-
-    response.insert("value".to_string(), serde_json::to_value(value)?);
-
-    Ok(Json(response))
-}
-
-/// Start finale event
-///
-/// This endpoint handles the finale event start request.
-/// Currently returns a placeholder response.
-#[get("/finale/finale_start")]
-pub async fn finale_start(_user_auth: AuthGuard) -> ArcResult<Json<HashMap<String, Value>>> {
-    let mut response = HashMap::new();
-    response.insert("success".to_string(), Value::Bool(true));
-    response.insert("value".to_string(), Value::Object(serde_json::Map::new()));
-
-    Ok(Json(response))
+/// Download routes
+pub fn routes() -> Vec<Route> {
+    routes![download_song, serve_download_file]
 }

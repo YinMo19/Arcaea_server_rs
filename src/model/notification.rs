@@ -4,8 +4,6 @@ use sqlx::FromRow;
 /// Base notification structure
 #[derive(Debug, Clone, FromRow)]
 pub struct Notification {
-    pub user_id: i32,
-    pub id: i32,
     pub notification_type: String,
     pub content: String,
     pub sender_user_id: i32,
@@ -61,19 +59,11 @@ impl RoomInviteNotification {
 
 impl From<Notification> for NotificationResponse {
     fn from(notification: Notification) -> Self {
-        match notification.notification_type.as_str() {
-            "room_inv" => NotificationResponse {
-                sender: notification.sender_name,
-                notification_type: notification.notification_type,
-                share_token: notification.content,
-                send_ts: notification.timestamp,
-            },
-            _ => NotificationResponse {
-                sender: notification.sender_name,
-                notification_type: notification.notification_type,
-                share_token: notification.content,
-                send_ts: notification.timestamp,
-            },
+        NotificationResponse {
+            sender: notification.sender_name,
+            notification_type: notification.notification_type,
+            share_token: notification.content,
+            send_ts: notification.timestamp,
         }
     }
 }

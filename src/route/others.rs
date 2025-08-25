@@ -1,21 +1,20 @@
-use crate::config::{ARCAEA_DATABASE_VERSION, ARCAEA_LOG_DATABASE_VERSION, ARCAEA_SERVER_VERSION};
 use crate::context::{ClientContext, VersionContext};
 use crate::error::ArcError;
 use crate::model::{
-    AggregateCall, AggregateResponse, AggregateValue, GameInfo, InsightCompleteResponse,
+    AggregateCall, AggregateResponse, AggregateValue, InsightCompleteResponse, NotificationResponse,
 };
 use crate::route::common::{success_return, AuthGuard, EmptyResponse, RouteResult};
 use crate::service::aggregate::*;
 use crate::service::bundle::BundleDownloadResponse;
 use crate::service::{
-    BundleService, CharacterService, DownloadService, ItemService, NotificationService,
-    PresentService, PurchaseService, ScoreService, UserService, WorldService,
+    BundleService, CharacterService, DownloadService, NotificationService, PresentService,
+    PurchaseService, ScoreService, UserService, WorldService,
 };
 use rocket::fs::NamedFile;
 use rocket::http::Status;
 
 use rocket::response::status;
-use rocket::serde::json::Json;
+use rocket::serde::json::{Json, Value};
 use rocket::{get, post, routes, Route, State};
 use std::collections::HashMap;
 use url::Url;
@@ -26,12 +25,8 @@ use urlencoding::decode;
 /// Returns system information including server version,
 /// database version, and log database version.
 #[get("/game/info")]
-pub async fn game_info() -> RouteResult<GameInfo> {
-    let info = GameInfo {
-        version: ARCAEA_SERVER_VERSION.to_string(),
-        database_version: ARCAEA_DATABASE_VERSION.to_string(),
-        log_database_version: ARCAEA_LOG_DATABASE_VERSION.to_string(),
-    };
+pub async fn game_info() -> RouteResult<Value> {
+    let info = handle_game_info().await?;
 
     Ok(success_return(info))
 }
@@ -44,7 +39,7 @@ pub async fn game_info() -> RouteResult<GameInfo> {
 pub async fn notification_me(
     notification_service: &State<NotificationService>,
     auth: AuthGuard,
-) -> RouteResult<Vec<crate::model::NotificationResponse>> {
+) -> RouteResult<Vec<NotificationResponse>> {
     let notifications = notification_service
         .get_user_notifications(auth.user_id)
         .await?;
@@ -74,6 +69,15 @@ pub async fn game_content_bundle(
 
     let response = BundleDownloadResponse { ordered_results };
     Ok(success_return(response))
+}
+
+/// Finale progress endpoint
+///
+/// return full percentage.
+#[post("/finale/progress")]
+pub async fn finale_progress(_auth: AuthGuard) -> RouteResult<Value> {
+    // world boss percentage
+    Ok(success_return(serde_json::json!({"percentage": 100000})))
 }
 
 /// Finale start endpoint
@@ -340,6 +344,7 @@ pub fn routes() -> Vec<Route> {
         game_info,
         notification_me,
         game_content_bundle,
+        finale_progress,
         finale_start,
         finale_end,
         insight_complete,

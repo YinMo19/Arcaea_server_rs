@@ -29,8 +29,6 @@ impl CharacterService {
 
     /// Grant a character to a user by character ID
     pub async fn grant_character_by_id(&self, user_id: i32, character_id: i32) -> ArcResult<()> {
-        let _table_name = self.get_user_char_table();
-
         // Check if user already has this character
         let exists = if CONFIG.character_full_unlock {
             sqlx::query_scalar!(
