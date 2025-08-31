@@ -1,4 +1,5 @@
 use crate::error::{ArcError, ArcResult};
+use crate::service::UserService;
 use serde_json::Value;
 
 use crate::model::download::{
@@ -50,6 +51,23 @@ impl ScoreService {
         let mut prog_boost_multiply = request.prog_boost_multiply.unwrap_or(0);
         let mut beyond_boost_gauge_use = request.beyond_boost_gauge_use.unwrap_or(0);
 
+        // Handle special skills
+        let mut skill_cytusii_flag: Option<String> = None;
+        let mut skill_chinatsu_flag: Option<String> = None;
+        let mut invasion_flag = 0;
+
+        if let Some(skill_id) = &request.skill_id {
+            if (skill_id == "skill_ilith_ivy" || skill_id == "skill_hikari_vanessa")
+                && request.is_skill_sealed.as_deref() == Some("false")
+            {
+                skill_cytusii_flag = Some(generate_random_skill_flag(5));
+            }
+
+            if skill_id == "skill_chinatsu" && request.is_skill_sealed.as_deref() == Some("false") {
+                skill_chinatsu_flag = Some(generate_random_skill_flag(7));
+            }
+        }
+
         // Validate prog_boost and beyond_boost_gauge like Python version
         if prog_boost_multiply != 0 || beyond_boost_gauge_use != 0 {
             let boost_data = sqlx::query!(
@@ -76,25 +94,18 @@ impl ScoreService {
             }
         }
 
-        // Handle special skills
-        let mut skill_cytusii_flag: Option<String> = None;
-        let mut skill_chinatsu_flag: Option<String> = None;
-        let mut invasion_flag = 0;
-
-        if let Some(skill_id) = &request.skill_id {
-            if (skill_id == "skill_ilith_ivy" || skill_id == "skill_hikari_vanessa")
-                && request.is_skill_sealed.as_deref() == Some("false")
-            {
-                skill_cytusii_flag = Some(generate_random_skill_flag(5));
-            }
-
-            if skill_id == "skill_chinatsu" && request.is_skill_sealed.as_deref() == Some("false") {
-                skill_chinatsu_flag = Some(generate_random_skill_flag(7));
-            }
-        }
-
         // Get user map and character info for stamina and skill processing
         let stamina_cost = self.get_user_current_map(user_id).await?;
+        // Validate stamina (including Fatalis multiplier)
+        if user.stamina.unwrap_or(0) < stamina_cost * stamina_multiply {
+            return Err(ArcError::Base {
+                message: "Stamina is not enough.".to_string(),
+                error_code: 108,
+                api_error_code: -901,
+                extra_data: None,
+                status: 200,
+            });
+        }
 
         // Check character skill and invasion
         let mut fatalis_stamina_multiply = 1;
@@ -120,7 +131,8 @@ impl ScoreService {
             let insight_state = user.insight_state.unwrap_or(4);
             if insight_state == 3 || insight_state == 5 {
                 // Use weighted choice like Python's choices([0, 1, 2], [weights])
-                let no_invasion_weight = 1.0 - INVASION_START_WEIGHT - INVASION_HARD_WEIGHT;
+                let no_invasion_weight =
+                    (1.0 - INVASION_START_WEIGHT - INVASION_HARD_WEIGHT).max(0.0f64);
                 let weights = [
                     no_invasion_weight,
                     INVASION_START_WEIGHT,
@@ -137,22 +149,6 @@ impl ScoreService {
                     }
                 }
             }
-        }
-
-        // Validate stamina (including Fatalis multiplier)
-        let required_stamina = stamina_cost * stamina_multiply * fatalis_stamina_multiply;
-        if user.stamina.unwrap_or(0) < required_stamina {
-            return Err(ArcError::Base {
-                message: format!(
-                    "Stamina is not enough. Required: {}, Current: {}",
-                    required_stamina,
-                    user.stamina.unwrap_or(0)
-                ),
-                error_code: 108,
-                api_error_code: -901,
-                extra_data: None,
-                status: 200,
-            });
         }
 
         // Generate token
@@ -181,9 +177,10 @@ impl ScoreService {
 
         // Update user stamina
         sqlx::query!(
-            "UPDATE user SET stamina = stamina - ? WHERE user_id = ?",
-            required_stamina,
-            user_id
+            "UPDATE user SET stamina = stamina - ?, max_stamina_ts = ? WHERE user_id = ?",
+            stamina_cost * stamina_multiply * fatalis_stamina_multiply,
+            user.max_stamina_ts,
+            user.user_id
         )
         .execute(&self.pool)
         .await?;
@@ -1225,6 +1222,7 @@ impl ScoreService {
             .fetch_one(&self.pool)
             .await?;
 
+        // TODO: get world map info.
         // Get stamina cost based on current map (simplified logic for now)
         let current_map = user.current_map.unwrap_or_default();
         if current_map.contains("beyond") {

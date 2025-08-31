@@ -965,9 +965,7 @@ impl CharacterService {
     pub async fn remove_character(&self, user_id: i32, character_id: i32) -> ArcResult<()> {
         let table_name = self.get_user_char_table();
 
-        let query = format!(
-            "DELETE FROM {table_name} WHERE user_id = ? AND character_id = ?"
-        );
+        let query = format!("DELETE FROM {table_name} WHERE user_id = ? AND character_id = ?");
         sqlx::query(&query)
             .bind(user_id)
             .bind(character_id)
