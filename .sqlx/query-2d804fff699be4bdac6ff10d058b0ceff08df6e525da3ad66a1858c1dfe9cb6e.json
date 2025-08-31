@@ -1,30 +1,10 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT user_id, id, type, content, sender_user_id, sender_name, timestamp\n             FROM notification WHERE user_id = ?",
+  "query": "SELECT type, content, sender_user_id, sender_name, timestamp\n             FROM notification WHERE user_id = ?",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "user_id",
-        "type_info": {
-          "type": "Long",
-          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
-          "char_set": 63,
-          "max_size": 11
-        }
-      },
-      {
-        "ordinal": 1,
-        "name": "id",
-        "type_info": {
-          "type": "Long",
-          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
-          "char_set": 63,
-          "max_size": 11
-        }
-      },
-      {
-        "ordinal": 2,
         "name": "type",
         "type_info": {
           "type": "VarString",
@@ -34,7 +14,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 1,
         "name": "content",
         "type_info": {
           "type": "Blob",
@@ -44,7 +24,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 2,
         "name": "sender_user_id",
         "type_info": {
           "type": "Long",
@@ -54,7 +34,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 3,
         "name": "sender_name",
         "type_info": {
           "type": "VarString",
@@ -64,7 +44,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 4,
         "name": "timestamp",
         "type_info": {
           "type": "LongLong",
@@ -78,8 +58,6 @@
       "Right": 1
     },
     "nullable": [
-      false,
-      false,
       true,
       true,
       true,
@@ -87,5 +65,5 @@
       true
     ]
   },
-  "hash": "6835b40b4d05d9ecf13c53d9c909069e084a8978f3030212903646c5d320f974"
+  "hash": "2d804fff699be4bdac6ff10d058b0ceff08df6e525da3ad66a1858c1dfe9cb6e"
 }

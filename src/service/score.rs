@@ -5,7 +5,7 @@ use crate::model::download::{
     BestScore, CourseTokenRequest, CourseTokenResponse, ScoreSubmission, SongplayToken,
     WorldTokenRequest, WorldTokenResponse,
 };
-use crate::model::score::{Potential, Score, UserPlay, UserScore};
+use crate::model::score::{Potential, Recent30Tuple, Score, UserPlay, UserScore};
 use crate::model::user::User;
 use base64::{engine::general_purpose, Engine as _};
 use md5;
@@ -276,6 +276,7 @@ impl ScoreService {
             course_play_state: play_state.course_state,
             combo_interval_bonus: submission.combo_interval_bonus,
             hp_interval_bonus: submission.hp_interval_bonus,
+            fever_bonus: submission.fever_bonus,
             skill_cytusii_flag: play_state.skill_cytusii_flag,
             skill_chinatsu_flag: play_state.skill_chinatsu_flag,
             highest_health: submission.highest_health,
@@ -759,16 +760,51 @@ impl ScoreService {
     }
 
     async fn update_recent_30(&self, user_play: &UserPlay) -> ArcResult<()> {
-        // TODO: Implement proper recent 30 management logic
-        // This is a simplified version
         let user_id = user_play.user_score.user_id;
         let score = &user_play.user_score.score;
 
+        // Get current recent30 tuples
+        let current_tuples = self.get_recent30_tuples(user_id).await?;
+
+        // Handle recent30 based on Python logic
+        if current_tuples.len() < 30 {
+            // Simple case: add new entry
+            self.insert_recent30_entry(user_id, current_tuples.len() as i32, score).await?;
+        } else {
+            // Complex case: apply replacement logic
+            self.apply_recent30_replacement_logic(user_id, user_play, &current_tuples).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn get_recent30_tuples(&self, user_id: i32) -> ArcResult<Vec<Recent30Tuple>> {
+        let rows = sqlx::query!(
+            "SELECT r_index, song_id, difficulty, rating FROM recent30 
+             WHERE user_id = ? AND song_id != '' ORDER BY time_played DESC",
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| Recent30Tuple::new(
+                row.r_index,
+                row.song_id.unwrap_or_else(|| "".to_string()),
+                row.difficulty.unwrap_or(0),
+                row.rating.unwrap_or(0.0)
+            ))
+            .collect())
+    }
+
+    async fn insert_recent30_entry(&self, user_id: i32, r_index: i32, score: &Score) -> ArcResult<()> {
         sqlx::query!(
             "INSERT INTO recent30 (user_id, r_index, time_played, song_id, difficulty, score,
              shiny_perfect_count, perfect_count, near_count, miss_count, health, modifier,
-             clear_type, rating) VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             clear_type, rating) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             user_id,
+            r_index,
             score.time_played,
             score.song_id,
             score.difficulty,
@@ -784,7 +820,122 @@ impl ScoreService {
         )
         .execute(&self.pool)
         .await?;
+        Ok(())
+    }
 
+    async fn apply_recent30_replacement_logic(
+        &self,
+        user_id: i32,
+        user_play: &UserPlay,
+        current_tuples: &[Recent30Tuple]
+    ) -> ArcResult<()> {
+        let score = &user_play.user_score.score;
+        let song_key = (score.song_id.clone(), score.difficulty);
+
+        // Build unique songs map
+        let mut unique_songs: std::collections::HashMap<(String, i32), Vec<(usize, i32, f64)>> = 
+            std::collections::HashMap::new();
+        
+        for (i, tuple) in current_tuples.iter().enumerate() {
+            let key = (tuple.song_id.clone(), tuple.difficulty);
+            unique_songs.entry(key).or_insert_with(Vec::new)
+                .push((i, tuple.r_index, tuple.rating));
+        }
+
+        let new_song = song_key.clone();
+        let len_unique = unique_songs.len();
+
+        if len_unique >= 11 || (len_unique == 10 && !unique_songs.contains_key(&new_song)) {
+            // Case 1: >=11 unique songs or exactly 10 and new song
+            if user_play.is_protected() {
+                // Protected: find lowest rating to replace
+                let lowest = current_tuples.iter()
+                    .enumerate()
+                    .filter(|(_, tuple)| tuple.rating <= score.rating)
+                    .min_by(|(_, a), (_, b)| a.rating.partial_cmp(&b.rating).unwrap())
+                    .map(|(idx, _)| idx);
+
+                if let Some(idx) = lowest {
+                    self.update_one_r30(user_id, current_tuples[idx].r_index, score).await?;
+                }
+            } else {
+                // Not protected: replace oldest (last in current order)
+                if let Some(oldest) = current_tuples.last() {
+                    self.update_one_r30(user_id, oldest.r_index, score).await?;
+                }
+            }
+        } else {
+            // Case 2: Need to find duplicate songs for replacement
+            let mut filtered_songs = unique_songs.clone();
+            
+            filtered_songs.retain(|_, v| v.len() > 1);
+
+            // If new song has unique entry, add it to filtered
+            if unique_songs.contains_key(&new_song) && !filtered_songs.contains_key(&new_song) {
+                if let Some(entries) = unique_songs.get(&new_song) {
+                    filtered_songs.insert(new_song.clone(), entries.clone());
+                }
+            }
+
+            if user_play.is_protected() {
+                // Protected: find lowest in filtered songs
+                let mut candidates = Vec::new();
+                for (_, entries) in &filtered_songs {
+                    for &(idx, r_index, rating) in entries {
+                        if rating <= score.rating {
+                            candidates.push((idx, r_index, rating));
+                        }
+                    }
+                }
+
+                if let Some((_, r_index, _)) = candidates.iter().min_by(|a, b| a.2.partial_cmp(&b.2).unwrap()) {
+                    self.update_one_r30(user_id, *r_index, score).await?;
+                }
+            } else {
+                // Not protected: find oldest in filtered songs
+                let mut oldest_idx = 0;
+                let mut oldest_r_index = 0;
+                
+                for (_, entries) in &filtered_songs {
+                    for &(idx, r_index, _) in entries {
+                        if idx > oldest_idx {
+                            oldest_idx = idx;
+                            oldest_r_index = r_index;
+                        }
+                    }
+                }
+
+                if oldest_r_index != 0 {
+                    self.update_one_r30(user_id, oldest_r_index, score).await?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn update_one_r30(&self, user_id: i32, r_index: i32, score: &Score) -> ArcResult<()> {
+        sqlx::query!(
+            "REPLACE INTO recent30 (user_id, r_index, time_played, song_id, difficulty, score,
+             shiny_perfect_count, perfect_count, near_count, miss_count, health, modifier,
+             clear_type, rating) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            user_id,
+            r_index,
+            score.time_played,
+            score.song_id,
+            score.difficulty,
+            score.score,
+            score.shiny_perfect_count,
+            score.perfect_count,
+            score.near_count,
+            score.miss_count,
+            score.health,
+            score.modifier,
+            score.clear_type,
+            score.rating
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 

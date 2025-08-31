@@ -330,6 +330,7 @@ pub struct UserPlay {
     pub course_play_state: i32,
     pub combo_interval_bonus: Option<i32>,
     pub hp_interval_bonus: Option<i32>,
+    pub fever_bonus: Option<i32>,
     pub skill_cytusii_flag: Option<String>,
     pub skill_chinatsu_flag: Option<String>,
     pub highest_health: Option<i32>,
@@ -372,8 +373,15 @@ impl UserPlay {
             }
         }
 
+        // Validate fever bonus
+        if let Some(fever_bonus) = self.fever_bonus {
+            if fever_bonus < 0 || fever_bonus > self.user_score.score.perfect_count * 5 {
+                return false;
+            }
+        }
+
         // Validate submission hash
-        let hash_input = format!(
+        let mut hash_input = format!(
             "{}{}{}{}{}{}{}{}{}{}{}{}{}",
             self.song_token,
             self.song_hash,
@@ -391,6 +399,10 @@ impl UserPlay {
                 .map(|b| b.to_string())
                 .unwrap_or_default()
         );
+        
+        if let Some(fever_bonus) = self.fever_bonus {
+            hash_input.push_str(&fever_bonus.to_string());
+        }
 
         let user_hash_input = format!("{}{}", self.user_score.user_id, self.song_hash);
         let expected_hash = crate::service::score::md5_hash(&format!(
@@ -457,4 +469,15 @@ pub struct Recent30Tuple {
     pub song_id: String,
     pub difficulty: i32,
     pub rating: f64,
+}
+
+impl Recent30Tuple {
+    pub fn new(r_index: i32, song_id: String, difficulty: i32, rating: f64) -> Self {
+        Self {
+            r_index,
+            song_id,
+            difficulty,
+            rating,
+        }
+    }
 }

@@ -131,6 +131,7 @@ pub struct ScoreSubmissionForm {
     pub submission_hash: String,
     pub combo_interval_bonus: Option<i32>,
     pub hp_interval_bonus: Option<i32>,
+    pub fever_bonus: Option<i32>,
     pub highest_health: Option<i32>,
     pub lowest_health: Option<i32>,
 }
@@ -163,6 +164,7 @@ pub async fn song_score_post(
         submission_hash: form.submission_hash.clone(),
         combo_interval_bonus: form.combo_interval_bonus,
         hp_interval_bonus: form.hp_interval_bonus,
+        fever_bonus: form.fever_bonus,
         highest_health: form.highest_health,
         lowest_health: form.lowest_health,
     };

@@ -1,0 +1,17 @@
+curl -X POST "http://localhost:8090/yinmo/30/score/song" \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -H "Authorization: Bearer 5GheXabAh7rzxP9vckqQTdheHaUdukrdcehDILpUzr8=" \
+     -d "song_token=1145141919810" \
+     -d "song_hash=test_hash" \
+     -d "song_id=sayonarahatsukoi" \
+     -d "difficulty=2" \
+     -d "score=9500000" \
+     -d "shiny_perfect_count=100" \
+     -d "perfect_count=500" \
+     -d "near_count=50" \
+     -d "miss_count=10" \
+     -d "health=100" \
+     -d "modifier=0" \
+     -d "clear_type=1" \
+     -d "beyond_gauge=0" \
+     -d "submission_hash=test_submission_hash"

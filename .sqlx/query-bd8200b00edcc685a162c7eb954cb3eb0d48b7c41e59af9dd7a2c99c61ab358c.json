@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "REPLACE INTO recent30 (user_id, r_index, time_played, song_id, difficulty, score,\n             shiny_perfect_count, perfect_count, near_count, miss_count, health, modifier,\n             clear_type, rating) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 14
+    },
+    "nullable": []
+  },
+  "hash": "bd8200b00edcc685a162c7eb954cb3eb0d48b7c41e59af9dd7a2c99c61ab358c"
+}

@@ -133,6 +133,7 @@ pub struct ScoreSubmission {
     pub submission_hash: String,
     pub combo_interval_bonus: Option<i32>,
     pub hp_interval_bonus: Option<i32>,
+    pub fever_bonus: Option<i32>,
     pub highest_health: Option<i32>,
     pub lowest_health: Option<i32>,
 }
