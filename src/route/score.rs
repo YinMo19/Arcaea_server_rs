@@ -95,64 +95,19 @@ pub async fn score_token_course(
     Ok(success_return(token_response))
 }
 
-#[derive(FromForm)]
-pub struct ScoreSubmissionForm {
-    pub song_token: String,
-    pub song_hash: String,
-    pub song_id: String,
-    pub difficulty: i32,
-    pub score: i32,
-    pub shiny_perfect_count: i32,
-    pub perfect_count: i32,
-    pub near_count: i32,
-    pub miss_count: i32,
-    pub health: i32,
-    pub modifier: i32,
-    pub clear_type: i32,
-    pub beyond_gauge: i32,
-    pub submission_hash: String,
-    pub combo_interval_bonus: Option<i32>,
-    pub hp_interval_bonus: Option<i32>,
-    pub fever_bonus: Option<i32>,
-    pub highest_health: Option<i32>,
-    pub lowest_health: Option<i32>,
-}
-
 /// Submit a score
 ///
 /// This endpoint handles score submission for both world mode and course mode.
 /// It validates the score data, updates user records, calculates ratings,
 /// and manages recent30/best score records.
-#[post("/score/song", data = "<form>")]
+#[post("/score/song", data = "<submission>")]
 pub async fn song_score_post(
     user_auth: AuthGuard,
     score_service: &State<ScoreService>,
-    form: Form<ScoreSubmissionForm>,
+    submission: Form<ScoreSubmission>,
 ) -> RouteResult<HashMap<String, Value>> {
-    let submission = ScoreSubmission {
-        song_token: form.song_token.clone(),
-        song_hash: form.song_hash.clone(),
-        song_id: form.song_id.clone(),
-        difficulty: form.difficulty,
-        score: form.score,
-        shiny_perfect_count: form.shiny_perfect_count,
-        perfect_count: form.perfect_count,
-        near_count: form.near_count,
-        miss_count: form.miss_count,
-        health: form.health,
-        modifier: form.modifier,
-        clear_type: form.clear_type,
-        beyond_gauge: form.beyond_gauge,
-        submission_hash: form.submission_hash.clone(),
-        combo_interval_bonus: form.combo_interval_bonus,
-        hp_interval_bonus: form.hp_interval_bonus,
-        fever_bonus: form.fever_bonus,
-        highest_health: form.highest_health,
-        lowest_health: form.lowest_health,
-    };
-
     let result = score_service
-        .submit_score(user_auth.user_id, submission)
+        .submit_score(user_auth.user_id, submission.into_inner())
         .await?;
 
     Ok(success_return(result))

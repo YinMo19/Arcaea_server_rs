@@ -1,3 +1,4 @@
+use rocket::FromForm;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
@@ -115,7 +116,7 @@ pub struct DownloadAudio {
 }
 
 /// Score submission data
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromForm)]
 pub struct ScoreSubmission {
     pub song_token: String,
     pub song_hash: String,
