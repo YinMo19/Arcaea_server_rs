@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE songplay_token SET token = ? WHERE token = ? AND user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "15b654fa0758b7ad5de4724944af61b61312a10248fa34afe9669c3519b7b1bb"
+}

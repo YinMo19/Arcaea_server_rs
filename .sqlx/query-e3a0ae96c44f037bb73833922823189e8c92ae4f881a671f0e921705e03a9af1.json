@@ -1,0 +1,36 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT prog_boost, beyond_boost_gauge FROM user WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "prog_boost",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "beyond_boost_gauge",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 22
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "e3a0ae96c44f037bb73833922823189e8c92ae4f881a671f0e921705e03a9af1"
+}

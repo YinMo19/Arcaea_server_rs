@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT c.skill_id FROM user u\n                 JOIN `character` c ON u.character_id = c.character_id\n                 WHERE u.user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "skill_id",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "char_set": 224,
+          "max_size": 262140
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "7e50496fa30d81982be2c48787cda3b5093183860890dcb2163f0870b3078af1"
+}

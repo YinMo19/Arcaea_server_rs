@@ -175,7 +175,7 @@ pub struct WorldTokenResponse {
 pub struct CourseTokenRequest {
     pub course_id: Option<String>,
     pub previous_token: Option<String>,
-    pub use_course_skip_purchase: Option<bool>,
+    pub use_course_skip_purchase: bool,
 }
 
 /// Token response for course mode

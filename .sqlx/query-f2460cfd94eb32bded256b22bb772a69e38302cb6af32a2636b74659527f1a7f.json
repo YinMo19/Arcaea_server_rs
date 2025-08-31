@@ -1,11 +1,11 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT COUNT(*) as rank FROM best_score\n                 WHERE song_id = ? AND difficulty = ? AND score > ?",
+  "query": "SELECT COUNT(*) as total FROM best_score WHERE song_id = ? AND difficulty = ?",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "rank",
+        "name": "total",
         "type_info": {
           "type": "LongLong",
           "flags": "NOT_NULL | BINARY",
@@ -15,11 +15,11 @@
       }
     ],
     "parameters": {
-      "Right": 3
+      "Right": 2
     },
     "nullable": [
       false
     ]
   },
-  "hash": "fd22bf79afd0656d7d39735787009fbb19ebcd152a0088b3d2c0aa76993f769b"
+  "hash": "f2460cfd94eb32bded256b22bb772a69e38302cb6af32a2636b74659527f1a7f"
 }

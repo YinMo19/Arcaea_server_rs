@@ -1,0 +1,36 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT score, time_played FROM best_score WHERE user_id = ? AND song_id = ? AND difficulty = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "score",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "time_played",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 20
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "06fbb9fa21491a974bc42fab6808164a5b575750dea84d5313ac71d7b9fd3d43"
+}

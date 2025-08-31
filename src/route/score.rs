@@ -85,7 +85,7 @@ pub async fn score_token_course(
     let request = CourseTokenRequest {
         course_id,
         previous_token,
-        use_course_skip_purchase: Some(use_course_skip_purchase.as_deref() == Some("true")),
+        use_course_skip_purchase: use_course_skip_purchase.as_deref() == Some("true"),
     };
 
     let token_response = score_service

@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT r_index, song_id, difficulty, rating FROM recent30 \n             WHERE user_id = ? AND song_id != '' ORDER BY time_played DESC",
+  "query": "SELECT r_index, song_id, difficulty, rating FROM recent30\n             WHERE user_id = ? AND song_id != '' ORDER BY time_played DESC",
   "describe": {
     "columns": [
       {
@@ -54,5 +54,5 @@
       true
     ]
   },
-  "hash": "9fd8d2dbccfdb2a12add0d2e20775cf7f96a9d6ff1ce86cf856308fcad2ee0a8"
+  "hash": "65ef114c78443f8af584cf636da92244f7f62bbe717911812928cca71da27ca1"
 }

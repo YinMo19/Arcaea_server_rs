@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO recent30 (\n                user_id, r_index, time_played, song_id, difficulty, score,\n                shiny_perfect_count, perfect_count, near_count, miss_count, health, modifier,\n                clear_type, rating\n            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n            ON DUPLICATE KEY UPDATE\n                r_index = VALUES(r_index),\n                time_played = VALUES(time_played),\n                song_id = VALUES(song_id),\n                difficulty = VALUES(difficulty),\n                score = VALUES(score),\n                shiny_perfect_count = VALUES(shiny_perfect_count),\n                perfect_count = VALUES(perfect_count),\n                near_count = VALUES(near_count),\n                miss_count = VALUES(miss_count),\n                health = VALUES(health),\n                modifier = VALUES(modifier),\n                clear_type = VALUES(clear_type),\n                rating = VALUES(rating);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 14
+    },
+    "nullable": []
+  },
+  "hash": "0646e99764ad559d9e98ca4e5eb8ce91b3451d7c2123d611d1f380b71c06976c"
+}

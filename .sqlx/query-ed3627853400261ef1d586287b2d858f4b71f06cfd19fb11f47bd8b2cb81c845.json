@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,\n             bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,\n             bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,\n             u.name, u.character_id, u.is_char_uncapped, u.is_skill_sealed\n             FROM best_score bs\n             JOIN user u ON bs.user_id = u.user_id\n             JOIN friend f ON (f.user_id_me = ? AND f.user_id_other = bs.user_id)\n             WHERE bs.song_id = ? AND bs.difficulty = ?\n             ORDER BY bs.score DESC\n             LIMIT 50",
+  "query": "SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,\n             bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,\n             bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,\n             u.name, u.character_id, u.is_char_uncapped, u.is_skill_sealed\n             FROM best_score bs\n             JOIN user u ON bs.user_id = u.user_id\n             WHERE bs.song_id = ? AND bs.difficulty = ?\n             AND (bs.user_id = ? OR EXISTS(\n                 SELECT 1 FROM friend f\n                 WHERE f.user_id_me = ? AND f.user_id_other = bs.user_id\n             ))\n             ORDER BY bs.score DESC, bs.time_played DESC\n             LIMIT 50",
   "describe": {
     "columns": [
       {
@@ -195,7 +195,7 @@
       }
     ],
     "parameters": {
-      "Right": 3
+      "Right": 4
     },
     "nullable": [
       false,
@@ -219,5 +219,5 @@
       true
     ]
   },
-  "hash": "d3674ec9bf167f9da11332c599480c8a06c83e6765eb852130fcb921fd281d82"
+  "hash": "ed3627853400261ef1d586287b2d858f4b71f06cfd19fb11f47bd8b2cb81c845"
 }

@@ -224,7 +224,7 @@ impl ScoreService {
         request: CourseTokenRequest,
     ) -> ArcResult<CourseTokenResponse> {
         // let user = self.get_user_info(user_id).await?;
-        let use_course_skip_purchase = request.use_course_skip_purchase.unwrap_or(false);
+        let use_course_skip_purchase = request.use_course_skip_purchase;
 
         let mut status = "created".to_string();
         let token;
@@ -839,6 +839,7 @@ impl ScoreService {
         match existing {
             None => {
                 // New score
+                // first try's protect.
                 user_play.new_best_protect_flag = true;
                 sqlx::query!(
                     "INSERT INTO best_score VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -860,6 +861,9 @@ impl ScoreService {
                 )
                 .execute(&self.pool)
                 .await?;
+
+                // update global rank.
+                self.update_user_global_rank(user_id).await?;
             }
             Some(existing_score) => {
                 // Update best clear type if better
@@ -902,6 +906,8 @@ impl ScoreService {
                     )
                     .execute(&self.pool)
                     .await?;
+
+                    self.update_user_global_rank(user_id).await?;
                 }
             }
         }
@@ -959,9 +965,25 @@ impl ScoreService {
         score: &Score,
     ) -> ArcResult<()> {
         sqlx::query!(
-            "INSERT INTO recent30 (user_id, r_index, time_played, song_id, difficulty, score,
-             shiny_perfect_count, perfect_count, near_count, miss_count, health, modifier,
-             clear_type, rating) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO recent30 (
+                user_id, r_index, time_played, song_id, difficulty, score,
+                shiny_perfect_count, perfect_count, near_count, miss_count, health, modifier,
+                clear_type, rating
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                r_index = VALUES(r_index),
+                time_played = VALUES(time_played),
+                song_id = VALUES(song_id),
+                difficulty = VALUES(difficulty),
+                score = VALUES(score),
+                shiny_perfect_count = VALUES(shiny_perfect_count),
+                perfect_count = VALUES(perfect_count),
+                near_count = VALUES(near_count),
+                miss_count = VALUES(miss_count),
+                health = VALUES(health),
+                modifier = VALUES(modifier),
+                clear_type = VALUES(clear_type),
+                rating = VALUES(rating);",
             user_id,
             r_index,
             score.time_played,
@@ -992,8 +1014,7 @@ impl ScoreService {
         let song_key = (score.song_id.clone(), score.difficulty);
 
         // Build unique songs map
-        let mut unique_songs: std::collections::HashMap<(String, i32), Vec<(usize, i32, f64)>> =
-            std::collections::HashMap::new();
+        let mut unique_songs: HashMap<(String, i32), Vec<(usize, i32, f64)>> = HashMap::new();
 
         for (i, tuple) in current_tuples.iter().enumerate() {
             let key = (tuple.song_id.clone(), tuple.difficulty);
@@ -1009,12 +1030,17 @@ impl ScoreService {
         if len_unique >= 11 || (len_unique == 10 && !unique_songs.contains_key(&new_song)) {
             // Case 1: >=11 unique songs or exactly 10 and new song
             if user_play.is_protected() {
-                // Protected: find lowest rating to replace
+                // Protected: find lowest and earliest rating to replace
                 let lowest = current_tuples
                     .iter()
                     .enumerate()
                     .filter(|(_, tuple)| tuple.rating <= score.rating)
-                    .min_by(|(_, a), (_, b)| a.rating.partial_cmp(&b.rating).unwrap())
+                    .min_by(|(_, a), (_, b)| {
+                        a.rating
+                            .partial_cmp(&b.rating) // first judge the score rating
+                            .unwrap()
+                            .then(a.r_index.cmp(&b.r_index)) // if same, select older one
+                    })
                     .map(|(idx, _)| idx);
 
                 if let Some(idx) = lowest {
@@ -1051,10 +1077,9 @@ impl ScoreService {
                     }
                 }
 
-                if let Some((_, r_index, _)) = candidates
-                    .iter()
-                    .min_by(|a, b| a.2.partial_cmp(&b.2).unwrap())
-                {
+                if let Some((_, r_index, _)) = candidates.iter().min_by(|a, b| {
+                    a.2.partial_cmp(&b.2).unwrap().then(a.1.cmp(&b.1)) // if same, select older one
+                }) {
                     self.update_one_r30(user_id, *r_index, score).await?;
                 }
             } else {
@@ -1239,7 +1264,32 @@ impl ScoreService {
 
         // Calculate total score_v2
         let total_score = sqlx::query!(
-            "SELECT SUM(score_v2) as total FROM best_score WHERE user_id = ?",
+            r#"WITH user_scores AS (
+                SELECT song_id, difficulty, score_v2
+                FROM best_score
+                WHERE user_id = ?
+                AND difficulty IN (2, 3, 4)
+            )
+            SELECT SUM(cal_score) AS total FROM (
+                SELECT SUM(score_v2) AS cal_score
+                FROM user_scores
+                WHERE difficulty = 2
+                AND song_id IN (SELECT song_id FROM chart WHERE rating_ftr > 0)
+
+                UNION ALL
+
+                SELECT SUM(score_v2) AS cal_score
+                FROM user_scores
+                WHERE difficulty = 3
+                AND song_id IN (SELECT song_id FROM chart WHERE rating_byn > 0)
+
+                UNION ALL
+
+                SELECT SUM(score_v2) AS cal_score
+                FROM user_scores
+                WHERE difficulty = 4
+                AND song_id IN (SELECT song_id FROM chart WHERE rating_etr > 0)
+            ) AS subquery"#,
             user_id
         )
         .fetch_one(&self.pool)
