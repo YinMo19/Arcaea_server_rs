@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
 use std::collections::HashMap;
 
 /// Basic score data structure for score calculations
@@ -49,6 +48,12 @@ impl Score {
             chart_const: None,
             song_name: None,
         }
+    }
+
+    /// Set chart information
+    pub fn set_chart(&mut self, song_id: String, difficulty: i32) {
+        self.song_id = song_id;
+        self.difficulty = difficulty;
     }
 
     /// Set score data from individual components
@@ -113,6 +118,11 @@ impl Score {
     /// Get total note count
     pub fn all_note_count(&self) -> i32 {
         self.perfect_count + self.near_count + self.miss_count
+    }
+
+    /// Create tuple representation for comparisons
+    pub fn to_tuple(&self) -> (String, i32) {
+        (self.song_id.clone(), self.difficulty)
     }
 
     /// Validate score data
@@ -281,6 +291,17 @@ impl UserScore {
         }
     }
 
+    /// Create from list data (from SQL result) - simplified version
+    pub fn from_list(&mut self, data: Vec<i32>) {
+        // Simplified implementation - would need proper database row parsing
+        // This is a placeholder for the actual implementation
+        if data.len() >= 3 {
+            self.user_id = data[0];
+            self.score.score = data.get(3).copied().unwrap_or(0);
+            self.score.rating = data.get(13).copied().unwrap_or(0) as f64;
+        }
+    }
+
     /// Convert to dictionary with user info
     pub fn to_dict(&self, has_user_info: bool) -> HashMap<String, serde_json::Value> {
         let mut result = self.score.to_dict();
@@ -322,12 +343,18 @@ pub struct UserPlay {
     pub beyond_gauge: i32,
     pub unrank_flag: bool,
     pub new_best_protect_flag: bool,
-    pub is_world_mode: bool,
+
+    // World mode fields
+    pub is_world_mode: Option<bool>,
     pub stamina_multiply: i32,
     pub fragment_multiply: i32,
     pub prog_boost_multiply: i32,
     pub beyond_boost_gauge_usage: i32,
+
+    // Course mode fields
     pub course_play_state: i32,
+
+    // Special skill fields
     pub combo_interval_bonus: Option<i32>,
     pub hp_interval_bonus: Option<i32>,
     pub fever_bonus: Option<i32>,
@@ -336,6 +363,9 @@ pub struct UserPlay {
     pub highest_health: Option<i32>,
     pub lowest_health: Option<i32>,
     pub invasion_flag: i32,
+
+    // World mode calculation fields - simplified for now
+    pub ptt: Option<Potential>,
 }
 
 impl UserPlay {
@@ -399,7 +429,7 @@ impl UserPlay {
                 .map(|b| b.to_string())
                 .unwrap_or_default()
         );
-        
+
         if let Some(fever_bonus) = self.fever_bonus {
             hash_input.push_str(&fever_bonus.to_string());
         }
@@ -415,30 +445,44 @@ impl UserPlay {
     }
 
     /// Convert to response dictionary
-    pub fn to_dict(
-        &self,
-        user_rating_ptt: i32,
-        finale_play_value: f64,
-    ) -> HashMap<String, serde_json::Value> {
+    pub fn to_dict(&self) -> HashMap<String, serde_json::Value> {
+        // Check if we have world mode or course mode data
+        if self.is_world_mode.is_none() || self.course_play_state == -1 {
+            return HashMap::new();
+        }
+
         let mut result = HashMap::new();
-        result.insert("user_rating".to_string(), Value::from(user_rating_ptt));
+
+        if self.course_play_state == 4 {
+            // Course mode completed
+            // TODO: Implement course play to_dict
+        } else if self.is_world_mode == Some(true) {
+            // World mode - placeholder implementation
+            result.insert("world_mode".to_string(), Value::Bool(true));
+        }
+
+        // Add common fields
         result.insert(
-            "finale_challenge_higher".to_string(),
-            Value::from(self.user_score.score.rating > self.get_potential_value()),
-        );
+            "user_rating".to_string(),
+            Value::from(self.user_score.user_id),
+        ); // This should be actual rating
+
+        if let Some(ref ptt) = self.ptt {
+            result.insert(
+                "finale_challenge_higher".to_string(),
+                Value::from(self.user_score.score.rating > ptt.value()),
+            );
+        }
+
         result.insert("global_rank".to_string(), Value::Null); // TODO: implement global rank
         result.insert(
             "finale_play_value".to_string(),
-            Value::from(finale_play_value),
+            Value::from(Potential::calculate_finale_play_value(
+                self.user_score.score.rating,
+            )),
         );
-        result
-    }
 
-    /// Get potential value placeholder
-    fn get_potential_value(&self) -> f64 {
-        // This should be calculated from user's current potential
-        // For now, return a placeholder
-        0.0
+        result
     }
 }
 
@@ -448,10 +492,32 @@ pub struct Potential {
     pub user_id: i32,
     pub best_30_sum: f64,
     pub recent_10_sum: f64,
+
+    // Cache for recent30 data
+    pub r30_tuples: Option<Vec<Recent30Tuple>>,
+    pub r30: Option<Vec<Score>>,
+    pub b30: Option<Vec<f64>>,
 }
 
 impl Potential {
+    /// Create new potential instance
+    pub fn new(user_id: i32) -> Self {
+        Self {
+            user_id,
+            best_30_sum: 0.0,
+            recent_10_sum: 0.0,
+            r30_tuples: None,
+            r30: None,
+            b30: None,
+        }
+    }
+
     /// Calculate user's potential value
+    pub fn value(&self) -> f64 {
+        self.calculate_value(0.75, 0.25) // BEST30_WEIGHT, RECENT10_WEIGHT
+    }
+
+    /// Calculate user's potential value with custom weights
     pub fn calculate_value(&self, best30_weight: f64, recent10_weight: f64) -> f64 {
         self.best_30_sum * best30_weight + self.recent_10_sum * recent10_weight
     }
@@ -460,10 +526,105 @@ impl Potential {
     pub fn calculate_finale_play_value(rating: f64) -> f64 {
         9.065 * rating.sqrt()
     }
+
+    /// Get best 30 sum
+    pub fn best_30(&self) -> f64 {
+        self.best_30_sum
+    }
+
+    /// Get recent 10 sum
+    pub fn recent_10(&self) -> f64 {
+        self.recent_10_sum
+    }
+
+    /// Update one recent30 entry
+    pub fn update_one_r30(&mut self, r_index: i32, user_score: &UserScore) {
+        // This would update the database and internal state
+        if let Some(ref mut tuples) = self.r30_tuples {
+            let new_tuple = Recent30Tuple::new(
+                r_index,
+                user_score.score.song_id.clone(),
+                user_score.score.difficulty,
+                user_score.score.rating,
+            );
+
+            // Find existing entry with same r_index and replace it
+            if let Some(existing) = tuples.iter_mut().find(|t| t.r_index == r_index) {
+                *existing = new_tuple;
+            } else if tuples.len() < 30 {
+                tuples.push(new_tuple);
+            }
+        }
+    }
+
+    /// Push score to recent30 with complex logic
+    pub fn r30_push_score(&mut self, user_score: &UserPlay) {
+        // This implements the complex recent30 logic from Python
+        if self.r30_tuples.is_none() {
+            return; // Would need to load from database first
+        }
+
+        let tuples = self.r30_tuples.as_ref().unwrap();
+
+        if tuples.len() < 30 {
+            self.update_one_r30(tuples.len() as i32, &user_score.user_score);
+            return;
+        }
+
+        if user_score.is_protected() {
+            // Protected score logic - find lowest rating to replace
+            let lowest_rating = tuples
+                .iter()
+                .filter(|t| t.rating <= user_score.user_score.score.rating)
+                .min_by(|a, b| a.rating.partial_cmp(&b.rating).unwrap());
+
+            if let Some(lowest) = lowest_rating {
+                self.update_one_r30(lowest.r_index, &user_score.user_score);
+            }
+            return;
+        }
+
+        // Complex unique song logic (simplified)
+        let mut unique_songs: std::collections::HashMap<(String, i32), Vec<(usize, i32, f64)>> =
+            std::collections::HashMap::new();
+
+        for (i, tuple) in tuples.iter().enumerate() {
+            let key = (tuple.song_id.clone(), tuple.difficulty);
+            unique_songs
+                .entry(key)
+                .or_insert_with(Vec::new)
+                .push((i, tuple.r_index, tuple.rating));
+        }
+
+        let new_song = user_score.user_score.score.to_tuple();
+
+        if unique_songs.len() >= 11
+            || (unique_songs.len() == 10 && !unique_songs.contains_key(&new_song))
+        {
+            // Replace oldest
+            if let Some(oldest) = tuples.last() {
+                self.update_one_r30(oldest.r_index, &user_score.user_score);
+            }
+        } else {
+            // Find oldest in filtered songs (songs with multiple entries)
+            let filtered_songs: std::collections::HashMap<_, _> = unique_songs
+                .into_iter()
+                .filter(|(_, v)| v.len() > 1)
+                .collect();
+
+            if let Some((_, entries)) = filtered_songs.iter().max_by_key(|(_, entries)| {
+                entries.iter().map(|(idx, _, _)| *idx).max().unwrap_or(0)
+            }) {
+                if let Some((_, r_index, _)) = entries.iter().max_by_key(|(idx, _, _)| *idx) {
+                    self.update_one_r30(*r_index, &user_score.user_score);
+                }
+            }
+        }
+    }
 }
 
 /// Recent 30 tuple for internal calculations
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Recent30Tuple {
     pub r_index: i32,
     pub song_id: String,
@@ -478,6 +639,39 @@ impl Recent30Tuple {
             song_id,
             difficulty,
             rating,
+        }
+    }
+}
+
+/// User score list for queries
+#[derive(Debug, Clone)]
+pub struct UserScoreList {
+    pub scores: Option<Vec<UserScore>>,
+    // Query parameters would go here
+}
+
+impl UserScoreList {
+    /// Create new user score list
+    pub fn new() -> Self {
+        Self { scores: None }
+    }
+
+    /// Convert scores to dictionary list
+    pub fn to_dict_list(&self) -> Vec<HashMap<String, serde_json::Value>> {
+        self.scores
+            .as_ref()
+            .map(|scores| scores.iter().map(|s| s.to_dict(false)).collect())
+            .unwrap_or_default()
+    }
+
+    /// Select song names for all scores
+    pub fn select_song_name(&mut self) {
+        // This would query the database for song names
+        if let Some(ref mut scores) = self.scores {
+            for score in scores {
+                // Would lookup song name from chart table
+                score.score.song_name = Some("Unknown Song".to_string());
+            }
         }
     }
 }

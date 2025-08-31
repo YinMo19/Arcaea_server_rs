@@ -1,9 +1,9 @@
-use crate::error::ArcResult;
 use crate::model::download::{CourseTokenRequest, ScoreSubmission, WorldTokenRequest};
+use crate::model::{CourseTokenResponse, WorldTokenResponse};
 use crate::route::common::AuthGuard;
+use crate::route::{success_return, RouteResult};
 use crate::service::score::ScoreService;
 use rocket::form::{Form, FromForm};
-use rocket::serde::json::Json;
 use rocket::{get, post, routes, Route, State};
 
 use serde_json::Value;
@@ -27,20 +27,10 @@ pub fn routes() -> Vec<Route> {
 /// This endpoint returns a hardcoded token that bypasses normal validation.
 /// Used for development and testing purposes.
 #[get("/score/token")]
-pub async fn score_token(
-    score_service: &State<ScoreService>,
-) -> ArcResult<Json<HashMap<String, Value>>> {
-    let token = score_service.get_score_token().await?;
-
-    let mut response = HashMap::new();
-    response.insert("success".to_string(), Value::Bool(true));
-
-    let mut value = HashMap::new();
-    value.insert("token".to_string(), Value::String(token));
-
-    response.insert("value".to_string(), serde_json::to_value(value)?);
-
-    Ok(Json(response))
+pub async fn score_token() -> RouteResult<Value> {
+    Ok(success_return(
+        serde_json::json!({"token": "1145141919810"}),
+    ))
 }
 
 /// Get world mode score token
@@ -60,7 +50,7 @@ pub async fn score_token_world(
     beyond_boost_gauge_use: Option<i32>,
     skill_id: Option<String>,
     is_skill_sealed: Option<String>,
-) -> ArcResult<Json<HashMap<String, Value>>> {
+) -> RouteResult<WorldTokenResponse> {
     let request = WorldTokenRequest {
         song_id,
         difficulty,
@@ -76,11 +66,7 @@ pub async fn score_token_world(
         .get_world_score_token(user_auth.user_id, request)
         .await?;
 
-    let mut response = HashMap::new();
-    response.insert("success".to_string(), Value::Bool(true));
-    response.insert("value".to_string(), serde_json::to_value(token_response)?);
-
-    Ok(Json(response))
+    Ok(success_return(token_response))
 }
 
 /// Get course mode score token
@@ -95,7 +81,7 @@ pub async fn score_token_course(
     course_id: Option<String>,
     previous_token: Option<String>,
     use_course_skip_purchase: Option<String>,
-) -> ArcResult<Json<HashMap<String, Value>>> {
+) -> RouteResult<CourseTokenResponse> {
     let request = CourseTokenRequest {
         course_id,
         previous_token,
@@ -106,11 +92,7 @@ pub async fn score_token_course(
         .get_course_score_token(user_auth.user_id, request)
         .await?;
 
-    let mut response = HashMap::new();
-    response.insert("success".to_string(), Value::Bool(true));
-    response.insert("value".to_string(), serde_json::to_value(token_response)?);
-
-    Ok(Json(response))
+    Ok(success_return(token_response))
 }
 
 #[derive(FromForm)]
@@ -146,7 +128,7 @@ pub async fn song_score_post(
     user_auth: AuthGuard,
     score_service: &State<ScoreService>,
     form: Form<ScoreSubmissionForm>,
-) -> ArcResult<Json<HashMap<String, Value>>> {
+) -> RouteResult<HashMap<String, Value>> {
     let submission = ScoreSubmission {
         song_token: form.song_token.clone(),
         song_hash: form.song_hash.clone(),
@@ -173,11 +155,7 @@ pub async fn song_score_post(
         .submit_score(user_auth.user_id, submission)
         .await?;
 
-    let mut response = HashMap::new();
-    response.insert("success".to_string(), Value::Bool(true));
-    response.insert("value".to_string(), serde_json::to_value(result)?);
-
-    Ok(Json(response))
+    Ok(success_return(result))
 }
 
 /// Get top 20 scores for a song
@@ -190,16 +168,12 @@ pub async fn song_score_top(
     score_service: &State<ScoreService>,
     song_id: String,
     difficulty: i32,
-) -> ArcResult<Json<HashMap<String, Value>>> {
+) -> RouteResult<Vec<HashMap<String, Value>>> {
     let scores = score_service
         .get_song_top_scores(&song_id, difficulty)
         .await?;
 
-    let mut response = HashMap::new();
-    response.insert("success".to_string(), Value::Bool(true));
-    response.insert("value".to_string(), serde_json::to_value(scores)?);
-
-    Ok(Json(response))
+    Ok(success_return(scores))
 }
 
 /// Get user's ranking for a song
@@ -212,16 +186,12 @@ pub async fn song_score_me(
     score_service: &State<ScoreService>,
     song_id: String,
     difficulty: i32,
-) -> ArcResult<Json<HashMap<String, Value>>> {
+) -> RouteResult<Vec<HashMap<String, Value>>> {
     let scores = score_service
         .get_user_song_rank(user_auth.user_id, &song_id, difficulty)
         .await?;
 
-    let mut response = HashMap::new();
-    response.insert("success".to_string(), Value::Bool(true));
-    response.insert("value".to_string(), serde_json::to_value(scores)?);
-
-    Ok(Json(response))
+    Ok(success_return(scores))
 }
 
 /// Get friend rankings for a song
@@ -234,14 +204,10 @@ pub async fn song_score_friend(
     score_service: &State<ScoreService>,
     song_id: String,
     difficulty: i32,
-) -> ArcResult<Json<HashMap<String, Value>>> {
+) -> RouteResult<Vec<HashMap<String, Value>>> {
     let scores = score_service
         .get_friend_song_ranks(user_auth.user_id, &song_id, difficulty)
         .await?;
 
-    let mut response = HashMap::new();
-    response.insert("success".to_string(), Value::Bool(true));
-    response.insert("value".to_string(), serde_json::to_value(scores)?);
-
-    Ok(Json(response))
+    Ok(success_return(scores))
 }

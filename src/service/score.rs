@@ -78,11 +78,15 @@ impl ScoreService {
         }
 
         // Validate stamina
-        let stamina_cost = self.get_world_map_stamina_cost(user_id).await?;
+        let stamina_cost = self.get_world_map_stamina_cost(user_id).await.unwrap_or(1);
         let required_stamina = stamina_cost * stamina_multiply;
         if user.stamina.unwrap_or(0) < required_stamina {
             return Err(ArcError::Base {
-                message: "Stamina is not enough".to_string(),
+                message: format!(
+                    "Stamina is not enough. Required: {}, Current: {}",
+                    required_stamina,
+                    user.stamina.unwrap_or(0)
+                ),
                 error_code: 108,
                 api_error_code: -901,
                 extra_data: None,
@@ -268,7 +272,7 @@ impl ScoreService {
             beyond_gauge: submission.beyond_gauge,
             unrank_flag: false,
             new_best_protect_flag: false,
-            is_world_mode: play_state.course_id.is_none(),
+            is_world_mode: Some(play_state.course_id.is_none()),
             stamina_multiply: play_state.stamina_multiply,
             fragment_multiply: play_state.fragment_multiply,
             prog_boost_multiply: play_state.prog_boost_multiply,
@@ -282,6 +286,7 @@ impl ScoreService {
             highest_health: submission.highest_health,
             lowest_health: submission.lowest_health,
             invasion_flag: play_state.invasion_flag,
+            ptt: None,
         };
 
         // Set score data
@@ -319,15 +324,26 @@ impl ScoreService {
             user_play.user_score.score.rating = 0.0;
         }
 
+        // Set timestamp
+        user_play.user_score.score.time_played = current_timestamp();
+
         // Upload score (update recent, best, and potential)
         self.upload_score(&mut user_play).await?;
 
-        // Calculate response values
-        let user_rating_ptt = self.get_user_rating_ptt(user_id).await?;
-        let finale_play_value =
-            Potential::calculate_finale_play_value(user_play.user_score.score.rating);
+        // Handle world mode
+        if user_play.is_world_mode == Some(true) {
+            self.handle_world_mode(&mut user_play).await?;
+        }
 
-        Ok(user_play.to_dict(user_rating_ptt, finale_play_value))
+        // Handle course mode
+        if user_play.course_play_state >= 0 {
+            self.handle_course_mode(&mut user_play).await?;
+        }
+
+        // Create potential instance for response
+        user_play.ptt = Some(self.calculate_user_potential(user_id).await?);
+
+        Ok(user_play.to_dict())
     }
 
     /// Get top 20 scores for a song
@@ -515,7 +531,7 @@ impl ScoreService {
         sqlx::query_as!(User, "SELECT * FROM user WHERE user_id = ?", user_id)
             .fetch_one(&self.pool)
             .await
-            .map_err(|_| ArcError::no_data("User not found".to_string(), 108))
+            .map_err(|e| ArcError::no_data(format!("User not found: {}", e), 108))
     }
 
     async fn get_play_state(&self, token: &str, user_id: i32) -> ArcResult<SongplayToken> {
@@ -576,9 +592,27 @@ impl ScoreService {
         None
     }
 
-    async fn get_world_map_stamina_cost(&self, _user_id: i32) -> ArcResult<i32> {
-        // TODO: Implement world map stamina cost calculation
-        Ok(1)
+    async fn get_world_map_stamina_cost(&self, user_id: i32) -> ArcResult<i32> {
+        // Get user's current map
+        let user = sqlx::query!("SELECT current_map FROM user WHERE user_id = ?", user_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        if let Some(user_row) = user {
+            if let Some(current_map) = user_row.current_map {
+                // TODO: Load map data from JSON files and get stamina cost
+                // For now, return default stamina cost based on map
+                if current_map.contains("beyond") {
+                    Ok(2)
+                } else {
+                    Ok(1)
+                }
+            } else {
+                Ok(1) // Default stamina cost if no current map
+            }
+        } else {
+            Err(ArcError::no_data("User not found".to_string(), 108))
+        }
     }
 
     async fn clear_user_songplay_tokens(&self, user_id: i32) -> ArcResult<()> {
@@ -637,6 +671,9 @@ impl ScoreService {
         let user_id = user_play.user_score.user_id;
         let score = &user_play.user_score.score;
 
+        // Record score to log database (placeholder for now)
+        self.record_score(user_play).await?;
+
         // Update user recent score
         sqlx::query!(
             "UPDATE user SET song_id = ?, difficulty = ?, score = ?, shiny_perfect_count = ?,
@@ -653,7 +690,7 @@ impl ScoreService {
             score.modifier,
             score.clear_type,
             score.rating,
-            score.time_played,
+            score.time_played * 1000, // Convert to milliseconds
             user_id
         )
         .execute(&self.pool)
@@ -769,10 +806,12 @@ impl ScoreService {
         // Handle recent30 based on Python logic
         if current_tuples.len() < 30 {
             // Simple case: add new entry
-            self.insert_recent30_entry(user_id, current_tuples.len() as i32, score).await?;
+            self.insert_recent30_entry(user_id, current_tuples.len() as i32, score)
+                .await?;
         } else {
             // Complex case: apply replacement logic
-            self.apply_recent30_replacement_logic(user_id, user_play, &current_tuples).await?;
+            self.apply_recent30_replacement_logic(user_id, user_play, &current_tuples)
+                .await?;
         }
 
         Ok(())
@@ -780,7 +819,7 @@ impl ScoreService {
 
     async fn get_recent30_tuples(&self, user_id: i32) -> ArcResult<Vec<Recent30Tuple>> {
         let rows = sqlx::query!(
-            "SELECT r_index, song_id, difficulty, rating FROM recent30 
+            "SELECT r_index, song_id, difficulty, rating FROM recent30
              WHERE user_id = ? AND song_id != '' ORDER BY time_played DESC",
             user_id
         )
@@ -789,16 +828,23 @@ impl ScoreService {
 
         Ok(rows
             .into_iter()
-            .map(|row| Recent30Tuple::new(
-                row.r_index,
-                row.song_id.unwrap_or_else(|| "".to_string()),
-                row.difficulty.unwrap_or(0),
-                row.rating.unwrap_or(0.0)
-            ))
+            .map(|row| {
+                Recent30Tuple::new(
+                    row.r_index,
+                    row.song_id.unwrap_or_else(|| "".to_string()),
+                    row.difficulty.unwrap_or(0),
+                    row.rating.unwrap_or(0.0),
+                )
+            })
             .collect())
     }
 
-    async fn insert_recent30_entry(&self, user_id: i32, r_index: i32, score: &Score) -> ArcResult<()> {
+    async fn insert_recent30_entry(
+        &self,
+        user_id: i32,
+        r_index: i32,
+        score: &Score,
+    ) -> ArcResult<()> {
         sqlx::query!(
             "INSERT INTO recent30 (user_id, r_index, time_played, song_id, difficulty, score,
              shiny_perfect_count, perfect_count, near_count, miss_count, health, modifier,
@@ -827,18 +873,20 @@ impl ScoreService {
         &self,
         user_id: i32,
         user_play: &UserPlay,
-        current_tuples: &[Recent30Tuple]
+        current_tuples: &[Recent30Tuple],
     ) -> ArcResult<()> {
         let score = &user_play.user_score.score;
         let song_key = (score.song_id.clone(), score.difficulty);
 
         // Build unique songs map
-        let mut unique_songs: std::collections::HashMap<(String, i32), Vec<(usize, i32, f64)>> = 
+        let mut unique_songs: std::collections::HashMap<(String, i32), Vec<(usize, i32, f64)>> =
             std::collections::HashMap::new();
-        
+
         for (i, tuple) in current_tuples.iter().enumerate() {
             let key = (tuple.song_id.clone(), tuple.difficulty);
-            unique_songs.entry(key).or_insert_with(Vec::new)
+            unique_songs
+                .entry(key)
+                .or_insert_with(Vec::new)
                 .push((i, tuple.r_index, tuple.rating));
         }
 
@@ -849,14 +897,16 @@ impl ScoreService {
             // Case 1: >=11 unique songs or exactly 10 and new song
             if user_play.is_protected() {
                 // Protected: find lowest rating to replace
-                let lowest = current_tuples.iter()
+                let lowest = current_tuples
+                    .iter()
                     .enumerate()
                     .filter(|(_, tuple)| tuple.rating <= score.rating)
                     .min_by(|(_, a), (_, b)| a.rating.partial_cmp(&b.rating).unwrap())
                     .map(|(idx, _)| idx);
 
                 if let Some(idx) = lowest {
-                    self.update_one_r30(user_id, current_tuples[idx].r_index, score).await?;
+                    self.update_one_r30(user_id, current_tuples[idx].r_index, score)
+                        .await?;
                 }
             } else {
                 // Not protected: replace oldest (last in current order)
@@ -867,7 +917,7 @@ impl ScoreService {
         } else {
             // Case 2: Need to find duplicate songs for replacement
             let mut filtered_songs = unique_songs.clone();
-            
+
             filtered_songs.retain(|_, v| v.len() > 1);
 
             // If new song has unique entry, add it to filtered
@@ -888,14 +938,17 @@ impl ScoreService {
                     }
                 }
 
-                if let Some((_, r_index, _)) = candidates.iter().min_by(|a, b| a.2.partial_cmp(&b.2).unwrap()) {
+                if let Some((_, r_index, _)) = candidates
+                    .iter()
+                    .min_by(|a, b| a.2.partial_cmp(&b.2).unwrap())
+                {
                     self.update_one_r30(user_id, *r_index, score).await?;
                 }
             } else {
                 // Not protected: find oldest in filtered songs
                 let mut oldest_idx = 0;
                 let mut oldest_r_index = 0;
-                
+
                 for (_, entries) in &filtered_songs {
                     for &(idx, r_index, _) in entries {
                         if idx > oldest_idx {
@@ -994,6 +1047,9 @@ impl ScoreService {
             user_id,
             best_30_sum,
             recent_10_sum,
+            r30_tuples: None,
+            r30: None,
+            b30: None,
         })
     }
 
@@ -1002,6 +1058,83 @@ impl ScoreService {
             .fetch_one(&self.pool)
             .await?;
         Ok(user.rating_ptt.unwrap_or(0))
+    }
+
+    /// Record score to log database
+    async fn record_score(&self, _user_play: &UserPlay) -> ArcResult<()> {
+        // This would record to a separate log database
+        // For now, this is a placeholder implementation
+        Ok(())
+    }
+
+    /// Record user rating PTT changes to log database
+    async fn record_rating_ptt(&self, _user_id: i32, _user_rating_ptt: f64) -> ArcResult<()> {
+        // This would record to a separate log database
+        // For now, this is a placeholder implementation
+        Ok(())
+    }
+
+    /// Handle world mode calculations
+    async fn handle_world_mode(&self, user_play: &mut UserPlay) -> ArcResult<()> {
+        // Get user's current world map info
+        let _user_current_map = self
+            .get_user_current_map(user_play.user_score.user_id)
+            .await?;
+
+        // This would implement the complex world mode logic from Python:
+        // - Check map type (normal, beyond, breached)
+        // - Apply character skills
+        // - Calculate progress
+        // - Update map position
+        // - Handle rewards
+
+        // For now, this is a placeholder implementation
+        Ok(())
+    }
+
+    /// Handle course mode calculations
+    async fn handle_course_mode(&self, _user_play: &mut UserPlay) -> ArcResult<()> {
+        // This would implement course mode logic:
+        // - Update course progress
+        // - Check course completion
+        // - Handle course rewards
+
+        // For now, this is a placeholder implementation
+        Ok(())
+    }
+
+    /// Get user's current world map
+    async fn get_user_current_map(&self, user_id: i32) -> ArcResult<String> {
+        let user = sqlx::query!("SELECT current_map FROM user WHERE user_id = ?", user_id)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(user.current_map.unwrap_or_default())
+    }
+
+    /// Update user's global rank
+    async fn update_user_global_rank(&self, user_id: i32) -> ArcResult<()> {
+        // This would calculate and update the user's global ranking
+        // based on their score_v2 values
+
+        // Calculate total score_v2
+        let total_score = sqlx::query!(
+            "SELECT SUM(score_v2) as total FROM best_score WHERE user_id = ?",
+            user_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        let world_rank_score = total_score.total.unwrap_or(0.0) as i32;
+
+        sqlx::query!(
+            "UPDATE user SET world_rank_score = ? WHERE user_id = ?",
+            world_rank_score,
+            user_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 }
 
