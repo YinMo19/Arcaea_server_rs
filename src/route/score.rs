@@ -3,7 +3,7 @@ use crate::model::{CourseTokenResponse, WorldTokenResponse};
 use crate::route::common::AuthGuard;
 use crate::route::{success_return, RouteResult};
 use crate::service::score::ScoreService;
-use rocket::form::{Form, FromForm};
+use rocket::form::Form;
 use rocket::{get, post, routes, Route, State};
 
 use serde_json::Value;

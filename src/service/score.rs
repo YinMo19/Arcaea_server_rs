@@ -2,10 +2,10 @@ use crate::error::{ArcError, ArcResult};
 use serde_json::Value;
 
 use crate::model::download::{
-    BestScore, CourseTokenRequest, CourseTokenResponse, ScoreSubmission, SongplayToken,
-    WorldTokenRequest, WorldTokenResponse,
+    CourseTokenRequest, CourseTokenResponse, ScoreSubmission, SongplayToken, WorldTokenRequest,
+    WorldTokenResponse,
 };
-use crate::model::score::{Potential, Recent30Tuple, Score, UserPlay, UserScore};
+use crate::model::score::{Potential, RankingScoreRow, Recent30Tuple, Score, UserPlay, UserScore};
 use crate::model::user::User;
 use base64::{engine::general_purpose, Engine as _};
 use md5;
@@ -15,11 +15,11 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Constants for score calculations
-const BEST30_WEIGHT: f64 = 0.75;
-const RECENT10_WEIGHT: f64 = 0.25;
+const BEST30_WEIGHT: f64 = 1.0 / 40.0;
+const RECENT10_WEIGHT: f64 = 1.0 / 40.0;
 const COURSE_STAMINA_COST: i32 = 2;
 const INVASION_START_WEIGHT: f64 = 0.1;
-const INVASION_HARD_WEIGHT: f64 = 0.05;
+const INVASION_HARD_WEIGHT: f64 = 0.1;
 
 /// Score service for handling score submission, validation, and calculations
 pub struct ScoreService {
@@ -47,8 +47,34 @@ impl ScoreService {
 
         let stamina_multiply = request.stamina_multiply.unwrap_or(1);
         let fragment_multiply = request.fragment_multiply.unwrap_or(100);
-        let prog_boost_multiply = request.prog_boost_multiply.unwrap_or(0);
-        let beyond_boost_gauge_use = request.beyond_boost_gauge_use.unwrap_or(0);
+        let mut prog_boost_multiply = request.prog_boost_multiply.unwrap_or(0);
+        let mut beyond_boost_gauge_use = request.beyond_boost_gauge_use.unwrap_or(0);
+
+        // Validate prog_boost and beyond_boost_gauge like Python version
+        if prog_boost_multiply != 0 || beyond_boost_gauge_use != 0 {
+            let boost_data = sqlx::query!(
+                "SELECT prog_boost, beyond_boost_gauge FROM user WHERE user_id = ?",
+                user_id
+            )
+            .fetch_optional(&self.pool)
+            .await?;
+
+            if let Some(data) = boost_data {
+                prog_boost_multiply = if data.prog_boost.unwrap_or(0) == 300 {
+                    300
+                } else {
+                    0
+                };
+                if data.beyond_boost_gauge.unwrap_or(0.0) < beyond_boost_gauge_use as f64
+                    || !matches!(beyond_boost_gauge_use, 100 | 200)
+                {
+                    beyond_boost_gauge_use = 0;
+                }
+            } else {
+                prog_boost_multiply = 0;
+                beyond_boost_gauge_use = 0;
+            }
+        }
 
         // Handle special skills
         let mut skill_cytusii_flag: Option<String> = None;
@@ -67,19 +93,54 @@ impl ScoreService {
             }
         }
 
-        // Check for invasion (random chance)
-        if user.insight_state.unwrap_or(0) == 4 {
-            let rand_val: f64 = rand::thread_rng().gen();
-            if rand_val < INVASION_HARD_WEIGHT {
-                invasion_flag = 2;
-            } else if rand_val < INVASION_START_WEIGHT + INVASION_HARD_WEIGHT {
-                invasion_flag = 1;
+        // Get user map and character info for stamina and skill processing
+        let stamina_cost = self.get_user_current_map(user_id).await?;
+
+        // Check character skill and invasion
+        let mut fatalis_stamina_multiply = 1;
+        if user.is_skill_sealed.unwrap_or(1) == 0 {
+            // Get character info for skill processing
+            let character_info = sqlx::query!(
+                "SELECT c.skill_id FROM user u
+                 JOIN `character` c ON u.character_id = c.character_id
+                 WHERE u.user_id = ?",
+                user_id
+            )
+            .fetch_optional(&self.pool)
+            .await?;
+
+            if let Some(char_data) = character_info {
+                // Check for Fatalis skill (double stamina cost)
+                if char_data.skill_id.as_deref() == Some("skill_fatalis") {
+                    fatalis_stamina_multiply = 2;
+                }
+            }
+
+            // Invasion logic - only if insight is enabled (insight_state == 3 or 5)
+            let insight_state = user.insight_state.unwrap_or(4);
+            if insight_state == 3 || insight_state == 5 {
+                // Use weighted choice like Python's choices([0, 1, 2], [weights])
+                let no_invasion_weight = 1.0 - INVASION_START_WEIGHT - INVASION_HARD_WEIGHT;
+                let weights = [
+                    no_invasion_weight,
+                    INVASION_START_WEIGHT,
+                    INVASION_HARD_WEIGHT,
+                ];
+                let mut cumulative = 0.0;
+                let rand_val: f64 = rand::thread_rng().gen();
+
+                for (i, &weight) in weights.iter().enumerate() {
+                    cumulative += weight;
+                    if rand_val < cumulative {
+                        invasion_flag = i as i32;
+                        break;
+                    }
+                }
             }
         }
 
-        // Validate stamina
-        let stamina_cost = self.get_world_map_stamina_cost(user_id).await.unwrap_or(1);
-        let required_stamina = stamina_cost * stamina_multiply;
+        // Validate stamina (including Fatalis multiplier)
+        let required_stamina = stamina_cost * stamina_multiply * fatalis_stamina_multiply;
         if user.stamina.unwrap_or(0) < required_stamina {
             return Err(ArcError::Base {
                 message: format!(
@@ -165,14 +226,14 @@ impl ScoreService {
         user_id: i32,
         request: CourseTokenRequest,
     ) -> ArcResult<CourseTokenResponse> {
-        let _user = self.get_user_info(user_id).await?;
+        // let user = self.get_user_info(user_id).await?;
         let use_course_skip_purchase = request.use_course_skip_purchase.unwrap_or(false);
 
         let mut status = "created".to_string();
         let token;
 
-        if let Some(previous_token) = request.previous_token {
-            // Check existing token
+        // Get play state from previous token if provided
+        let course_play_state = if let Some(previous_token) = &request.previous_token {
             let existing_token = sqlx::query!(
                 "SELECT course_state FROM songplay_token WHERE token = ? AND user_id = ?",
                 previous_token,
@@ -181,55 +242,42 @@ impl ScoreService {
             .fetch_optional(&self.pool)
             .await?;
 
-            match existing_token {
-                Some(row) => {
-                    let course_state = row.course_state;
-                    if let Some(state) = course_state {
-                        if (0..=3).contains(&state) {
-                            // Update token
-                            token = generate_course_token();
-                            sqlx::query!(
-                                "UPDATE songplay_token SET token = ? WHERE token = ?",
-                                token,
-                                previous_token
-                            )
-                            .execute(&self.pool)
-                            .await?;
-                        } else {
-                            // Course finished
-                            self.clear_user_songplay_tokens(user_id).await?;
-                            status = if state == 4 { "cleared" } else { "failed" }.to_string();
-                            token = String::new();
-                        }
-                    } else {
-                        return Err(ArcError::no_data("Invalid course state".to_string(), 108));
-                    }
-                }
-                None => {
-                    // Create new course session
-                    if let Some(course_id) = request.course_id {
-                        token = generate_course_token();
-                        self.create_course_session(
-                            user_id,
-                            &course_id,
-                            &token,
-                            use_course_skip_purchase,
-                        )
-                        .await?;
-                    } else {
-                        return Err(ArcError::input("Course ID is required for new session"));
-                    }
-                }
-            }
+            existing_token
+                .map(|t| t.course_state.unwrap_or(-1))
+                .unwrap_or(-1)
         } else {
-            // Create new course session
+            -1
+        };
+
+        if course_play_state == -1 {
+            // No token, course mode just started
             if let Some(course_id) = request.course_id {
-                token = generate_course_token();
-                self.create_course_session(user_id, &course_id, &token, use_course_skip_purchase)
+                token = self
+                    .create_course_session(user_id, &course_id, use_course_skip_purchase)
                     .await?;
             } else {
-                return Err(ArcError::input("Course ID is required for new session"));
+                return Err(ArcError::input(
+                    "course_id is required for new course session",
+                ));
             }
+        } else if course_play_state >= 0 && course_play_state <= 3 {
+            // Validate token and continue course
+            if let Some(previous_token) = request.previous_token {
+                token = self.update_course_token(&previous_token, user_id).await?;
+            } else {
+                return Err(ArcError::input(
+                    "previous_token is required for continuing course",
+                ));
+            }
+        } else {
+            // Course mode has ended
+            self.clear_user_songplay_tokens(user_id).await?;
+            status = if course_play_state == 4 {
+                "cleared".to_string()
+            } else {
+                "failed".to_string()
+            };
+            token = "".to_string();
         }
 
         let updated_user = self.get_user_info(user_id).await?;
@@ -352,7 +400,8 @@ impl ScoreService {
         song_id: &str,
         difficulty: i32,
     ) -> ArcResult<Vec<HashMap<String, serde_json::Value>>> {
-        let scores = sqlx::query!(
+        let scores = sqlx::query_as!(
+            RankingScoreRow,
             "SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
              bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
              bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
@@ -360,7 +409,7 @@ impl ScoreService {
              FROM best_score bs
              JOIN user u ON bs.user_id = u.user_id
              WHERE bs.song_id = ? AND bs.difficulty = ?
-             ORDER BY bs.score DESC
+             ORDER BY bs.score DESC, bs.time_played DESC
              LIMIT 20",
             song_id,
             difficulty
@@ -368,36 +417,14 @@ impl ScoreService {
         .fetch_all(&self.pool)
         .await?;
 
-        let mut result = Vec::new();
-        for (rank, row) in scores.iter().enumerate() {
-            let best_score = BestScore {
-                user_id: row.user_id,
-                song_id: row.song_id.clone(),
-                difficulty: row.difficulty,
-                score: row.score.unwrap_or(0),
-                shiny_perfect_count: row.shiny_perfect_count.unwrap_or(0),
-                perfect_count: row.perfect_count.unwrap_or(0),
-                near_count: row.near_count.unwrap_or(0),
-                miss_count: row.miss_count.unwrap_or(0),
-                health: row.health.unwrap_or(0),
-                modifier: row.modifier.unwrap_or(0),
-                time_played: row.time_played.unwrap_or(0),
-                best_clear_type: row.best_clear_type.unwrap_or(0),
-                clear_type: row.clear_type.unwrap_or(0),
-                rating: row.rating.unwrap_or(0.0),
-                score_v2: row.score_v2.unwrap_or(0.0),
-            };
-            let user_info = (
-                row.user_id,
-                row.name.clone().unwrap_or_default(),
-                row.character_id.unwrap_or(0),
-                row.is_char_uncapped.unwrap_or(0),
-                row.is_skill_sealed.unwrap_or(0),
-            );
-            let mut user_score = UserScore::from_best_score_row(&best_score, user_info);
-            user_score.rank = Some((rank + 1) as i32);
-            result.push(user_score.to_dict(true));
-        }
+        let result = scores
+            .into_iter()
+            .enumerate()
+            .map(|(rank, row)| {
+                row.to_user_score_with_rank(Some((rank + 1) as i32))
+                    .to_dict(true)
+            })
+            .collect();
 
         Ok(result)
     }
@@ -409,9 +436,9 @@ impl ScoreService {
         song_id: &str,
         difficulty: i32,
     ) -> ArcResult<Vec<HashMap<String, serde_json::Value>>> {
-        // Get user's score
+        // Get user's score and time_played
         let user_score = sqlx::query!(
-            "SELECT * FROM best_score WHERE user_id = ? AND song_id = ? AND difficulty = ?",
+            "SELECT score, time_played FROM best_score WHERE user_id = ? AND song_id = ? AND difficulty = ?",
             user_id,
             song_id,
             difficulty
@@ -419,108 +446,184 @@ impl ScoreService {
         .fetch_optional(&self.pool)
         .await?;
 
-        if let Some(row) = user_score {
-            // Get user's rank
-            let rank = sqlx::query!(
+        if let Some(user_row) = user_score {
+            // Calculate user's rank (considering both score and time_played for tie-breaking)
+            let rank_result = sqlx::query!(
                 "SELECT COUNT(*) as rank FROM best_score
-                 WHERE song_id = ? AND difficulty = ? AND score > ?",
+                 WHERE song_id = ? AND difficulty = ? AND
+                 (score > ? OR (score = ? AND time_played > ?))",
                 song_id,
                 difficulty,
-                row.score
+                user_row.score,
+                user_row.score,
+                user_row.time_played
             )
             .fetch_one(&self.pool)
             .await?;
+            let my_rank = (rank_result.rank + 1) as i32;
 
-            let user_info = self.get_user_info(user_id).await?;
-            let user_score_info = (
-                user_id,
-                user_info.name.unwrap_or_default(),
-                user_info.character_id.unwrap_or(0),
-                user_info.is_char_uncapped.unwrap_or(0),
-                user_info.is_skill_sealed.unwrap_or(0),
+            // Get total count
+            let total_result = sqlx::query!(
+                "SELECT COUNT(*) as total FROM best_score WHERE song_id = ? AND difficulty = ?",
+                song_id,
+                difficulty
+            )
+            .fetch_one(&self.pool)
+            .await?;
+            let total_count = total_result.total as i32;
+
+            // Calculate ranking display parameters using Python logic
+            const MAX_LOCAL_POSITION: i32 = 5;
+            const MAX_GLOBAL_POSITION: i32 = 9999;
+            const LIMIT: i32 = 20;
+
+            let (sql_limit, sql_offset, need_myself) = self.get_my_rank_parameters(
+                my_rank,
+                total_count,
+                LIMIT,
+                MAX_LOCAL_POSITION,
+                MAX_GLOBAL_POSITION,
             );
 
-            let best_score = BestScore {
-                user_id: row.user_id,
-                song_id: row.song_id,
-                difficulty: row.difficulty,
-                score: row.score.unwrap_or(0),
-                shiny_perfect_count: row.shiny_perfect_count.unwrap_or(0),
-                perfect_count: row.perfect_count.unwrap_or(0),
-                near_count: row.near_count.unwrap_or(0),
-                miss_count: row.miss_count.unwrap_or(0),
-                health: row.health.unwrap_or(0),
-                modifier: row.modifier.unwrap_or(0),
-                time_played: row.time_played.unwrap_or(0),
-                best_clear_type: row.best_clear_type.unwrap_or(0),
-                clear_type: row.clear_type.unwrap_or(0),
-                rating: row.rating.unwrap_or(0.0),
-                score_v2: row.score_v2.unwrap_or(0.0),
-            };
-            let mut user_score_obj = UserScore::from_best_score_row(&best_score, user_score_info);
-            user_score_obj.rank = Some((rank.rank + 1) as i32);
+            // Get scores with calculated offset and limit
+            let scores = sqlx::query_as!(
+                RankingScoreRow,
+                "SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
+                 bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
+                 bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
+                 u.name, u.character_id, u.is_char_uncapped, u.is_skill_sealed
+                 FROM best_score bs
+                 JOIN user u ON bs.user_id = u.user_id
+                 WHERE bs.song_id = ? AND bs.difficulty = ?
+                 ORDER BY bs.score DESC, bs.time_played DESC
+                 LIMIT ? OFFSET ?",
+                song_id,
+                difficulty,
+                sql_limit,
+                sql_offset
+            )
+            .fetch_all(&self.pool)
+            .await?;
 
-            Ok(vec![user_score_obj.to_dict(true)])
+            let mut result = Vec::new();
+
+            for (i, row) in scores.iter().enumerate() {
+                let rank = if sql_offset > 0 {
+                    sql_offset + (i as i32) + 1
+                } else {
+                    (i as i32) + 1
+                };
+
+                result.push(row.to_user_score_with_rank(Some(rank)).to_dict(true));
+            }
+
+            // Add user's own score at the end if needed
+            if need_myself {
+                let user_own_score = sqlx::query_as!(
+                    RankingScoreRow,
+                    "SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
+                     bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
+                     bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
+                     u.name, u.character_id, u.is_char_uncapped, u.is_skill_sealed
+                     FROM best_score bs
+                     JOIN user u ON bs.user_id = u.user_id
+                     WHERE bs.user_id = ? AND bs.song_id = ? AND bs.difficulty = ?",
+                    user_id,
+                    song_id,
+                    difficulty
+                )
+                .fetch_one(&self.pool)
+                .await?;
+
+                result.push(
+                    user_own_score
+                        .to_user_score_with_rank(Some(-1))
+                        .to_dict(true),
+                );
+            }
+
+            Ok(result)
         } else {
             Ok(vec![])
         }
     }
 
     /// Get friend rankings for a song
+    /// Calculate ranking display parameters for user's personal ranking
+    /// This implements the Python get_my_rank_parameter logic
+    fn get_my_rank_parameters(
+        &self,
+        my_rank: i32,
+        total_count: i32,
+        limit: i32,
+        max_local_position: i32,
+        max_global_position: i32,
+    ) -> (i32, i32, bool) {
+        let mut sql_limit = limit;
+        let mut sql_offset = 0;
+        let mut need_myself = false;
+
+        if my_rank <= max_local_position {
+            // Rank is at the front, not enough people ahead
+        } else if my_rank > max_global_position {
+            // Rank is too far back, don't show ranking
+            sql_limit -= 1;
+            sql_offset = max_global_position - limit + 1;
+            need_myself = true;
+        } else if total_count - my_rank < limit - max_local_position {
+            // Not enough people behind, show ranking
+            sql_offset = total_count - limit;
+        } else if max_local_position <= my_rank
+            && my_rank <= max_global_position - limit + max_local_position - 1
+        {
+            // Enough people ahead, show ranking
+            sql_offset = my_rank - max_local_position;
+        } else {
+            // Default case
+            sql_offset = max_global_position - limit;
+        }
+
+        (sql_limit, sql_offset, need_myself)
+    }
+
     pub async fn get_friend_song_ranks(
         &self,
         user_id: i32,
         song_id: &str,
         difficulty: i32,
     ) -> ArcResult<Vec<HashMap<String, serde_json::Value>>> {
-        let scores = sqlx::query!(
+        // First get all friend scores using a JOIN instead of IN clause
+        let scores = sqlx::query_as!(
+            RankingScoreRow,
             "SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
              bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
              bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
              u.name, u.character_id, u.is_char_uncapped, u.is_skill_sealed
              FROM best_score bs
              JOIN user u ON bs.user_id = u.user_id
-             JOIN friend f ON (f.user_id_me = ? AND f.user_id_other = bs.user_id)
              WHERE bs.song_id = ? AND bs.difficulty = ?
-             ORDER BY bs.score DESC
+             AND (bs.user_id = ? OR EXISTS(
+                 SELECT 1 FROM friend f
+                 WHERE f.user_id_me = ? AND f.user_id_other = bs.user_id
+             ))
+             ORDER BY bs.score DESC, bs.time_played DESC
              LIMIT 50",
-            user_id,
             song_id,
-            difficulty
+            difficulty,
+            user_id,
+            user_id
         )
         .fetch_all(&self.pool)
         .await?;
 
-        let mut result = Vec::new();
-        for (rank, row) in scores.iter().enumerate() {
-            let best_score = BestScore {
-                user_id: row.user_id,
-                song_id: row.song_id.clone(),
-                difficulty: row.difficulty,
-                score: row.score.unwrap_or(0),
-                shiny_perfect_count: row.shiny_perfect_count.unwrap_or(0),
-                perfect_count: row.perfect_count.unwrap_or(0),
-                near_count: row.near_count.unwrap_or(0),
-                miss_count: row.miss_count.unwrap_or(0),
-                health: row.health.unwrap_or(0),
-                modifier: row.modifier.unwrap_or(0),
-                time_played: row.time_played.unwrap_or(0),
-                best_clear_type: row.best_clear_type.unwrap_or(0),
-                clear_type: row.clear_type.unwrap_or(0),
-                rating: row.rating.unwrap_or(0.0),
-                score_v2: row.score_v2.unwrap_or(0.0),
-            };
-            let user_info = (
-                row.user_id,
-                row.name.clone().unwrap_or_default(),
-                row.character_id.unwrap_or(0),
-                row.is_char_uncapped.unwrap_or(0),
-                row.is_skill_sealed.unwrap_or(0),
-            );
-            let mut user_score = UserScore::from_best_score_row(&best_score, user_info);
-            user_score.rank = Some((rank + 1) as i32);
-            result.push(user_score.to_dict(true));
-        }
+        let result = scores
+            .into_iter()
+            .enumerate()
+            .map(|(rank, row)| {
+                row.to_user_score_with_rank(Some((rank + 1) as i32))
+                    .to_dict(true)
+            })
+            .collect();
 
         Ok(result)
     }
@@ -626,9 +729,9 @@ impl ScoreService {
         &self,
         user_id: i32,
         course_id: &str,
-        token: &str,
         use_skip_purchase: bool,
-    ) -> ArcResult<()> {
+    ) -> ArcResult<String> {
+        let token = generate_course_token();
         if use_skip_purchase {
             // TODO: Handle course skip purchase
         } else {
@@ -664,7 +767,20 @@ impl ScoreService {
         .execute(&self.pool)
         .await?;
 
-        Ok(())
+        Ok(token)
+    }
+
+    async fn update_course_token(&self, previous_token: &str, user_id: i32) -> ArcResult<String> {
+        let new_token = generate_course_token();
+        sqlx::query!(
+            "UPDATE songplay_token SET token = ? WHERE token = ? AND user_id = ?",
+            new_token,
+            previous_token,
+            user_id
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(new_token)
     }
 
     async fn upload_score(&self, user_play: &mut UserPlay) -> ArcResult<()> {
@@ -1103,12 +1219,19 @@ impl ScoreService {
         Ok(())
     }
 
-    /// Get user's current world map
-    async fn get_user_current_map(&self, user_id: i32) -> ArcResult<String> {
+    /// Get user's current world map stamina cost
+    async fn get_user_current_map(&self, user_id: i32) -> ArcResult<i32> {
         let user = sqlx::query!("SELECT current_map FROM user WHERE user_id = ?", user_id)
             .fetch_one(&self.pool)
             .await?;
-        Ok(user.current_map.unwrap_or_default())
+
+        // Get stamina cost based on current map (simplified logic for now)
+        let current_map = user.current_map.unwrap_or_default();
+        if current_map.contains("beyond") {
+            Ok(2)
+        } else {
+            Ok(1)
+        }
     }
 
     /// Update user's global rank
@@ -1164,10 +1287,10 @@ fn generate_random_skill_flag(length: usize) -> String {
 /// Get world value name from index
 fn get_world_value_name(index: i32) -> String {
     match index {
-        0 => "fragment".to_string(),
-        1 => "progress".to_string(),
-        2 => "overdrive".to_string(),
-        _ => "fragment".to_string(),
+        0 => "frag".to_string(),
+        1 => "prog".to_string(),
+        2 => "over".to_string(),
+        _ => "frag".to_string(),
     }
 }
 

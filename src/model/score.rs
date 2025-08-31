@@ -446,7 +446,7 @@ impl UserPlay {
 
     /// Convert to response dictionary
     pub fn to_dict(&self) -> HashMap<String, serde_json::Value> {
-        // Check if we have world mode or course mode data
+        // Check if we have world mode or course mode data - matching Python logic
         if self.is_world_mode.is_none() || self.course_play_state == -1 {
             return HashMap::new();
         }
@@ -454,32 +454,34 @@ impl UserPlay {
         let mut result = HashMap::new();
 
         if self.course_play_state == 4 {
-            // Course mode completed
-            // TODO: Implement course play to_dict
+            // Course mode completed - TODO: implement course_play.to_dict()
+            // For now, return empty dict for course completion
         } else if self.is_world_mode == Some(true) {
-            // World mode - placeholder implementation
-            result.insert("world_mode".to_string(), Value::Bool(true));
+            // World mode - TODO: implement world_play.to_dict()
+            // For now, return empty dict for world mode
         }
 
-        // Add common fields
-        result.insert(
-            "user_rating".to_string(),
-            Value::from(self.user_score.user_id),
-        ); // This should be actual rating
+        // Add common fields matching Python implementation
+        // Get user's rating_ptt (should be from user data, not user_id)
+        result.insert("user_rating".to_string(), Value::from(0)); // TODO: get actual user.rating_ptt
 
+        // finale_challenge_higher: check if this score's rating > user's ptt value
         if let Some(ref ptt) = self.ptt {
             result.insert(
                 "finale_challenge_higher".to_string(),
                 Value::from(self.user_score.score.rating > ptt.value()),
             );
+        } else {
+            result.insert("finale_challenge_higher".to_string(), Value::from(false));
         }
 
         result.insert("global_rank".to_string(), Value::Null); // TODO: implement global rank
+
+        // finale_play_value calculation: 9.065 * rating^0.5
+        let finale_play_value = 9.065 * self.user_score.score.rating.sqrt();
         result.insert(
             "finale_play_value".to_string(),
-            Value::from(Potential::calculate_finale_play_value(
-                self.user_score.score.rating,
-            )),
+            Value::from(finale_play_value),
         );
 
         result
@@ -672,6 +674,63 @@ impl UserScoreList {
                 // Would lookup song name from chart table
                 score.score.song_name = Some("Unknown Song".to_string());
             }
+        }
+    }
+}
+
+/// Complete ranking score row that maps directly to final result
+#[derive(Debug, sqlx::FromRow)]
+pub struct RankingScoreRow {
+    // Score fields
+    pub user_id: i32,
+    pub song_id: String,
+    pub difficulty: i32,
+    pub score: Option<i32>,
+    pub shiny_perfect_count: Option<i32>,
+    pub perfect_count: Option<i32>,
+    pub near_count: Option<i32>,
+    pub miss_count: Option<i32>,
+    pub health: Option<i32>,
+    pub modifier: Option<i32>,
+    pub time_played: Option<i64>,
+    pub best_clear_type: Option<i32>,
+    pub clear_type: Option<i32>,
+    pub rating: Option<f64>,
+    pub score_v2: Option<f64>,
+    // User fields
+    pub name: Option<String>,
+    pub character_id: Option<i32>,
+    pub is_char_uncapped: Option<i8>,
+    pub is_skill_sealed: Option<i8>,
+}
+
+impl RankingScoreRow {
+    /// Convert to UserScore with rank
+    pub fn to_user_score_with_rank(&self, rank: Option<i32>) -> UserScore {
+        let mut score = Score::new();
+        score.song_id = self.song_id.clone();
+        score.difficulty = self.difficulty;
+        score.score = self.score.unwrap_or(0);
+        score.shiny_perfect_count = self.shiny_perfect_count.unwrap_or(0);
+        score.perfect_count = self.perfect_count.unwrap_or(0);
+        score.near_count = self.near_count.unwrap_or(0);
+        score.miss_count = self.miss_count.unwrap_or(0);
+        score.health = self.health.unwrap_or(0);
+        score.modifier = self.modifier.unwrap_or(0);
+        score.time_played = self.time_played.unwrap_or(0);
+        score.clear_type = self.clear_type.unwrap_or(0);
+        score.rating = self.rating.unwrap_or(0.0);
+        score.score_v2 = self.score_v2.unwrap_or(0.0);
+
+        UserScore {
+            score,
+            user_id: self.user_id,
+            name: self.name.clone().unwrap_or_default(),
+            best_clear_type: self.best_clear_type.unwrap_or(0),
+            character: self.character_id.unwrap_or(0),
+            is_char_uncapped: self.is_char_uncapped.unwrap_or(0),
+            is_skill_sealed: self.is_skill_sealed.unwrap_or(0),
+            rank,
         }
     }
 }
