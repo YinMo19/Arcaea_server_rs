@@ -296,9 +296,6 @@ impl ScoreService {
         // Get user info
         let user = self.get_user_info(user_id).await?;
 
-        // Validate token and get play state
-        let play_state = self.get_play_state(&submission.song_token, user_id).await?;
-
         // Create UserPlay instance
         let mut user_play = UserPlay {
             user_score: UserScore {
@@ -317,26 +314,30 @@ impl ScoreService {
             beyond_gauge: submission.beyond_gauge,
             unrank_flag: false,
             new_best_protect_flag: false,
-            is_world_mode: Some(play_state.course_id.is_none()),
-            stamina_multiply: play_state.stamina_multiply,
-            fragment_multiply: play_state.fragment_multiply,
-            prog_boost_multiply: play_state.prog_boost_multiply,
-            beyond_boost_gauge_usage: play_state.beyond_boost_gauge_usage,
-            course_play_state: play_state.course_state,
+            is_world_mode: None,
+            stamina_multiply: 1,
+            fragment_multiply: 100,
+            prog_boost_multiply: 0,
+            beyond_boost_gauge_usage: 0,
+            course_play_state: -1,
             combo_interval_bonus: submission.combo_interval_bonus,
             hp_interval_bonus: submission.hp_interval_bonus,
             fever_bonus: submission.fever_bonus,
-            skill_cytusii_flag: play_state.skill_cytusii_flag,
-            skill_chinatsu_flag: play_state.skill_chinatsu_flag,
+            skill_cytusii_flag: None,
+            skill_chinatsu_flag: None,
             highest_health: submission.highest_health,
             lowest_health: submission.lowest_health,
-            invasion_flag: play_state.invasion_flag,
+            invasion_flag: 0,
             ptt: None,
         };
 
+        // Set chart info
+        user_play
+            .user_score
+            .score
+            .set_chart(submission.song_id.clone(), submission.difficulty);
+
         // Set score data
-        user_play.user_score.score.song_id = submission.song_id.clone();
-        user_play.user_score.score.difficulty = submission.difficulty;
         user_play.user_score.score.set_score(
             Some(submission.score),
             Some(submission.shiny_perfect_count),
@@ -349,13 +350,7 @@ impl ScoreService {
             Some(submission.clear_type),
         );
 
-        // Get chart constant for rating calculation
-        let chart_const = self
-            .get_chart_constant(&submission.song_id, submission.difficulty)
-            .await?;
-        user_play.user_score.score.get_rating_by_calc(chart_const);
-
-        // Validate score
+        // Validate score first (before any processing)
         let expected_hash = self
             .get_song_file_hash(&submission.song_id, submission.difficulty)
             .await;
@@ -363,27 +358,8 @@ impl ScoreService {
             return Err(ArcError::input("Invalid score"));
         }
 
-        // Handle unranked scores
-        if user_play.user_score.score.rating < 0.0 {
-            user_play.unrank_flag = true;
-            user_play.user_score.score.rating = 0.0;
-        }
-
-        // Set timestamp
-        user_play.user_score.score.time_played = current_timestamp();
-
-        // Upload score (update recent, best, and potential)
+        // Upload score (which handles rating calculation internally)
         self.upload_score(&mut user_play).await?;
-
-        // Handle world mode
-        if user_play.is_world_mode == Some(true) {
-            self.handle_world_mode(&mut user_play).await?;
-        }
-
-        // Handle course mode
-        if user_play.course_play_state >= 0 {
-            self.handle_course_mode(&mut user_play).await?;
-        }
 
         // Create potential instance for response
         user_play.ptt = Some(self.calculate_user_potential(user_id).await?);
@@ -782,28 +758,61 @@ impl ScoreService {
 
     async fn upload_score(&self, user_play: &mut UserPlay) -> ArcResult<()> {
         let user_id = user_play.user_score.user_id;
-        let score = &user_play.user_score.score;
 
-        // Record score to log database (placeholder for now)
+        // Get play state first (like Python version)
+        let play_state = self.get_play_state(&user_play.song_token, user_id).await?;
+
+        // Set play state info
+        user_play.is_world_mode = Some(play_state.course_id.is_none());
+        user_play.stamina_multiply = play_state.stamina_multiply;
+        user_play.fragment_multiply = play_state.fragment_multiply;
+        user_play.prog_boost_multiply = play_state.prog_boost_multiply;
+        user_play.beyond_boost_gauge_usage = play_state.beyond_boost_gauge_usage;
+        user_play.course_play_state = play_state.course_state;
+        user_play.skill_cytusii_flag = play_state.skill_cytusii_flag;
+        user_play.skill_chinatsu_flag = play_state.skill_chinatsu_flag;
+        user_play.invasion_flag = play_state.invasion_flag;
+
+        // Get rating by calc (like Python version)
+        let chart_const = self
+            .get_chart_constant(
+                &user_play.user_score.score.song_id,
+                user_play.user_score.score.difficulty,
+            )
+            .await?;
+        user_play.user_score.score.get_rating_by_calc(chart_const);
+
+        // Handle unranked scores
+        if user_play.user_score.score.rating < 0.0 {
+            user_play.unrank_flag = true;
+            user_play.user_score.score.rating = 0.0;
+        } else {
+            user_play.unrank_flag = false;
+        }
+
+        // Set timestamp
+        user_play.user_score.score.time_played = current_timestamp();
+
+        // Record score to log database
         self.record_score(user_play).await?;
 
-        // Update user recent score
+        // Update user recent score (like Python version)
         sqlx::query!(
             "UPDATE user SET song_id = ?, difficulty = ?, score = ?, shiny_perfect_count = ?,
              perfect_count = ?, near_count = ?, miss_count = ?, health = ?, modifier = ?,
              clear_type = ?, rating = ?, time_played = ? WHERE user_id = ?",
-            score.song_id,
-            score.difficulty,
-            score.score,
-            score.shiny_perfect_count,
-            score.perfect_count,
-            score.near_count,
-            score.miss_count,
-            score.health,
-            score.modifier,
-            score.clear_type,
-            score.rating,
-            score.time_played * 1000, // Convert to milliseconds
+            user_play.user_score.score.song_id,
+            user_play.user_score.score.difficulty,
+            user_play.user_score.score.score,
+            user_play.user_score.score.shiny_perfect_count,
+            user_play.user_score.score.perfect_count,
+            user_play.user_score.score.near_count,
+            user_play.user_score.score.miss_count,
+            user_play.user_score.score.health,
+            user_play.user_score.score.modifier,
+            user_play.user_score.score.clear_type,
+            user_play.user_score.score.rating,
+            user_play.user_score.score.time_played * 1000,
             user_id
         )
         .execute(&self.pool)
@@ -819,6 +828,16 @@ impl ScoreService {
 
         // Update user rating
         self.update_user_rating(user_id).await?;
+
+        // Handle world mode if applicable
+        if user_play.is_world_mode == Some(true) {
+            self.handle_world_mode(user_play).await?;
+        }
+
+        // Handle course mode if applicable
+        if user_play.course_play_state >= 0 {
+            self.handle_course_mode(user_play).await?;
+        }
 
         Ok(())
     }
@@ -1011,11 +1030,26 @@ impl ScoreService {
         current_tuples: &[Recent30Tuple],
     ) -> ArcResult<()> {
         let score = &user_play.user_score.score;
-        let song_key = (score.song_id.clone(), score.difficulty);
+        let new_song_tuple = (score.song_id.clone(), score.difficulty);
 
-        // Build unique songs map
+        // If protected, find the lowest rating, and if tied, the oldest one (most efficient approach)
+        let lowest_eligible_tuple = if user_play.is_protected() {
+            current_tuples
+                .iter()
+                .enumerate()
+                .filter(|(_, tuple)| tuple.rating <= score.rating)
+                .min_by(|(_, a), (_, b)| {
+                    a.rating
+                        .partial_cmp(&b.rating)
+                        .unwrap()
+                        .then(a.r_index.cmp(&b.r_index)) // Lower r_index = older
+                })
+        } else {
+            None
+        };
+
+        // Build unique_songs map exactly like Python
         let mut unique_songs: HashMap<(String, i32), Vec<(usize, i32, f64)>> = HashMap::new();
-
         for (i, tuple) in current_tuples.iter().enumerate() {
             let key = (tuple.song_id.clone(), tuple.difficulty);
             unique_songs
@@ -1024,81 +1058,69 @@ impl ScoreService {
                 .push((i, tuple.r_index, tuple.rating));
         }
 
-        let new_song = song_key.clone();
-        let len_unique = unique_songs.len();
-
-        if len_unique >= 11 || (len_unique == 10 && !unique_songs.contains_key(&new_song)) {
-            // Case 1: >=11 unique songs or exactly 10 and new song
+        // Check if we have too many unique songs
+        if unique_songs.len() >= 11
+            || (unique_songs.len() == 10 && !unique_songs.contains_key(&new_song_tuple))
+        {
             if user_play.is_protected() {
-                // Protected: find lowest and earliest rating to replace
-                let lowest = current_tuples
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, tuple)| tuple.rating <= score.rating)
-                    .min_by(|(_, a), (_, b)| {
-                        a.rating
-                            .partial_cmp(&b.rating) // first judge the score rating
-                            .unwrap()
-                            .then(a.r_index.cmp(&b.r_index)) // if same, select older one
-                    })
-                    .map(|(idx, _)| idx);
-
-                if let Some(idx) = lowest {
-                    self.update_one_r30(user_id, current_tuples[idx].r_index, score)
+                // Replace lowest and oldest score
+                if let Some((_, tuple)) = lowest_eligible_tuple {
+                    self.update_one_r30(user_id, tuple.r_index, score).await?;
+                }
+            } else {
+                // Replace the last (oldest) score
+                if let Some(last_tuple) = current_tuples.last() {
+                    self.update_one_r30(user_id, last_tuple.r_index, score)
                         .await?;
                 }
-            } else {
-                // Not protected: replace oldest (last in current order)
-                if let Some(oldest) = current_tuples.last() {
-                    self.update_one_r30(user_id, oldest.r_index, score).await?;
-                }
+            }
+            return Ok(());
+        }
+
+        // Filter songs with multiple entries
+        let mut filtered_songs: HashMap<(String, i32), Vec<(usize, i32, f64)>> = unique_songs
+            .iter()
+            .filter(|(_, entries)| entries.len() > 1)
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
+        // If new song has unique entry in r30, it should be replaceable too
+        if unique_songs.contains_key(&new_song_tuple)
+            && !filtered_songs.contains_key(&new_song_tuple)
+        {
+            if let Some(entries) = unique_songs.get(&new_song_tuple) {
+                filtered_songs.insert(new_song_tuple, entries.clone());
+            }
+        }
+
+        if user_play.is_protected() {
+            // Protected: find lowest score in filtered songs (efficient iterator approach)
+            if let Some(target_tuple) = current_tuples
+                .iter()
+                .filter(|tuple| {
+                    tuple.rating <= score.rating
+                        && filtered_songs.contains_key(&(tuple.song_id.clone(), tuple.difficulty))
+                })
+                .min_by(|a, b| {
+                    a.rating
+                        .partial_cmp(&b.rating)
+                        .unwrap()
+                        .then(a.r_index.cmp(&b.r_index))
+                })
+            {
+                self.update_one_r30(user_id, target_tuple.r_index, score)
+                    .await?;
+                return Ok(());
             }
         } else {
-            // Case 2: Need to find duplicate songs for replacement
-            let mut filtered_songs = unique_songs.clone();
-
-            filtered_songs.retain(|_, v| v.len() > 1);
-
-            // If new song has unique entry, add it to filtered
-            if unique_songs.contains_key(&new_song) && !filtered_songs.contains_key(&new_song) {
-                if let Some(entries) = unique_songs.get(&new_song) {
-                    filtered_songs.insert(new_song.clone(), entries.clone());
-                }
-            }
-
-            if user_play.is_protected() {
-                // Protected: find lowest in filtered songs
-                let mut candidates = Vec::new();
-                for (_, entries) in &filtered_songs {
-                    for &(idx, r_index, rating) in entries {
-                        if rating <= score.rating {
-                            candidates.push((idx, r_index, rating));
-                        }
-                    }
-                }
-
-                if let Some((_, r_index, _)) = candidates.iter().min_by(|a, b| {
-                    a.2.partial_cmp(&b.2).unwrap().then(a.1.cmp(&b.1)) // if same, select older one
-                }) {
-                    self.update_one_r30(user_id, *r_index, score).await?;
-                }
-            } else {
-                // Not protected: find oldest in filtered songs
-                let mut oldest_idx = 0;
-                let mut oldest_r_index = 0;
-
-                for (_, entries) in &filtered_songs {
-                    for &(idx, r_index, _) in entries {
-                        if idx > oldest_idx {
-                            oldest_idx = idx;
-                            oldest_r_index = r_index;
-                        }
-                    }
-                }
-
-                if oldest_r_index != 0 {
-                    self.update_one_r30(user_id, oldest_r_index, score).await?;
-                }
+            // Not protected: find oldest score in filtered songs (efficient iterator approach)
+            if let Some(oldest_r_index) = filtered_songs
+                .values()
+                .flat_map(|entries| entries.iter())
+                .max_by_key(|(idx, _, _)| *idx)
+                .map(|(_, r_index, _)| *r_index)
+            {
+                self.update_one_r30(user_id, oldest_r_index, score).await?;
             }
         }
 

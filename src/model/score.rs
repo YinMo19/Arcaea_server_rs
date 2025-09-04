@@ -389,30 +389,9 @@ impl UserPlay {
             }
         }
 
-        // Validate combo interval bonus
-        if let Some(combo_bonus) = self.combo_interval_bonus {
-            if combo_bonus < 0 || combo_bonus > self.user_score.score.all_note_count() / 150 {
-                return false;
-            }
-        }
-
-        // Validate hp interval bonus
-        if let Some(hp_bonus) = self.hp_interval_bonus {
-            if hp_bonus < 0 {
-                return false;
-            }
-        }
-
-        // Validate fever bonus
-        if let Some(fever_bonus) = self.fever_bonus {
-            if fever_bonus < 0 || fever_bonus > self.user_score.score.perfect_count * 5 {
-                return false;
-            }
-        }
-
-        // Validate submission hash
+        // Build hash input string exactly like Python version
         let mut hash_input = format!(
-            "{}{}{}{}{}{}{}{}{}{}{}{}{}",
+            "{}{}{}{}{}{}{}{}{}{}{}{}",
             self.song_token,
             self.song_hash,
             self.user_score.score.song_id,
@@ -424,16 +403,32 @@ impl UserPlay {
             self.user_score.score.miss_count,
             self.user_score.score.health,
             self.user_score.score.modifier,
-            self.user_score.score.clear_type,
-            self.combo_interval_bonus
-                .map(|b| b.to_string())
-                .unwrap_or_default()
+            self.user_score.score.clear_type
         );
 
-        if let Some(fever_bonus) = self.fever_bonus {
-            hash_input.push_str(&fever_bonus.to_string());
+        // Validate combo interval bonus and add to hash if present
+        if let Some(combo_bonus) = self.combo_interval_bonus {
+            if combo_bonus < 0 || combo_bonus > self.user_score.score.all_note_count() / 150 {
+                return false;
+            }
+            hash_input.push_str(&combo_bonus.to_string());
         }
 
+        // Validate hp interval bonus (but don't add to hash)
+        if let Some(hp_bonus) = self.hp_interval_bonus {
+            if hp_bonus < 0 {
+                return false;
+            }
+        }
+
+        // Validate fever bonus (but don't add to hash)
+        if let Some(fever_bonus) = self.fever_bonus {
+            if fever_bonus < 0 || fever_bonus > self.user_score.score.perfect_count * 5 {
+                return false;
+            }
+        }
+
+        // Validate submission hash exactly like Python version
         let user_hash_input = format!("{}{}", self.user_score.user_id, self.song_hash);
         let expected_hash = crate::service::score::md5_hash(&format!(
             "{}{}",
