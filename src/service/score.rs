@@ -1,12 +1,14 @@
 use crate::error::{ArcError, ArcResult};
-use crate::service::UserService;
+// use crate::service::UserService;
 use serde_json::Value;
 
 use crate::model::download::{
     CourseTokenRequest, CourseTokenResponse, ScoreSubmission, SongplayToken, WorldTokenRequest,
     WorldTokenResponse,
 };
-use crate::model::score::{Potential, RankingScoreRow, Recent30Tuple, Score, UserPlay, UserScore};
+use crate::model::score::{
+    Potential, RankingScoreRow, RankingScoreRowComplete, Recent30Tuple, Score, UserPlay, UserScore,
+};
 use crate::model::user::User;
 use base64::{engine::general_purpose, Engine as _};
 use md5;
@@ -367,7 +369,7 @@ impl ScoreService {
         Ok(user_play.to_dict())
     }
 
-    /// Get top 20 scores for a song
+    /// Get top 30 scores for a song
     pub async fn get_song_top_scores(
         &self,
         song_id: &str,
@@ -376,14 +378,14 @@ impl ScoreService {
         let scores = sqlx::query_as!(
             RankingScoreRow,
             "SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
-             bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
-             bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
-             u.name, u.character_id, u.is_char_uncapped, u.is_skill_sealed
+                bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
+                bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
+                u.name, u.character_id, u.is_char_uncapped, u.is_skill_sealed
              FROM best_score bs
              JOIN user u ON bs.user_id = u.user_id
              WHERE bs.song_id = ? AND bs.difficulty = ?
              ORDER BY bs.score DESC, bs.time_played DESC
-             LIMIT 20",
+             LIMIT 30",
             song_id,
             difficulty
         )
@@ -567,13 +569,13 @@ impl ScoreService {
     ) -> ArcResult<Vec<HashMap<String, serde_json::Value>>> {
         // First get all friend scores using a JOIN instead of IN clause
         let scores = sqlx::query_as!(
-            RankingScoreRow,
-            "SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
-             bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
-             bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
-             u.name, u.character_id, u.is_char_uncapped, u.is_skill_sealed
+            RankingScoreRowComplete,
+            "SELECT bs.*, u.name, u.character_id, u.is_char_uncapped,
+                u.is_char_uncapped_override, u.favorite_character, u.is_skill_sealed,
+                c.name as song_name
              FROM best_score bs
              JOIN user u ON bs.user_id = u.user_id
+             LEFT JOIN chart c ON bs.song_id = c.song_id
              WHERE bs.song_id = ? AND bs.difficulty = ?
              AND (bs.user_id = ? OR EXISTS(
                  SELECT 1 FROM friend f
@@ -593,7 +595,7 @@ impl ScoreService {
             .into_iter()
             .enumerate()
             .map(|(rank, row)| {
-                row.to_user_score_with_rank(Some((rank + 1) as i32))
+                row.to_user_score_with_rank_and_display(Some((rank + 1) as i32))
                     .to_dict(true)
             })
             .collect();

@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,\n             bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,\n             bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,\n             u.name, u.character_id, u.is_char_uncapped, u.is_skill_sealed\n             FROM best_score bs\n             JOIN user u ON bs.user_id = u.user_id\n             WHERE bs.song_id = ? AND bs.difficulty = ?\n             AND (bs.user_id = ? OR EXISTS(\n                 SELECT 1 FROM friend f\n                 WHERE f.user_id_me = ? AND f.user_id_other = bs.user_id\n             ))\n             ORDER BY bs.score DESC, bs.time_played DESC\n             LIMIT 50",
+  "query": "SELECT bs.*, u.name, u.character_id, u.is_char_uncapped,\n                u.is_char_uncapped_override, u.favorite_character, u.is_skill_sealed,\n                c.name as song_name\n             FROM best_score bs\n             JOIN user u ON bs.user_id = u.user_id\n             LEFT JOIN chart c ON bs.song_id = c.song_id\n             WHERE bs.song_id = ? AND bs.difficulty = ?\n             AND (bs.user_id = ? OR EXISTS(\n                 SELECT 1 FROM friend f\n                 WHERE f.user_id_me = ? AND f.user_id_other = bs.user_id\n             ))\n             ORDER BY bs.score DESC, bs.time_played DESC\n             LIMIT 50",
   "describe": {
     "columns": [
       {
@@ -185,12 +185,42 @@
       },
       {
         "ordinal": 18,
+        "name": "is_char_uncapped_override",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 4
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "favorite_character",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 20,
         "name": "is_skill_sealed",
         "type_info": {
           "type": "Tiny",
           "flags": "",
           "char_set": 63,
           "max_size": 4
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "song_name",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "char_set": 224,
+          "max_size": 262140
         }
       }
     ],
@@ -216,8 +246,11 @@
       true,
       true,
       true,
+      true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "ed3627853400261ef1d586287b2d858f4b71f06cfd19fb11f47bd8b2cb81c845"
+  "hash": "7f4fd806c9504b7c791c609b641ffa15a195c5f2f2fd396e446945083c50b608"
 }

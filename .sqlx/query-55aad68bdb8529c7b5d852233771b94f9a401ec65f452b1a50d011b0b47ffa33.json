@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,\n             bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,\n             bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,\n             u.name, u.character_id, u.is_char_uncapped, u.is_skill_sealed\n             FROM best_score bs\n             JOIN user u ON bs.user_id = u.user_id\n             WHERE bs.song_id = ? AND bs.difficulty = ?\n             ORDER BY bs.score DESC, bs.time_played DESC\n             LIMIT 20",
+  "query": "SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,\n                bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,\n                bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,\n                u.name, u.character_id, u.is_char_uncapped, u.is_skill_sealed\n             FROM best_score bs\n             JOIN user u ON bs.user_id = u.user_id\n             WHERE bs.song_id = ? AND bs.difficulty = ?\n             ORDER BY bs.score DESC, bs.time_played DESC\n             LIMIT 30",
   "describe": {
     "columns": [
       {
@@ -219,5 +219,5 @@
       true
     ]
   },
-  "hash": "ce30d0ee31f79d590c986b076a270acfb7f63a2a557a91561abd8212352b92c8"
+  "hash": "55aad68bdb8529c7b5d852233771b94f9a401ec65f452b1a50d011b0b47ffa33"
 }

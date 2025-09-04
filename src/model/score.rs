@@ -699,6 +699,36 @@ pub struct RankingScoreRow {
     pub is_skill_sealed: Option<i8>,
 }
 
+/// Complete ranking score row with additional fields for friend rankings
+#[derive(Debug, sqlx::FromRow)]
+pub struct RankingScoreRowComplete {
+    // Score fields
+    pub user_id: i32,
+    pub song_id: String,
+    pub difficulty: i32,
+    pub score: Option<i32>,
+    pub shiny_perfect_count: Option<i32>,
+    pub perfect_count: Option<i32>,
+    pub near_count: Option<i32>,
+    pub miss_count: Option<i32>,
+    pub health: Option<i32>,
+    pub modifier: Option<i32>,
+    pub time_played: Option<i64>,
+    pub best_clear_type: Option<i32>,
+    pub clear_type: Option<i32>,
+    pub rating: Option<f64>,
+    pub score_v2: Option<f64>,
+    // User fields
+    pub name: Option<String>,
+    pub character_id: Option<i32>,
+    pub is_char_uncapped: Option<i8>,
+    pub is_char_uncapped_override: Option<i8>,
+    pub favorite_character: Option<i32>,
+    pub is_skill_sealed: Option<i8>,
+    // Song fields
+    pub song_name: Option<String>,
+}
+
 impl RankingScoreRow {
     /// Convert to UserScore with rank
     pub fn to_user_score_with_rank(&self, rank: Option<i32>) -> UserScore {
@@ -724,6 +754,60 @@ impl RankingScoreRow {
             best_clear_type: self.best_clear_type.unwrap_or(0),
             character: self.character_id.unwrap_or(0),
             is_char_uncapped: self.is_char_uncapped.unwrap_or(0),
+            is_skill_sealed: self.is_skill_sealed.unwrap_or(0),
+            rank,
+        }
+    }
+}
+
+impl RankingScoreRowComplete {
+    /// Convert to UserScore with rank using character display logic
+    pub fn to_user_score_with_rank_and_display(&self, rank: Option<i32>) -> UserScore {
+        let mut score = Score::new();
+        score.song_id = self.song_id.clone();
+        score.difficulty = self.difficulty;
+        score.score = self.score.unwrap_or(0);
+        score.shiny_perfect_count = self.shiny_perfect_count.unwrap_or(0);
+        score.perfect_count = self.perfect_count.unwrap_or(0);
+        score.near_count = self.near_count.unwrap_or(0);
+        score.miss_count = self.miss_count.unwrap_or(0);
+        score.health = self.health.unwrap_or(0);
+        score.modifier = self.modifier.unwrap_or(0);
+        score.time_played = self.time_played.unwrap_or(0);
+        score.clear_type = self.clear_type.unwrap_or(0);
+        score.rating = self.rating.unwrap_or(0.0);
+        score.score_v2 = self.score_v2.unwrap_or(0.0);
+
+        // Set song name if available
+        if let Some(song_name) = &self.song_name {
+            score.song_name = Some(song_name.clone());
+        }
+
+        // Determine displayed character (favorite_character takes precedence if set)
+        let displayed_character = if let Some(fav_char) = self.favorite_character {
+            if fav_char > 0 {
+                fav_char
+            } else {
+                self.character_id.unwrap_or(0)
+            }
+        } else {
+            self.character_id.unwrap_or(0)
+        };
+
+        // Determine displayed uncap status (consider is_char_uncapped_override)
+        let displayed_uncap = if self.is_char_uncapped_override.unwrap_or(0) != 0 {
+            0 // Override means hide uncap
+        } else {
+            self.is_char_uncapped.unwrap_or(0)
+        };
+
+        UserScore {
+            score,
+            user_id: self.user_id,
+            name: self.name.clone().unwrap_or_default(),
+            best_clear_type: self.best_clear_type.unwrap_or(0),
+            character: displayed_character,
+            is_char_uncapped: displayed_uncap,
             is_skill_sealed: self.is_skill_sealed.unwrap_or(0),
             rank,
         }
