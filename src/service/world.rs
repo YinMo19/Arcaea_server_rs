@@ -511,6 +511,10 @@ impl StaminaImpl {
         }
     }
 
+    pub fn max_stamina_ts(&self) -> i64 {
+        self.max_stamina_ts
+    }
+
     /// Set stamina value and update max_stamina_ts accordingly
     pub fn set_stamina(&mut self, value: i32) {
         self.stamina = value;

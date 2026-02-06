@@ -1,3 +1,4 @@
+use crate::config::CONFIG;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -315,11 +316,11 @@ impl UserScore {
             result.insert("name".to_string(), Value::from(self.name.clone()));
             result.insert(
                 "is_skill_sealed".to_string(),
-                Value::from(self.is_skill_sealed),
+                Value::from(self.is_skill_sealed != 0),
             );
             result.insert(
                 "is_char_uncapped".to_string(),
-                Value::from(self.is_char_uncapped),
+                Value::from(self.is_char_uncapped != 0),
             );
             result.insert("character".to_string(), Value::from(self.character));
         }
@@ -511,7 +512,7 @@ impl Potential {
 
     /// Calculate user's potential value
     pub fn value(&self) -> f64 {
-        self.calculate_value(0.75, 0.25) // BEST30_WEIGHT, RECENT10_WEIGHT
+        self.calculate_value(CONFIG.best30_weight, CONFIG.recent10_weight)
     }
 
     /// Calculate user's potential value with custom weights
@@ -696,7 +697,11 @@ pub struct RankingScoreRow {
     pub name: Option<String>,
     pub character_id: Option<i32>,
     pub is_char_uncapped: Option<i8>,
+    pub is_char_uncapped_override: Option<i8>,
+    pub favorite_character: Option<i32>,
     pub is_skill_sealed: Option<i8>,
+    pub favorite_is_uncapped: Option<i8>,
+    pub favorite_is_uncapped_override: Option<i8>,
 }
 
 /// Complete ranking score row with additional fields for friend rankings
@@ -725,6 +730,8 @@ pub struct RankingScoreRowComplete {
     pub is_char_uncapped_override: Option<i8>,
     pub favorite_character: Option<i32>,
     pub is_skill_sealed: Option<i8>,
+    pub favorite_is_uncapped: Option<i8>,
+    pub favorite_is_uncapped_override: Option<i8>,
     // Song fields
     pub song_name: Option<String>,
 }
@@ -747,13 +754,34 @@ impl RankingScoreRow {
         score.rating = self.rating.unwrap_or(0.0);
         score.score_v2 = self.score_v2.unwrap_or(0.0);
 
+        let favorite_character_id = self.favorite_character.unwrap_or(-1);
+        let (displayed_character, is_uncapped, is_uncapped_override) = if favorite_character_id == -1
+        {
+            (
+                self.character_id.unwrap_or(0),
+                self.is_char_uncapped.unwrap_or(0),
+                self.is_char_uncapped_override.unwrap_or(0),
+            )
+        } else {
+            (
+                favorite_character_id,
+                self.favorite_is_uncapped.unwrap_or(0),
+                self.favorite_is_uncapped_override.unwrap_or(0),
+            )
+        };
+        let is_char_uncapped_displayed = if is_uncapped_override != 0 {
+            0
+        } else {
+            is_uncapped
+        };
+
         UserScore {
             score,
             user_id: self.user_id,
             name: self.name.clone().unwrap_or_default(),
             best_clear_type: self.best_clear_type.unwrap_or(0),
-            character: self.character_id.unwrap_or(0),
-            is_char_uncapped: self.is_char_uncapped.unwrap_or(0),
+            character: displayed_character,
+            is_char_uncapped: is_char_uncapped_displayed,
             is_skill_sealed: self.is_skill_sealed.unwrap_or(0),
             rank,
         }
@@ -778,27 +806,25 @@ impl RankingScoreRowComplete {
         score.rating = self.rating.unwrap_or(0.0);
         score.score_v2 = self.score_v2.unwrap_or(0.0);
 
-        // Set song name if available
-        if let Some(song_name) = &self.song_name {
-            score.song_name = Some(song_name.clone());
-        }
-
-        // Determine displayed character (favorite_character takes precedence if set)
-        let displayed_character = if let Some(fav_char) = self.favorite_character {
-            if fav_char > 0 {
-                fav_char
-            } else {
-                self.character_id.unwrap_or(0)
-            }
+        let favorite_character_id = self.favorite_character.unwrap_or(-1);
+        let (displayed_character, is_uncapped, is_uncapped_override) = if favorite_character_id == -1
+        {
+            (
+                self.character_id.unwrap_or(0),
+                self.is_char_uncapped.unwrap_or(0),
+                self.is_char_uncapped_override.unwrap_or(0),
+            )
         } else {
-            self.character_id.unwrap_or(0)
+            (
+                favorite_character_id,
+                self.favorite_is_uncapped.unwrap_or(0),
+                self.favorite_is_uncapped_override.unwrap_or(0),
+            )
         };
-
-        // Determine displayed uncap status (consider is_char_uncapped_override)
-        let displayed_uncap = if self.is_char_uncapped_override.unwrap_or(0) != 0 {
-            0 // Override means hide uncap
+        let displayed_uncap = if is_uncapped_override != 0 {
+            0
         } else {
-            self.is_char_uncapped.unwrap_or(0)
+            is_uncapped
         };
 
         UserScore {

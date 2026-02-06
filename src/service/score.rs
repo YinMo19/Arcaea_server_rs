@@ -2,6 +2,7 @@ use crate::error::{ArcError, ArcResult};
 // use crate::service::UserService;
 use serde_json::Value;
 
+use crate::config::{Constants, CONFIG};
 use crate::model::download::{
     CourseTokenRequest, CourseTokenResponse, ScoreSubmission, SongplayToken, WorldTokenRequest,
     WorldTokenResponse,
@@ -10,19 +11,18 @@ use crate::model::score::{
     Potential, RankingScoreRow, RankingScoreRowComplete, Recent30Tuple, Score, UserPlay, UserScore,
 };
 use crate::model::user::User;
+use crate::service::world::{get_map_parser, StaminaImpl};
 use base64::{engine::general_purpose, Engine as _};
 use md5;
 use rand::Rng;
 use sqlx::MySqlPool;
 use std::collections::HashMap;
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Constants for score calculations
 const BEST30_WEIGHT: f64 = 1.0 / 40.0;
 const RECENT10_WEIGHT: f64 = 1.0 / 40.0;
-const COURSE_STAMINA_COST: i32 = 2;
-const INVASION_START_WEIGHT: f64 = 0.1;
-const INVASION_HARD_WEIGHT: f64 = 0.1;
 
 /// Score service for handling score submission, validation, and calculations
 pub struct ScoreService {
@@ -98,12 +98,14 @@ impl ScoreService {
 
         // Get user map and character info for stamina and skill processing
         let stamina_cost = self.get_user_current_map(user_id).await?;
-        // Validate stamina (including Fatalis multiplier)
-        if user.stamina.unwrap_or(0) < stamina_cost * stamina_multiply {
-            return Err(ArcError::Base {
+        let mut stamina = StaminaImpl::new(user.stamina.unwrap_or(0), user.max_stamina_ts.unwrap_or(0));
+        let current_stamina = stamina.get_current_stamina();
+
+        if current_stamina < stamina_cost * stamina_multiply {
+            return Err(ArcError::StaminaNotEnough {
                 message: "Stamina is not enough.".to_string(),
-                error_code: 108,
-                api_error_code: -901,
+                error_code: 107,
+                api_error_code: -999,
                 extra_data: None,
                 status: 200,
             });
@@ -122,23 +124,17 @@ impl ScoreService {
             .fetch_optional(&self.pool)
             .await?;
 
-            if let Some(char_data) = character_info {
-                // Check for Fatalis skill (double stamina cost)
-                if char_data.skill_id.as_deref() == Some("skill_fatalis") {
-                    fatalis_stamina_multiply = 2;
-                }
-            }
-
             // Invasion logic - only if insight is enabled (insight_state == 3 or 5)
             let insight_state = user.insight_state.unwrap_or(4);
             if insight_state == 3 || insight_state == 5 {
                 // Use weighted choice like Python's choices([0, 1, 2], [weights])
                 let no_invasion_weight =
-                    (1.0 - INVASION_START_WEIGHT - INVASION_HARD_WEIGHT).max(0.0f64);
+                    (1.0 - CONFIG.invasion_start_weight - CONFIG.invasion_hard_weight)
+                        .max(0.0f64);
                 let weights = [
                     no_invasion_weight,
-                    INVASION_START_WEIGHT,
-                    INVASION_HARD_WEIGHT,
+                    CONFIG.invasion_start_weight,
+                    CONFIG.invasion_hard_weight,
                 ];
                 let mut cumulative = 0.0;
                 let rand_val: f64 = rand::thread_rng().gen();
@@ -146,8 +142,20 @@ impl ScoreService {
                 for (i, &weight) in weights.iter().enumerate() {
                     cumulative += weight;
                     if rand_val < cumulative {
-                        invasion_flag = i as i32;
+                        let flag = i as i32;
+                        if flag != 0 {
+                            invasion_flag = flag;
+                        }
                         break;
+                    }
+                }
+            }
+
+            // Python baseline: Fatalis double stamina triggers only when invasion didn't trigger.
+            if invasion_flag == 0 {
+                if let Some(char_data) = character_info {
+                    if char_data.skill_id.as_deref() == Some("skill_fatalis") {
+                        fatalis_stamina_multiply = 2;
                     }
                 }
             }
@@ -177,12 +185,15 @@ impl ScoreService {
         .execute(&self.pool)
         .await?;
 
-        // Update user stamina
+        // Update user stamina (matches Python's Stamina setter semantics)
+        stamina.set_stamina(
+            current_stamina - stamina_cost * stamina_multiply * fatalis_stamina_multiply,
+        );
         sqlx::query!(
-            "UPDATE user SET stamina = stamina - ?, max_stamina_ts = ? WHERE user_id = ?",
-            stamina_cost * stamina_multiply * fatalis_stamina_multiply,
-            user.max_stamina_ts,
-            user.user_id
+            "UPDATE user SET stamina = ?, max_stamina_ts = ? WHERE user_id = ?",
+            stamina.get_current_stamina(),
+            stamina.max_stamina_ts(),
+            user_id
         )
         .execute(&self.pool)
         .await?;
@@ -190,8 +201,8 @@ impl ScoreService {
         // Build play parameters
         let mut play_parameters = HashMap::new();
 
-        if let Some(skill_flag) = skill_cytusii_flag.or(skill_chinatsu_flag) {
-            if let Some(skill_id) = request.skill_id {
+        if let Some(skill_flag) = skill_cytusii_flag.clone().or(skill_chinatsu_flag.clone()) {
+            if let Some(skill_id) = request.skill_id.clone() {
                 let values: Vec<String> = skill_flag
                     .chars()
                     .map(|c| get_world_value_name(c.to_digit(10).unwrap_or(0) as i32))
@@ -209,11 +220,9 @@ impl ScoreService {
             play_parameters.insert("invasion_hard".to_string(), Value::Bool(true));
         }
 
-        let updated_user = self.get_user_info(user_id).await?;
-
         Ok(WorldTokenResponse {
-            stamina: updated_user.stamina.unwrap_or(0),
-            max_stamina_ts: updated_user.max_stamina_ts.unwrap_or(0),
+            stamina: stamina.get_current_stamina(),
+            max_stamina_ts: stamina.max_stamina_ts(),
             token,
             play_parameters,
         })
@@ -225,7 +234,6 @@ impl ScoreService {
         user_id: i32,
         request: CourseTokenRequest,
     ) -> ArcResult<CourseTokenResponse> {
-        // let user = self.get_user_info(user_id).await?;
         let use_course_skip_purchase = request.use_course_skip_purchase;
 
         let mut status = "created".to_string();
@@ -276,14 +284,14 @@ impl ScoreService {
             } else {
                 "failed".to_string()
             };
-            token = "".to_string();
+            token = request.previous_token.unwrap_or_default();
         }
 
-        let updated_user = self.get_user_info(user_id).await?;
+        let (stamina, max_stamina_ts) = self.get_user_stamina_info(user_id).await?;
 
         Ok(CourseTokenResponse {
-            stamina: updated_user.stamina.unwrap_or(0),
-            max_stamina_ts: updated_user.max_stamina_ts.unwrap_or(0),
+            stamina,
+            max_stamina_ts,
             token,
             status,
         })
@@ -357,40 +365,90 @@ impl ScoreService {
             .get_song_file_hash(&submission.song_id, submission.difficulty)
             .await;
         if !user_play.is_valid(expected_hash.as_deref()) {
-            return Err(ArcError::input("Invalid score"));
+            return Err(ArcError::Input {
+                message: "Invalid score.".to_string(),
+                error_code: 107,
+                api_error_code: -100,
+                extra_data: None,
+                status: 200,
+            });
         }
 
         // Upload score (which handles rating calculation internally)
         self.upload_score(&mut user_play).await?;
 
-        // Create potential instance for response
-        user_play.ptt = Some(self.calculate_user_potential(user_id).await?);
+        // Python baseline response: (world/course payload) + common fields
+        let potential = self.calculate_user_potential(user_id).await?;
+        let ptt_value = potential.calculate_value(BEST30_WEIGHT, RECENT10_WEIGHT);
+        user_play.ptt = Some(potential);
 
-        Ok(user_play.to_dict())
+        let user_rating = self.get_user_rating_ptt(user_id).await?;
+        let global_rank = self.get_user_global_rank(user_id).await?;
+
+        let mut result = HashMap::new();
+        result.insert("user_rating".to_string(), Value::from(user_rating));
+        result.insert(
+            "finale_challenge_higher".to_string(),
+            Value::from(user_play.user_score.score.rating > ptt_value),
+        );
+        result.insert("global_rank".to_string(), Value::from(global_rank));
+        result.insert(
+            "finale_play_value".to_string(),
+            Value::from(9.065 * user_play.user_score.score.rating.sqrt()),
+        );
+
+        Ok(result)
     }
 
-    /// Get top 30 scores for a song
+    /// Get top 20 scores for a song
     pub async fn get_song_top_scores(
         &self,
         song_id: &str,
         difficulty: i32,
     ) -> ArcResult<Vec<HashMap<String, serde_json::Value>>> {
-        let scores = sqlx::query_as!(
-            RankingScoreRow,
-            "SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
-                bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
-                bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
-                u.name, u.character_id, u.is_char_uncapped, u.is_skill_sealed
-             FROM best_score bs
-             JOIN user u ON bs.user_id = u.user_id
-             WHERE bs.song_id = ? AND bs.difficulty = ?
-             ORDER BY bs.score DESC, bs.time_played DESC
-             LIMIT 30",
-            song_id,
-            difficulty
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let scores = if CONFIG.character_full_unlock {
+            sqlx::query_as!(
+                RankingScoreRow,
+                r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
+                    bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
+                    bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
+                    u.name, u.character_id, u.is_char_uncapped, u.is_char_uncapped_override,
+                    u.favorite_character, u.is_skill_sealed,
+                    uc.is_uncapped as favorite_is_uncapped,
+                    uc.is_uncapped_override as favorite_is_uncapped_override
+                 FROM best_score bs
+                 JOIN user u ON bs.user_id = u.user_id
+                 LEFT JOIN user_char_full uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character
+                 WHERE bs.song_id = ? AND bs.difficulty = ?
+                 ORDER BY bs.score DESC, bs.time_played DESC
+                 LIMIT 20"#,
+                song_id,
+                difficulty
+            )
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as!(
+                RankingScoreRow,
+                r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
+                    bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
+                    bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
+                    u.name, u.character_id, u.is_char_uncapped, u.is_char_uncapped_override,
+                    u.favorite_character, u.is_skill_sealed,
+                    uc.is_uncapped as favorite_is_uncapped,
+                    uc.is_uncapped_override as favorite_is_uncapped_override
+                 FROM best_score bs
+                 JOIN user u ON bs.user_id = u.user_id
+                 LEFT JOIN user_char uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character
+                 WHERE bs.song_id = ? AND bs.difficulty = ?
+                 ORDER BY bs.score DESC, bs.time_played DESC
+                 LIMIT 20"#,
+                song_id,
+                difficulty
+            )
+            .fetch_all(&self.pool)
+            .await?
+        };
 
         let result = scores
             .into_iter()
@@ -461,24 +519,53 @@ impl ScoreService {
             );
 
             // Get scores with calculated offset and limit
-            let scores = sqlx::query_as!(
-                RankingScoreRow,
-                "SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
-                 bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
-                 bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
-                 u.name, u.character_id, u.is_char_uncapped, u.is_skill_sealed
-                 FROM best_score bs
-                 JOIN user u ON bs.user_id = u.user_id
-                 WHERE bs.song_id = ? AND bs.difficulty = ?
-                 ORDER BY bs.score DESC, bs.time_played DESC
-                 LIMIT ? OFFSET ?",
-                song_id,
-                difficulty,
-                sql_limit,
-                sql_offset
-            )
-            .fetch_all(&self.pool)
-            .await?;
+            let scores = if CONFIG.character_full_unlock {
+                sqlx::query_as!(
+                    RankingScoreRow,
+                    r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
+                        bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
+                        bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
+                        u.name, u.character_id, u.is_char_uncapped, u.is_char_uncapped_override,
+                        u.favorite_character, u.is_skill_sealed,
+                        uc.is_uncapped as favorite_is_uncapped,
+                        uc.is_uncapped_override as favorite_is_uncapped_override
+                     FROM best_score bs
+                     JOIN user u ON bs.user_id = u.user_id
+                     LEFT JOIN user_char_full uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character
+                     WHERE bs.song_id = ? AND bs.difficulty = ?
+                     ORDER BY bs.score DESC, bs.time_played DESC
+                     LIMIT ? OFFSET ?"#,
+                    song_id,
+                    difficulty,
+                    sql_limit,
+                    sql_offset
+                )
+                .fetch_all(&self.pool)
+                .await?
+            } else {
+                sqlx::query_as!(
+                    RankingScoreRow,
+                    r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
+                        bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
+                        bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
+                        u.name, u.character_id, u.is_char_uncapped, u.is_char_uncapped_override,
+                        u.favorite_character, u.is_skill_sealed,
+                        uc.is_uncapped as favorite_is_uncapped,
+                        uc.is_uncapped_override as favorite_is_uncapped_override
+                     FROM best_score bs
+                     JOIN user u ON bs.user_id = u.user_id
+                     LEFT JOIN user_char uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character
+                     WHERE bs.song_id = ? AND bs.difficulty = ?
+                     ORDER BY bs.score DESC, bs.time_played DESC
+                     LIMIT ? OFFSET ?"#,
+                    song_id,
+                    difficulty,
+                    sql_limit,
+                    sql_offset
+                )
+                .fetch_all(&self.pool)
+                .await?
+            };
 
             let mut result = Vec::new();
 
@@ -494,21 +581,47 @@ impl ScoreService {
 
             // Add user's own score at the end if needed
             if need_myself {
-                let user_own_score = sqlx::query_as!(
-                    RankingScoreRow,
-                    "SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
-                     bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
-                     bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
-                     u.name, u.character_id, u.is_char_uncapped, u.is_skill_sealed
-                     FROM best_score bs
-                     JOIN user u ON bs.user_id = u.user_id
-                     WHERE bs.user_id = ? AND bs.song_id = ? AND bs.difficulty = ?",
-                    user_id,
-                    song_id,
-                    difficulty
-                )
-                .fetch_one(&self.pool)
-                .await?;
+                let user_own_score = if CONFIG.character_full_unlock {
+                    sqlx::query_as!(
+                        RankingScoreRow,
+                        r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
+                            bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
+                            bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
+                            u.name, u.character_id, u.is_char_uncapped, u.is_char_uncapped_override,
+                            u.favorite_character, u.is_skill_sealed,
+                            uc.is_uncapped as favorite_is_uncapped,
+                            uc.is_uncapped_override as favorite_is_uncapped_override
+                         FROM best_score bs
+                         JOIN user u ON bs.user_id = u.user_id
+                         LEFT JOIN user_char_full uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character
+                         WHERE bs.user_id = ? AND bs.song_id = ? AND bs.difficulty = ?"#,
+                        user_id,
+                        song_id,
+                        difficulty
+                    )
+                    .fetch_one(&self.pool)
+                    .await?
+                } else {
+                    sqlx::query_as!(
+                        RankingScoreRow,
+                        r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
+                            bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
+                            bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
+                            u.name, u.character_id, u.is_char_uncapped, u.is_char_uncapped_override,
+                            u.favorite_character, u.is_skill_sealed,
+                            uc.is_uncapped as favorite_is_uncapped,
+                            uc.is_uncapped_override as favorite_is_uncapped_override
+                         FROM best_score bs
+                         JOIN user u ON bs.user_id = u.user_id
+                         LEFT JOIN user_char uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character
+                         WHERE bs.user_id = ? AND bs.song_id = ? AND bs.difficulty = ?"#,
+                        user_id,
+                        song_id,
+                        difficulty
+                    )
+                    .fetch_one(&self.pool)
+                    .await?
+                };
 
                 result.push(
                     user_own_score
@@ -558,6 +671,10 @@ impl ScoreService {
             sql_offset = max_global_position - limit;
         }
 
+        if sql_offset < 0 {
+            sql_offset = 0;
+        }
+
         (sql_limit, sql_offset, need_myself)
     }
 
@@ -568,28 +685,59 @@ impl ScoreService {
         difficulty: i32,
     ) -> ArcResult<Vec<HashMap<String, serde_json::Value>>> {
         // First get all friend scores using a JOIN instead of IN clause
-        let scores = sqlx::query_as!(
-            RankingScoreRowComplete,
-            "SELECT bs.*, u.name, u.character_id, u.is_char_uncapped,
-                u.is_char_uncapped_override, u.favorite_character, u.is_skill_sealed,
-                c.name as song_name
-             FROM best_score bs
-             JOIN user u ON bs.user_id = u.user_id
-             LEFT JOIN chart c ON bs.song_id = c.song_id
-             WHERE bs.song_id = ? AND bs.difficulty = ?
-             AND (bs.user_id = ? OR EXISTS(
-                 SELECT 1 FROM friend f
-                 WHERE f.user_id_me = ? AND f.user_id_other = bs.user_id
-             ))
-             ORDER BY bs.score DESC, bs.time_played DESC
-             LIMIT 50",
-            song_id,
-            difficulty,
-            user_id,
-            user_id
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let scores = if CONFIG.character_full_unlock {
+            sqlx::query_as!(
+                RankingScoreRowComplete,
+                r#"SELECT bs.*, u.name, u.character_id, u.is_char_uncapped,
+                    u.is_char_uncapped_override, u.favorite_character, u.is_skill_sealed,
+                    uc.is_uncapped as favorite_is_uncapped,
+                    uc.is_uncapped_override as favorite_is_uncapped_override,
+                    c.name as song_name
+                 FROM best_score bs
+                 JOIN user u ON bs.user_id = u.user_id
+                 LEFT JOIN user_char_full uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character
+                 LEFT JOIN chart c ON bs.song_id = c.song_id
+                 WHERE bs.song_id = ? AND bs.difficulty = ?
+                 AND (bs.user_id = ? OR EXISTS(
+                     SELECT 1 FROM friend f
+                     WHERE f.user_id_me = ? AND f.user_id_other = bs.user_id
+                 ))
+                 ORDER BY bs.score DESC, bs.time_played DESC
+                 LIMIT 50"#,
+                song_id,
+                difficulty,
+                user_id,
+                user_id
+            )
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as!(
+                RankingScoreRowComplete,
+                r#"SELECT bs.*, u.name, u.character_id, u.is_char_uncapped,
+                    u.is_char_uncapped_override, u.favorite_character, u.is_skill_sealed,
+                    uc.is_uncapped as favorite_is_uncapped,
+                    uc.is_uncapped_override as favorite_is_uncapped_override,
+                    c.name as song_name
+                 FROM best_score bs
+                 JOIN user u ON bs.user_id = u.user_id
+                 LEFT JOIN user_char uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character
+                 LEFT JOIN chart c ON bs.song_id = c.song_id
+                 WHERE bs.song_id = ? AND bs.difficulty = ?
+                 AND (bs.user_id = ? OR EXISTS(
+                     SELECT 1 FROM friend f
+                     WHERE f.user_id_me = ? AND f.user_id_other = bs.user_id
+                 ))
+                 ORDER BY bs.score DESC, bs.time_played DESC
+                 LIMIT 50"#,
+                song_id,
+                difficulty,
+                user_id,
+                user_id
+            )
+            .fetch_all(&self.pool)
+            .await?
+        };
 
         let result = scores
             .into_iter()
@@ -612,17 +760,32 @@ impl ScoreService {
             .map_err(|e| ArcError::no_data(format!("User not found: {}", e), 108))
     }
 
-    async fn get_play_state(&self, token: &str, user_id: i32) -> ArcResult<SongplayToken> {
+    async fn get_user_stamina_info(&self, user_id: i32) -> ArcResult<(i32, i64)> {
+        let row = sqlx::query!(
+            "SELECT max_stamina_ts, stamina FROM user WHERE user_id = ?",
+            user_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        let stamina = StaminaImpl::new(row.stamina.unwrap_or(0), row.max_stamina_ts.unwrap_or(0));
+        Ok((stamina.get_current_stamina(), stamina.max_stamina_ts()))
+    }
+
+    async fn get_play_state(&self, token: &str, user_id: i32) -> ArcResult<Option<SongplayToken>> {
         let result = sqlx::query!(
             "SELECT token, user_id, song_id, difficulty, course_id, course_state, course_score, course_clear_type, stamina_multiply, fragment_multiply, prog_boost_multiply, beyond_boost_gauge_usage, skill_cytusii_flag, skill_chinatsu_flag, invasion_flag FROM songplay_token WHERE token = ? AND user_id = ?",
             token,
             user_id
         )
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|_| ArcError::no_data("Invalid token".to_string(), 108))?;
+        .fetch_optional(&self.pool)
+        .await?;
 
-        Ok(SongplayToken {
+        let Some(result) = result else {
+            return Ok(None);
+        };
+
+        Ok(Some(SongplayToken {
             token: result.token,
             user_id: result.user_id.unwrap_or(0),
             song_id: result.song_id.unwrap_or_default(),
@@ -638,7 +801,7 @@ impl ScoreService {
             skill_cytusii_flag: result.skill_cytusii_flag,
             skill_chinatsu_flag: result.skill_chinatsu_flag,
             invasion_flag: result.invasion_flag.unwrap_or(0),
-        })
+        }))
     }
 
     async fn get_chart_constant(&self, song_id: &str, difficulty: i32) -> ArcResult<f64> {
@@ -665,8 +828,27 @@ impl ScoreService {
         }
     }
 
-    async fn get_song_file_hash(&self, _song_id: &str, _difficulty: i32) -> Option<String> {
-        // TODO: Implement actual file hash calculation
+    async fn get_song_file_hash(&self, song_id: &str, difficulty: i32) -> Option<String> {
+        let file_name = format!("{difficulty}.aff");
+
+        // Python baseline: check chart MD5 if the server has the file; otherwise skip.
+        // In this Rust repo we usually keep songs under `./songs/<song_id>/<difficulty>.aff`,
+        // but also try `CONFIG.song_file_folder_path` for compatibility.
+        let candidates = [
+            Path::new("songs").join(song_id).join(&file_name),
+            Path::new(&CONFIG.song_file_folder_path)
+                .join(song_id)
+                .join(&file_name),
+        ];
+
+        for path in candidates {
+            if path.is_file() {
+                if let Ok(contents) = std::fs::read(&path) {
+                    return Some(format!("{:x}", md5::compute(&contents)));
+                }
+            }
+        }
+
         None
     }
 
@@ -707,32 +889,8 @@ impl ScoreService {
         use_skip_purchase: bool,
     ) -> ArcResult<String> {
         let token = generate_course_token();
-        if use_skip_purchase {
-            // TODO: Handle course skip purchase
-        } else {
-            // Check stamina
-            let user = self.get_user_info(user_id).await?;
-            if user.stamina.unwrap_or(0) < COURSE_STAMINA_COST {
-                return Err(ArcError::Base {
-                    message: "Stamina is not enough".to_string(),
-                    error_code: 108,
-                    api_error_code: -901,
-                    extra_data: None,
-                    status: 200,
-                });
-            }
 
-            // Deduct stamina
-            sqlx::query!(
-                "UPDATE user SET stamina = stamina - ? WHERE user_id = ?",
-                COURSE_STAMINA_COST,
-                user_id
-            )
-            .execute(&self.pool)
-            .await?;
-        }
-
-        // Insert course token
+        // Python baseline: insert token first, then deduct stamina / consume skip item.
         sqlx::query!(
             "INSERT INTO songplay_token VALUES (?, ?, '', 0, ?, 0, 0, 3, 1, 100, 0, 0, '', '', 0)",
             token,
@@ -741,6 +899,43 @@ impl ScoreService {
         )
         .execute(&self.pool)
         .await?;
+
+        if use_skip_purchase {
+            // TODO: consume core_course_skip_purchase (matches Python ItemCore usage)
+        } else {
+            let stamina_row = sqlx::query!(
+                "SELECT max_stamina_ts, stamina FROM user WHERE user_id = ?",
+                user_id
+            )
+            .fetch_one(&self.pool)
+            .await?;
+
+            let mut stamina = StaminaImpl::new(
+                stamina_row.stamina.unwrap_or(0),
+                stamina_row.max_stamina_ts.unwrap_or(0),
+            );
+            let current_stamina = stamina.get_current_stamina();
+
+            if current_stamina < Constants::COURSE_STAMINA_COST {
+                return Err(ArcError::StaminaNotEnough {
+                    message: "Stamina is not enough.".to_string(),
+                    error_code: 107,
+                    api_error_code: -999,
+                    extra_data: None,
+                    status: 200,
+                });
+            }
+
+            stamina.set_stamina(current_stamina - Constants::COURSE_STAMINA_COST);
+            sqlx::query!(
+                "UPDATE user SET stamina = ?, max_stamina_ts = ? WHERE user_id = ?",
+                stamina.get_current_stamina(),
+                stamina.max_stamina_ts(),
+                user_id
+            )
+            .execute(&self.pool)
+            .await?;
+        }
 
         Ok(token)
     }
@@ -761,19 +956,36 @@ impl ScoreService {
     async fn upload_score(&self, user_play: &mut UserPlay) -> ArcResult<()> {
         let user_id = user_play.user_score.user_id;
 
-        // Get play state first (like Python version)
-        let play_state = self.get_play_state(&user_play.song_token, user_id).await?;
+        // Get play state first (Python baseline: token may be missing; only used to detect world/course mode).
+        if user_play.song_token == "1145141919810" {
+            // Hardcoded bypass token
+            user_play.is_world_mode = Some(false);
+            user_play.course_play_state = -1;
+        } else if let Some(play_state) = self.get_play_state(&user_play.song_token, user_id).await?
+        {
+            let course_id = play_state.course_id.clone().unwrap_or_default();
+            if course_id.is_empty() {
+                // World mode: course_id is an empty string in Python
+                user_play.is_world_mode = Some(true);
+                user_play.course_play_state = -1;
+            } else {
+                // Course mode
+                user_play.is_world_mode = Some(false);
+                user_play.course_play_state = play_state.course_state;
+            }
 
-        // Set play state info
-        user_play.is_world_mode = Some(play_state.course_id.is_none());
-        user_play.stamina_multiply = play_state.stamina_multiply;
-        user_play.fragment_multiply = play_state.fragment_multiply;
-        user_play.prog_boost_multiply = play_state.prog_boost_multiply;
-        user_play.beyond_boost_gauge_usage = play_state.beyond_boost_gauge_usage;
-        user_play.course_play_state = play_state.course_state;
-        user_play.skill_cytusii_flag = play_state.skill_cytusii_flag;
-        user_play.skill_chinatsu_flag = play_state.skill_chinatsu_flag;
-        user_play.invasion_flag = play_state.invasion_flag;
+            user_play.stamina_multiply = play_state.stamina_multiply;
+            user_play.fragment_multiply = play_state.fragment_multiply;
+            user_play.prog_boost_multiply = play_state.prog_boost_multiply;
+            user_play.beyond_boost_gauge_usage = play_state.beyond_boost_gauge_usage;
+            user_play.skill_cytusii_flag = play_state.skill_cytusii_flag;
+            user_play.skill_chinatsu_flag = play_state.skill_chinatsu_flag;
+            user_play.invasion_flag = play_state.invasion_flag;
+        } else {
+            // Missing token: treat as non-world/non-course (same as Python)
+            user_play.is_world_mode = Some(false);
+            user_play.course_play_state = -1;
+        }
 
         // Get rating by calc (like Python version)
         let chart_const = self
@@ -792,8 +1004,8 @@ impl ScoreService {
             user_play.unrank_flag = false;
         }
 
-        // Set timestamp
-        user_play.user_score.score.time_played = current_timestamp();
+        // Set timestamp (Python baseline: best_score / recent30 uses seconds)
+        user_play.user_score.score.time_played = current_timestamp_seconds();
 
         // Record score to log database
         self.record_score(user_play).await?;
@@ -1222,6 +1434,38 @@ impl ScoreService {
         Ok(user.rating_ptt.unwrap_or(0))
     }
 
+    async fn get_user_global_rank(&self, user_id: i32) -> ArcResult<i32> {
+        let user_score = sqlx::query!(
+            "SELECT world_rank_score FROM user WHERE user_id = ?",
+            user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let Some(score_row) = user_score else {
+            return Ok(0);
+        };
+
+        let world_rank_score = score_row.world_rank_score.unwrap_or(0);
+        if world_rank_score == 0 {
+            return Ok(0);
+        }
+
+        let rank_result = sqlx::query!(
+            "SELECT COUNT(*) as count FROM user WHERE world_rank_score > ?",
+            world_rank_score
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        let rank = rank_result.count as i32 + 1;
+        if rank <= CONFIG.world_rank_max {
+            Ok(rank)
+        } else {
+            Ok(0)
+        }
+    }
+
     /// Record score to log database
     async fn record_score(&self, _user_play: &UserPlay) -> ArcResult<()> {
         // This would record to a separate log database
@@ -1271,14 +1515,17 @@ impl ScoreService {
             .fetch_one(&self.pool)
             .await?;
 
-        // TODO: get world map info.
-        // Get stamina cost based on current map (simplified logic for now)
         let current_map = user.current_map.unwrap_or_default();
-        if current_map.contains("beyond") {
-            Ok(2)
+        let current_map = if current_map.is_empty() {
+            "tutorial".to_string()
         } else {
-            Ok(1)
-        }
+            current_map
+        };
+
+        let parser = get_map_parser();
+        let map = parser.load_world_map(&current_map)?;
+
+        Ok(map.stamina_cost.unwrap_or(1))
     }
 
     /// Update user's global rank
@@ -1372,6 +1619,13 @@ fn current_timestamp() -> i64 {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis() as i64
+}
+
+fn current_timestamp_seconds() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
 }
 
 /// Calculate MD5 hash of a string

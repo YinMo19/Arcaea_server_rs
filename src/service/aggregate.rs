@@ -59,18 +59,24 @@ pub async fn handle_world_all(
 
 /// Handle /score/song/friend endpoint
 pub async fn handle_song_score_friend(
-    _score_service: &ScoreService,
+    score_service: &ScoreService,
     _user_service: &UserService,
-    _user_id: i32,
+    user_id: i32,
     query_params: &HashMap<String, String>,
 ) -> Result<serde_json::Value, ArcError> {
-    // Get song_id and difficulty from query params
-    let _song_id = query_params.get("song_id");
-    let _difficulty = query_params.get("difficulty");
+    let song_id = query_params
+        .get("song_id")
+        .ok_or_else(|| ArcError::input("song_id is required"))?;
+    let difficulty = query_params
+        .get("difficulty")
+        .and_then(|v| v.parse::<i32>().ok())
+        .ok_or_else(|| ArcError::input("difficulty is required"))?;
 
-    // For now, return empty friend score list since friend system is not implemented
-    // In the future, this should query friend scores from the database
-    Ok(serde_json::json!([]))
+    let scores = score_service
+        .get_friend_song_ranks(user_id, song_id, difficulty)
+        .await?;
+
+    Ok(serde_json::to_value(scores)?)
 }
 
 /// Handle /serve/download/me/song endpoint
