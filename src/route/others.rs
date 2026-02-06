@@ -73,9 +73,11 @@ pub async fn game_content_bundle(
 
 /// Finale progress endpoint
 ///
-/// return full percentage.
-#[post("/finale/progress")]
-pub async fn finale_progress(_auth: AuthGuard) -> RouteResult<Value> {
+/// Return full percentage.
+///
+/// Python baseline: `GET /finale/progress` does not require authentication.
+#[get("/finale/progress")]
+pub async fn finale_progress() -> RouteResult<Value> {
     // world boss percentage
     Ok(success_return(serde_json::json!({"percentage": 100000})))
 }
@@ -142,7 +144,14 @@ pub async fn insight_complete(
             3
         }
         _ => {
-            return Err(ArcError::input(format!("Invalid pack_id: {pack_id}")));
+            // Python baseline: `ArcError("Invalid pack_id", 151, status=404)`
+            return Err(ArcError::Base {
+                message: "Invalid pack_id".to_string(),
+                error_code: 151,
+                api_error_code: -999,
+                extra_data: None,
+                status: 404,
+            });
         }
     };
 
@@ -165,6 +174,12 @@ pub async fn applog_me(_log_data: Json<serde_json::Value>) -> RouteResult<EmptyR
 ///
 /// Handles integrated requests that combine multiple API calls.
 /// Processes up to 10 requests in a single call for efficiency.
+///
+/// Python baseline notes:
+/// - This endpoint itself does **not** require authentication.
+/// - Each inner endpoint may require `Authorization: Bearer <token>`.
+/// - Invalid payload / too many calls / unknown inner endpoint behaves like `error_return()`
+///   (HTTP 500, `{"success": false, "error_code": 108}`).
 #[get("/compose/aggregate?<calls>")]
 pub async fn aggregate(
     calls: String,
@@ -174,66 +189,91 @@ pub async fn aggregate(
     present_service: &State<PresentService>,
     world_service: &State<WorldService>,
     purchase_service: &State<PurchaseService>,
-    auth: AuthGuard,
+    ctx: ClientContext<'_>,
 ) -> Result<AggregateResponse, ArcError> {
-    // Parse the calls parameter as JSON
-    let call_list: Vec<AggregateCall> = match serde_json::from_str(&calls) {
-        Ok(calls) => calls,
-        Err(_) => {
-            return Ok(AggregateResponse {
-                success: false,
-                value: None,
-                error_code: Some(108),
-                id: None,
-                extra: None,
-            });
-        }
-    };
+    // Parse the calls parameter as JSON.
+    // If parsing fails, propagate as HTTP 500 with error_code 108 (matches Python's error_return()).
+    let call_list: Vec<AggregateCall> = serde_json::from_str(&calls)?;
 
     // Limit to 10 requests maximum
     if call_list.len() > 10 {
-        return Ok(AggregateResponse {
-            success: false,
-            value: None,
-            error_code: Some(108),
-            id: None,
-            extra: None,
-        });
+        return Err(ArcError::rocket_err("Unknown Error"));
     }
 
     let mut response_values = Vec::new();
+    let mut cached_user_id: Option<i32> = None;
 
     // Process each request
     for call in call_list {
-        let endpoint_url = match Url::parse(&format!("http://localhost{}", call.endpoint)) {
-            Ok(url) => url,
-            Err(_) => {
-                continue; // Skip invalid URLs
-            }
-        };
+        let endpoint_url = Url::parse(&format!("http://localhost{}", call.endpoint))
+            .map_err(|_| ArcError::rocket_err("Unknown Error"))?;
 
         let path = endpoint_url.path();
         let query_params = parse_query_params(endpoint_url.query().unwrap_or(""));
 
+        // Only a few endpoints are unauthenticated in the Python implementation.
+        let requires_auth =
+            !matches!(path, "/game/info" | "/finale/progress" | "/purchase/bundle/bundle");
+
+        let user_id = if requires_auth {
+            match cached_user_id {
+                Some(id) => id,
+                None => {
+                    let auth_header = match ctx.authorization {
+                        Some(h) if h.starts_with("Bearer ") && h.len() > 7 => h,
+                        _ => {
+                            // No token (or wrong header format). Match Python's `NoAccess(..., -4)`.
+                            return Ok(AggregateResponse {
+                                success: false,
+                                value: None,
+                                error_code: Some(-4),
+                                id: call.id,
+                                extra: None,
+                            });
+                        }
+                    };
+
+                    let token = &auth_header[7..];
+                    match user_service.authenticate_token(token).await {
+                        Ok(id) => {
+                            cached_user_id = Some(id);
+                            id
+                        }
+                        Err(e) => {
+                            // Inner endpoints fail with JSON error; aggregate itself returns HTTP 200.
+                            return Ok(AggregateResponse {
+                                success: false,
+                                value: None,
+                                error_code: Some(e.error_code()),
+                                id: call.id,
+                                extra: e.extra_data().cloned(),
+                            });
+                        }
+                    }
+                }
+            }
+        } else {
+            0
+        };
+
         // Route to appropriate handler based on path
         let result = match path {
-            "/user/me" => handle_user_me(user_service, auth.user_id).await,
-            "/purchase/bundle/pack" => handle_bundle_pack(purchase_service, auth.user_id).await,
+            "/user/me" => handle_user_me(user_service, user_id).await,
+            "/purchase/bundle/pack" => handle_bundle_pack(purchase_service, user_id).await,
             "/serve/download/me/song" => {
-                handle_download_song(download_service, user_service, auth.user_id, &query_params)
-                    .await
+                handle_download_song(download_service, user_service, user_id, &query_params).await
             }
             "/game/info" => handle_game_info().await,
-            "/present/me" => handle_present_info(present_service, auth.user_id).await,
-            "/world/map/me" => handle_world_all(world_service, auth.user_id).await,
+            "/present/me" => handle_present_info(present_service, user_id).await,
+            "/world/map/me" => handle_world_all(world_service, user_id).await,
             "/score/song/friend" => {
-                handle_song_score_friend(score_service, user_service, auth.user_id, &query_params)
-                    .await
+                handle_song_score_friend(score_service, user_service, user_id, &query_params).await
             }
             "/finale/progress" => handle_finale_progress().await,
             "/purchase/bundle/bundle" => handle_bundle_bundle().await,
-            "/purchase/bundle/single" => handle_bundle_single(purchase_service, auth.user_id).await,
-            _ => Err(ArcError::no_data("Endpoint not found in aggregate", 404)),
+            "/purchase/bundle/single" => handle_bundle_single(purchase_service, user_id).await,
+            // Unknown endpoint: behave like Python's KeyError path (error_return(), HTTP 500).
+            _ => return Err(ArcError::rocket_err("Unknown Error")),
         };
 
         match result {
