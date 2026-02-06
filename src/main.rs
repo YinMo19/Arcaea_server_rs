@@ -168,6 +168,7 @@ async fn configure_rocket() -> Rocket<Build> {
         .mount("/auth", Arcaea_server_rs::route::auth::routes())
         .mount("/", rocket::routes![bundle_download])
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::others::routes())
+        .mount(GAME_API_PREFIX, Arcaea_server_rs::route::friend::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::download::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::score::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::present::routes())

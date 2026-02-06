@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod common;
 pub mod download;
+pub mod friend;
 
 pub mod others;
 pub mod present;

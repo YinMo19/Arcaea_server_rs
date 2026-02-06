@@ -1472,9 +1472,21 @@ impl UserService {
             .await?;
 
             if let Some(friend) = friend_info {
-                let character_id = friend
-                    .favorite_character
-                    .unwrap_or(friend.character_id.unwrap_or(0));
+                // Python baseline: if `favorite_character == -1` then use current character,
+                // otherwise display favorite_character.
+                let favorite_character_id = friend.favorite_character.unwrap_or(-1);
+                let character_id = if favorite_character_id == -1 {
+                    friend.character_id.unwrap_or(0)
+                } else {
+                    favorite_character_id
+                };
+
+                // The uncap flags should match the displayed character, not necessarily the
+                // user's current character.
+                let (is_char_uncapped, is_char_uncapped_override) = self
+                    .character_service
+                    .get_user_character_uncap_condition(friend_id, character_id)
+                    .await?;
 
                 // Get best clear type for recent score if exists
                 let best_clear_type = if let Some(ref song_id) = friend.song_id {
@@ -1515,8 +1527,8 @@ impl UserService {
 
                 let friend_json = serde_json::json!({
                     "is_mutual": is_mutual,
-                    "is_char_uncapped_override": friend.is_char_uncapped_override.unwrap_or(0) != 0,
-                    "is_char_uncapped": friend.is_char_uncapped.unwrap_or(0) != 0,
+                    "is_char_uncapped_override": is_char_uncapped_override,
+                    "is_char_uncapped": is_char_uncapped,
                     "is_skill_sealed": friend.is_skill_sealed.unwrap_or(0) != 0,
                     "rating": if friend.is_hide_rating.unwrap_or(0) != 0 { -1 } else { friend.rating_ptt.unwrap_or(0) },
                     "join_date": friend.join_date,
