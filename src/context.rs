@@ -167,8 +167,7 @@ impl IpContext {
 
     /// Get the client IP address as a string, with fallback
     pub fn get_ip_string(&self) -> String {
-        self.ip.clone()
-            .unwrap_or_else(|| "unknown".to_string())
+        self.ip.clone().unwrap_or_else(|| "unknown".to_string())
     }
 }
 

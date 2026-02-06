@@ -1397,19 +1397,17 @@ impl UserService {
         .await?;
 
         // Store in user_kvdata table for fatalis skill
-        if let Some(total_steps) = step_result.total_steps {
-            sqlx::query!(
-                r#"
+        sqlx::query!(
+            r#"
                 INSERT INTO user_kvdata (user_id, class, `key`, idx, value)
                 VALUES (?, 'world', 'total_step_count', 0, ?)
                 ON DUPLICATE KEY UPDATE value = VALUES(value)
                 "#,
-                user_id,
-                total_steps.to_string()
-            )
-            .execute(&self.pool)
-            .await?;
-        }
+            user_id,
+            step_result.total_steps
+        )
+        .execute(&self.pool)
+        .await?;
 
         Ok(())
     }

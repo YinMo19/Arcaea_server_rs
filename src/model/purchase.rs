@@ -72,9 +72,10 @@ impl Purchase {
                 result["discount_to"] = serde_json::json!(to);
 
                 if !show_real_price
-                    || (self.discount_reason.as_ref().is_some_and(|r| {
-                        (r == "anni5tix" || r == "pick_ticket") && price == 0
-                    }))
+                    || (self
+                        .discount_reason
+                        .as_ref()
+                        .is_some_and(|r| (r == "anni5tix" || r == "pick_ticket") && price == 0))
                 {
                     if let Some(ref reason) = self.discount_reason {
                         result["discount_reason"] = serde_json::json!(reason);

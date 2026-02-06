@@ -1,4 +1,4 @@
-use crate::route::common::{success_return, AuthGuard, RouteResult};
+use crate::route::common::{success_return, success_return_no_value, AuthGuard, RouteResult};
 use crate::service::PurchaseService;
 use rocket::serde::json::Json;
 use rocket::{get, post, routes, Route, State};
@@ -112,8 +112,8 @@ pub async fn buy_pack_or_single(
     } else if let Some(ref single_id) = request.single_id {
         single_id
     } else {
-        // Return empty success if no pack_id or single_id provided
-        return Ok(success_return(serde_json::json!({})));
+        // Match Python behavior: success response without `value`
+        return Ok(success_return_no_value());
     };
 
     let result = purchase_service

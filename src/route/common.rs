@@ -111,6 +111,19 @@ where
     ApiResponse::success(value)
 }
 
+/// Helper function to create success response without value
+///
+/// Matches Python's `success_return()` behavior where the `value` field
+/// is omitted when there is no payload.
+pub fn success_return_no_value<T>() -> ApiResponse<T> {
+    ApiResponse {
+        success: true,
+        value: None,
+        error_code: None,
+        extra: None,
+    }
+}
+
 /// Helper function to create error response
 pub fn error_return() -> ApiResponse<()> {
     ApiResponse::<()>::error(108, None)
@@ -228,7 +241,5 @@ pub struct GameInfoResponse {
 }
 
 /// Empty response for endpoints that don't return data
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EmptyResponse {}
-

@@ -237,9 +237,7 @@ impl PurchaseService {
 
         if purchase_items.is_empty() {
             return Err(ArcError::no_data(
-                format!(
-                    "The items of the purchase `{purchase_name}` do not exist."
-                ),
+                format!("The items of the purchase `{purchase_name}` do not exist."),
                 501,
             ));
         }

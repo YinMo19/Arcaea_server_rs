@@ -45,9 +45,7 @@ async fn main() {
     };
 
     if character_count > 0 {
-        log::warn!(
-            "Database appears to already contain data ({character_count} characters found)"
-        );
+        log::warn!("Database appears to already contain data ({character_count} characters found)");
         log::warn!("This will add duplicate data or may cause errors.");
         print!("Continue anyway? (y/N): ");
 

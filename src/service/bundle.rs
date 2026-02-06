@@ -363,7 +363,7 @@ impl BundleService {
 
                 let response = bundle_with_urls.to_response();
                 results.push(response);
-            } 
+            }
         }
 
         Ok(results)
@@ -404,9 +404,10 @@ impl BundleService {
             }
         }
 
-        Err(ArcError::no_data(format!(
-            "No update path found from {current_version} to {target_version}"
-        ), 404))
+        Err(ArcError::no_data(
+            format!("No update path found from {current_version} to {target_version}"),
+            404,
+        ))
     }
 
     /// Generate a random download token

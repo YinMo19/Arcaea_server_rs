@@ -1,4 +1,6 @@
-use crate::route::common::{success_return, AuthGuard, EmptyResponse, RouteResult};
+use crate::route::common::{
+    success_return, success_return_no_value, AuthGuard, EmptyResponse, RouteResult,
+};
 use crate::service::PresentService;
 use rocket::{get, post, routes, Route, State};
 use serde::{Deserialize, Serialize};
@@ -45,7 +47,7 @@ pub async fn claim_present(
         .claim_present(auth.user_id, &present_id)
         .await?;
 
-    Ok(success_return(EmptyResponse::default()))
+    Ok(success_return_no_value())
 }
 
 /// Get all present routes

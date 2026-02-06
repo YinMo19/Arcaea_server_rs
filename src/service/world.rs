@@ -218,7 +218,8 @@ impl MapParser {
                     .map(|s| s.to_string()),
                 requires_any: map_data
                     .get("requires_any")
-                    .and_then(|v| v.as_array()).cloned(),
+                    .and_then(|v| v.as_array())
+                    .cloned(),
                 steps: Vec::new(),
             };
 

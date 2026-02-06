@@ -65,8 +65,7 @@ pub struct Songlist {
 }
 
 /// Cached songlist data
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct SonglistCache {
     /// Mapping of song_id to file availability bitmap
     pub songs: HashMap<String, u32>,
@@ -79,7 +78,6 @@ pub struct SonglistCache {
     /// Whether songlist was successfully parsed
     pub has_songlist: bool,
 }
-
 
 impl SonglistCache {
     /// Check if a file is available for download for a given song
@@ -217,8 +215,7 @@ impl SonglistCache {
 }
 
 /// File cache for MD5 hashes and file listings
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct FileCache {
     /// Cache of file MD5 hashes: (song_id, file_name) -> md5_hash
     pub file_md5_cache: HashMap<(String, String), Option<String>>,
@@ -227,7 +224,6 @@ pub struct FileCache {
     /// Cache of all song IDs
     pub all_song_ids: Option<Vec<String>>,
 }
-
 
 impl FileCache {
     /// Clear all cached data
