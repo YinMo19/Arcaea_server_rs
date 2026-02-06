@@ -508,7 +508,7 @@ impl UserService {
     ///
     /// Validates the access token and returns the associated user ID.
     pub async fn authenticate_token(&self, token: &str) -> ArcResult<i32> {
-        log::info!("Authenticating token: {token}");
+        log::debug!("Authenticating token: {token}");
         let result = sqlx::query_as!(
             UserCodeMapping,
             "SELECT user_id FROM login WHERE access_token = ?",
@@ -526,7 +526,7 @@ impl UserService {
     ///
     /// Retrieves complete user information for API responses.
     pub async fn get_user_info(&self, user_id: i32) -> ArcResult<UserInfo> {
-        let user = sqlx::query_as!(User, "SELECT user_id, name, password, join_date, user_code, rating_ptt, character_id, is_skill_sealed, is_char_uncapped, is_char_uncapped_override, is_hide_rating, song_id, difficulty, score, shiny_perfect_count, perfect_count, near_count, miss_count, health, modifier, time_played, clear_type, rating, favorite_character, max_stamina_notification_enabled, current_map, ticket, prog_boost, email, world_rank_score, ban_flag, next_fragstam_ts, max_stamina_ts, stamina, world_mode_locked_end_ts, beyond_boost_gauge, kanae_stored_prog, mp_notification_enabled, highest_rating_ptt, insight_state FROM user WHERE user_id = ?", user_id)
+        let user = sqlx::query_as!(User, "SELECT * FROM user WHERE user_id = ?", user_id)
             .fetch_optional(&self.pool)
             .await?;
 
@@ -1460,11 +1460,7 @@ impl UserService {
             // Get friend's basic info
             let friend_info = sqlx::query!(
                 r#"
-                SELECT name, user_id, rating_ptt, is_hide_rating, join_date,
-                       character_id, is_skill_sealed, is_char_uncapped, is_char_uncapped_override,
-                       favorite_character, song_id, difficulty, score, shiny_perfect_count,
-                       perfect_count, near_count, miss_count, health, modifier, time_played, clear_type, rating
-                FROM user WHERE user_id = ?
+                SELECT * FROM user WHERE user_id = ?
                 "#,
                 friend_id
             )

@@ -161,7 +161,7 @@ impl<'r> FromRequest<'r> for AuthGuard {
         match authorization {
             Some(token) => {
                 // Extract Bearer token
-                let token = &token[7..];
+                let token = token.get(7..).unwrap_or("");
 
                 // Get UserService from Rocket state
                 let user_service = match request.rocket().state::<crate::service::UserService>() {
