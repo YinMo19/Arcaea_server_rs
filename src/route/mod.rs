@@ -2,6 +2,7 @@ pub mod auth;
 pub mod common;
 pub mod download;
 pub mod friend;
+pub mod multiplayer;
 
 pub mod others;
 pub mod present;

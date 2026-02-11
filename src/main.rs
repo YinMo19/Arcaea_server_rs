@@ -12,8 +12,8 @@ use Arcaea_server_rs::route::others::bundle_download;
 use Arcaea_server_rs::route::CORS;
 use Arcaea_server_rs::service::{
     AssetManager, BundleService, CharacterService, DownloadService, ItemService,
-    NotificationService, OperationManager, PresentService, PurchaseService, ScoreService,
-    UserService, WorldService,
+    MultiplayerService, NotificationService, OperationManager, PresentService, PurchaseService,
+    ScoreService, UserService, WorldService,
 };
 use Arcaea_server_rs::{config, Database, DbPool};
 
@@ -35,6 +35,7 @@ async fn init_services(
     ItemService,
     std::sync::Arc<AssetManager>,
     OperationManager,
+    MultiplayerService,
 ) {
     // Initialize AssetManager with proper paths
     let asset_manager = std::sync::Arc::new(
@@ -89,6 +90,7 @@ async fn init_services(
     let present_service = PresentService::new(pool.clone());
     let world_service = WorldService::new(pool.clone());
     let purchase_service = PurchaseService::new(pool.clone());
+    let multiplayer_service = MultiplayerService::new(pool.clone());
     let operation_manager = OperationManager::new(
         asset_manager.clone(),
         std::sync::Arc::new(bundle_service.clone()),
@@ -108,6 +110,7 @@ async fn init_services(
         item_service,
         asset_manager,
         operation_manager,
+        multiplayer_service,
     )
 }
 
@@ -144,6 +147,7 @@ async fn configure_rocket() -> Rocket<Build> {
                 item_service,
                 asset_manager,
                 operation_manager,
+                multiplayer_service,
             ) = init_services(pool).await;
 
             log::info!("Services initialized");
@@ -160,6 +164,7 @@ async fn configure_rocket() -> Rocket<Build> {
                 .manage(item_service)
                 .manage(asset_manager)
                 .manage(operation_manager)
+                .manage(multiplayer_service)
         }))
         // for prometheus telemetry
         .attach(prometheus.clone())
@@ -171,6 +176,10 @@ async fn configure_rocket() -> Rocket<Build> {
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::friend::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::download::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::score::routes())
+        .mount(
+            GAME_API_PREFIX,
+            Arcaea_server_rs::route::multiplayer::routes(),
+        )
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::present::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::world::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::purchase::routes())
