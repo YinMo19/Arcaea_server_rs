@@ -8,7 +8,6 @@ use rocket::{Request, Response};
 use serde_json;
 use std::io::Cursor;
 
-use crate::model::Item;
 
 /// User database model representing the user table
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
@@ -121,6 +120,14 @@ pub struct UserSettings {
     pub is_hide_rating: bool,
     pub max_stamina_notification_enabled: bool,
     pub mp_notification_enabled: bool,
+    pub is_allow_marketing_email: bool,
+}
+
+/// User core item format for API responses
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserCoreInfo {
+    pub core_type: String,
+    pub amount: i32,
 }
 
 /// User recent score information
@@ -207,8 +214,9 @@ pub struct UserInfo {
     pub user_missions: Vec<serde_json::Value>,
 
     // Items and scores
-    pub cores: Vec<Item>,
+    pub cores: Vec<UserCoreInfo>,
     pub recent_score: Vec<UserRecentScore>,
+    pub has_email: bool,
 }
 
 /// User for insertion (new user registration)
@@ -318,6 +326,7 @@ impl From<User> for UserInfo {
                 is_hide_rating: user.is_hide_rating(),
                 max_stamina_notification_enabled: user.max_stamina_notification_enabled(),
                 mp_notification_enabled: user.mp_notification_enabled(),
+                is_allow_marketing_email: false,
             },
 
             character_stats: Vec::new(), // TODO: Load from character service
@@ -333,6 +342,7 @@ impl From<User> for UserInfo {
 
             cores: Vec::new(),        // TODO: Load from user cores
             recent_score: Vec::new(), // TODO: Load from recent scores
+            has_email: user.email.as_ref().is_some_and(|e| !e.is_empty()),
         }
     }
 }

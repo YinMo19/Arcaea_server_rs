@@ -1,16 +1,16 @@
 use crate::config::{Constants, CONFIG};
 use crate::error::{ArcError, ArcResult};
-use crate::model::user::UserRecentScore;
+use crate::model::user::{UserCoreInfo, UserRecentScore};
 use crate::model::{
-    Item, Stamina, UpdateCharacter, User, UserAuth, UserCodeMapping, UserCredentials, UserExists,
+    Stamina, UpdateCharacter, User, UserAuth, UserCodeMapping, UserCredentials, UserExists,
     UserInfo, UserLoginDevice, UserLoginDto, UserRegisterDto,
 };
-use crate::service::{CharacterService, ItemService};
+use crate::service::CharacterService;
 use base64::{engine::general_purpose, Engine as _};
 use rand::Rng;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use sqlx::{MySql, Pool};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -18,18 +18,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct UserService {
     pool: Pool<MySql>,
     character_service: CharacterService,
-    item_service: ItemService,
 }
 
 impl UserService {
     /// Create a new user service instance
     pub fn new(pool: Pool<MySql>) -> Self {
         let character_service = CharacterService::new(pool.clone());
-        let item_service = ItemService::new(pool.clone());
         Self {
             pool,
             character_service,
-            item_service,
         }
     }
 
@@ -827,7 +824,7 @@ impl UserService {
     }
 
     /// Get user cores information
-    async fn get_user_cores(&self, user_id: i32) -> ArcResult<Vec<Item>> {
+    async fn get_user_cores(&self, user_id: i32) -> ArcResult<Vec<UserCoreInfo>> {
         let cores = sqlx::query!(
             r#"
             SELECT item_id, amount
@@ -839,17 +836,13 @@ impl UserService {
         .fetch_all(&self.pool)
         .await?;
 
-        cores
+        Ok(cores
             .into_iter()
-            .map(|core| {
-                let amount = core.amount.unwrap_or(1);
-                self.item_service.create_item_from_dict(&HashMap::from([
-                    ("item_id", Value::from(core.item_id)),
-                    ("amount", Value::from(amount)),
-                    ("item_type", Value::from("core")),
-                ]))
+            .map(|core| UserCoreInfo {
+                core_type: core.item_id,
+                amount: core.amount.unwrap_or(1),
             })
-            .collect::<ArcResult<Vec<Item>>>()
+            .collect())
     }
 
     /// Get user pack unlocks
@@ -1153,7 +1146,7 @@ impl UserService {
     /// Get user cores as JSON (for API responses)
     ///
     /// Returns user's core inventory as JSON.
-    async fn get_user_cores_json(&self, user_id: i32) -> ArcResult<Vec<Item>> {
+    async fn get_user_cores_json(&self, user_id: i32) -> ArcResult<Vec<UserCoreInfo>> {
         let user_cores = self.get_user_cores(user_id).await?;
         Ok(user_cores)
     }
