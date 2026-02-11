@@ -28,12 +28,26 @@ source .env && sqlx database create && sqlx migrate run
 # 做完这一切之后，需要先初始化数据库，然后再开始跑
 cargo run --bin init_db
 cargo run
+
+# 如果你要单独跑 linkplay 服务（UDP + TCP）
+cargo run --bin linkplayd
 ```
 至于怎么部署上云，
 ```sh
 cargo build --release
 ```
 之后去 `target/release/<binary>`找到对应二进制 scp 到服务器上，数据库，配置文件，乐曲数据，热更新包等等都放到对应位置了，用你喜欢的方式持久化运行这个二进制就行了。
+
+### Link Play 独立进程配置
+`linkplayd` 通过环境变量读取配置，推荐直接在 `.env` 里配置。关键项如下：
+
+- `LINKPLAY_HOST`（默认 `0.0.0.0`）
+- `LINKPLAY_UDP_PORT`（默认 `10900`）
+- `LINKPLAY_TCP_PORT`（默认 `10901`）
+- `LINKPLAY_AUTHENTICATION`
+- `LINKPLAY_TCP_SECRET_KEY`
+
+更多参数见 `.env.example` 里的 `Link Play Daemon Configuration` 段。
 
 ---
 
@@ -47,7 +61,7 @@ cargo build --release
 真的有人想要和我一起写这个东西吗..... 有的话联系 arcaea@yinmo19.top，感激不尽。
 目前代码问题不少，还在比较初期的阶段。不过登录功能以及最基础的一些功能已经完善了，框架也基本上搭好了，接下来就是按部就班的写(抄)一些 crud 就是了。
 
-目前 linkplay 怎么写还没想好，不过车到山前必有路，实在不会问 ai。关于怎么 pua ai，我在 prompt目录下放了一个 txt，有兴趣可以看看这个文件以及这个文件的历史，里面是关于我 pua ai 帮我改代码的提示词。内容不少，挺好使的。
+现在已经加了一个独立的 `linkplayd` 进程（`src/bin/linkplayd.rs`），用于把 Link Play 从主服务拆出来。当前已经实现控制面（TCP）与核心 UDP 二进制 parser（房间状态机、命令队列、倒计时流转），后面继续做逐条行为对齐和回归验证。
 
 关于客户端的事情不要问我，请上网查找，真的很多的相信我。憋不住了可以给我发邮件 arcaea@yinmo19.top，但是我也不一定能解决。
 

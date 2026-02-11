@@ -26,7 +26,9 @@ pub async fn add_friend(
     auth: AuthGuard,
     request: Form<FriendAddRequest>,
 ) -> RouteResult<serde_json::Value> {
-    let friend_id = user_service.get_user_id_by_code(&request.friend_code).await?;
+    let friend_id = user_service
+        .get_user_id_by_code(&request.friend_code)
+        .await?;
 
     user_service.add_friend(auth.user_id, friend_id).await?;
 
@@ -68,4 +70,3 @@ pub async fn delete_friend(
 pub fn routes() -> Vec<Route> {
     routes![add_friend, delete_friend]
 }
-

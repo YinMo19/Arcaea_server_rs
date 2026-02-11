@@ -755,20 +755,20 @@ impl RankingScoreRow {
         score.score_v2 = self.score_v2.unwrap_or(0.0);
 
         let favorite_character_id = self.favorite_character.unwrap_or(-1);
-        let (displayed_character, is_uncapped, is_uncapped_override) = if favorite_character_id == -1
-        {
-            (
-                self.character_id.unwrap_or(0),
-                self.is_char_uncapped.unwrap_or(0),
-                self.is_char_uncapped_override.unwrap_or(0),
-            )
-        } else {
-            (
-                favorite_character_id,
-                self.favorite_is_uncapped.unwrap_or(0),
-                self.favorite_is_uncapped_override.unwrap_or(0),
-            )
-        };
+        let (displayed_character, is_uncapped, is_uncapped_override) =
+            if favorite_character_id == -1 {
+                (
+                    self.character_id.unwrap_or(0),
+                    self.is_char_uncapped.unwrap_or(0),
+                    self.is_char_uncapped_override.unwrap_or(0),
+                )
+            } else {
+                (
+                    favorite_character_id,
+                    self.favorite_is_uncapped.unwrap_or(0),
+                    self.favorite_is_uncapped_override.unwrap_or(0),
+                )
+            };
         let is_char_uncapped_displayed = if is_uncapped_override != 0 {
             0
         } else {
@@ -807,20 +807,20 @@ impl RankingScoreRowComplete {
         score.score_v2 = self.score_v2.unwrap_or(0.0);
 
         let favorite_character_id = self.favorite_character.unwrap_or(-1);
-        let (displayed_character, is_uncapped, is_uncapped_override) = if favorite_character_id == -1
-        {
-            (
-                self.character_id.unwrap_or(0),
-                self.is_char_uncapped.unwrap_or(0),
-                self.is_char_uncapped_override.unwrap_or(0),
-            )
-        } else {
-            (
-                favorite_character_id,
-                self.favorite_is_uncapped.unwrap_or(0),
-                self.favorite_is_uncapped_override.unwrap_or(0),
-            )
-        };
+        let (displayed_character, is_uncapped, is_uncapped_override) =
+            if favorite_character_id == -1 {
+                (
+                    self.character_id.unwrap_or(0),
+                    self.is_char_uncapped.unwrap_or(0),
+                    self.is_char_uncapped_override.unwrap_or(0),
+                )
+            } else {
+                (
+                    favorite_character_id,
+                    self.favorite_is_uncapped.unwrap_or(0),
+                    self.favorite_is_uncapped_override.unwrap_or(0),
+                )
+            };
         let displayed_uncap = if is_uncapped_override != 0 {
             0
         } else {

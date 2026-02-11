@@ -98,7 +98,8 @@ impl ScoreService {
 
         // Get user map and character info for stamina and skill processing
         let stamina_cost = self.get_user_current_map(user_id).await?;
-        let mut stamina = StaminaImpl::new(user.stamina.unwrap_or(0), user.max_stamina_ts.unwrap_or(0));
+        let mut stamina =
+            StaminaImpl::new(user.stamina.unwrap_or(0), user.max_stamina_ts.unwrap_or(0));
         let current_stamina = stamina.get_current_stamina();
 
         if current_stamina < stamina_cost * stamina_multiply {
@@ -129,8 +130,7 @@ impl ScoreService {
             if insight_state == 3 || insight_state == 5 {
                 // Use weighted choice like Python's choices([0, 1, 2], [weights])
                 let no_invasion_weight =
-                    (1.0 - CONFIG.invasion_start_weight - CONFIG.invasion_hard_weight)
-                        .max(0.0f64);
+                    (1.0 - CONFIG.invasion_start_weight - CONFIG.invasion_hard_weight).max(0.0f64);
                 let weights = [
                     no_invasion_weight,
                     CONFIG.invasion_start_weight,

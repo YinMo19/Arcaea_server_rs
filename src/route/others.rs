@@ -212,8 +212,10 @@ pub async fn aggregate(
         let query_params = parse_query_params(endpoint_url.query().unwrap_or(""));
 
         // Only a few endpoints are unauthenticated in the Python implementation.
-        let requires_auth =
-            !matches!(path, "/game/info" | "/finale/progress" | "/purchase/bundle/bundle");
+        let requires_auth = !matches!(
+            path,
+            "/game/info" | "/finale/progress" | "/purchase/bundle/bundle"
+        );
 
         let user_id = if requires_auth {
             match cached_user_id {
