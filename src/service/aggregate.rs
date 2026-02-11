@@ -8,6 +8,22 @@ use crate::Constants;
 
 use std::collections::HashMap;
 
+fn python_truthy(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Null => false,
+        serde_json::Value::Bool(b) => *b,
+        serde_json::Value::Number(n) => n
+            .as_i64()
+            .map(|v| v != 0)
+            .or_else(|| n.as_u64().map(|v| v != 0))
+            .or_else(|| n.as_f64().map(|v| v != 0.0))
+            .unwrap_or(false),
+        serde_json::Value::String(s) => !s.is_empty(),
+        serde_json::Value::Array(a) => !a.is_empty(),
+        serde_json::Value::Object(o) => !o.is_empty(),
+    }
+}
+
 /// Handle /user/me endpoint
 pub async fn handle_user_me(
     user_service: &UserService,
@@ -97,10 +113,14 @@ pub async fn handle_download_song(
     });
 
     // Parse URL flag (defaults to true)
-    let url_flag = query_params
-        .get("url")
-        .and_then(|s| s.parse::<bool>().ok())
-        .unwrap_or(true);
+    let url_flag = match query_params.get("url") {
+        Some(raw) => {
+            let parsed: serde_json::Value = serde_json::from_str(raw)
+                .map_err(|_| ArcError::input("Invalid `url` query value"))?;
+            python_truthy(&parsed)
+        }
+        None => true,
+    };
 
     // Check rate limiting if URLs are requested
     if url_flag && download_service.check_download_limit(user_id).await? {
