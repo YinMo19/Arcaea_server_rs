@@ -24,6 +24,7 @@ use tracing::{debug, error, info, warn};
 
 const PROTOCOL_NAME: [u8; 2] = [0x06, 0x16];
 const PROTOCOL_VERSION: u8 = 0x0E;
+type EncryptionPayload = ([u8; 12], [u8; 16], Vec<u8>);
 
 #[derive(Debug, Clone)]
 struct LinkplayConfig {
@@ -345,7 +346,7 @@ impl Room {
     }
 
     fn is_playing(&self) -> bool {
-        matches!(self.state, 4 | 5 | 6 | 7)
+        matches!(self.state, 4..=7)
     }
 
     fn get_players_info(&self) -> Vec<u8> {
@@ -631,7 +632,7 @@ impl Room {
     }
 
     fn should_next_state(&mut self, now: i64, cfg: &LinkplayConfig) -> bool {
-        if self.timed_mode == 0 && !matches!(self.state, 4 | 5 | 6) {
+        if self.timed_mode == 0 && !matches!(self.state, 4..=6) {
             self.countdown = 0xffff_ffff;
             return false;
         }
@@ -785,7 +786,7 @@ impl CommandSender {
         let rem = out.len() % 16;
         if rem != 0 {
             let pad = 16 - rem;
-            out.extend(std::iter::repeat(pad as u8).take(pad));
+            out.extend(std::iter::repeat_n(pad as u8, pad));
         }
 
         out
@@ -810,8 +811,7 @@ impl CommandSender {
         let prefix = self.command_prefix(room, 0x0c);
         let random_code = self.random_code();
 
-        let mut state = Vec::new();
-        state.push(room.state);
+        let state = vec![room.state];
         let countdown = room.countdown.to_le_bytes();
         let timestamp = (self.timestamp as u64).to_le_bytes();
 
@@ -1242,7 +1242,7 @@ impl<'a> CommandParser<'a> {
         if self.room.players[self.player_index].score.difficulty != new_diff
             && !matches!(
                 self.room.players[self.player_index].player_state,
-                5 | 6 | 7 | 8
+                5..=8
             )
         {
             flag_12 = true;
@@ -1571,6 +1571,7 @@ impl Store {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn join_room(
         &mut self,
         cfg: &LinkplayConfig,
@@ -1598,7 +1599,7 @@ impl Store {
         if player_num == 0 {
             return err_code(1202);
         }
-        if !matches!(room.state, 0 | 1 | 2) || (room.is_public == 1 && match_times.is_none()) {
+        if !matches!(room.state, 0..=2) || (room.is_public == 1 && match_times.is_none()) {
             return err_code(1205);
         }
 
@@ -2327,7 +2328,7 @@ fn encrypt_tcp_response(key: &[u8; 16], data: &Value) -> io::Result<Vec<u8>> {
 fn encrypt_bytes(
     key: &[u8; 16],
     plaintext: &[u8],
-) -> Result<([u8; 12], [u8; 16], Vec<u8>), String> {
+) -> Result<EncryptionPayload, String> {
     let cipher = Aes128Gcm::new_from_slice(key).map_err(|e| e.to_string())?;
 
     let mut iv = [0u8; 12];

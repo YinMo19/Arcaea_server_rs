@@ -20,7 +20,7 @@ async fn main() {
 
     // Connect to database
     log::info!("Connecting to database...");
-    let pool = match Database::new().await {
+    let pool = match Database::connect().await {
         Ok(pool) => {
             log::info!("Database connection established");
             pool

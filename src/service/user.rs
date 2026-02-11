@@ -107,6 +107,7 @@ impl UserService {
     }
 
     /// Validate user code format and uniqueness
+    #[allow(dead_code)]
     async fn validate_user_code(&self, user_code: &str) -> ArcResult<()> {
         if user_code.len() != 9 || !user_code.chars().all(|c| c.is_ascii_digit()) {
             return Err(ArcError::input("User code is invalid."));

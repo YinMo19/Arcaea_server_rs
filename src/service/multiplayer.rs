@@ -526,6 +526,7 @@ impl MultiplayerService {
         }))
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn remote_join_room(
         &self,
         room_code: &str,

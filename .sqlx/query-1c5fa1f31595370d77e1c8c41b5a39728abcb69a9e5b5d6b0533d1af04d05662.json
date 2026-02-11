@@ -1,0 +1,36 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT max_stamina_ts, stamina FROM user WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "max_stamina_ts",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "stamina",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "1c5fa1f31595370d77e1c8c41b5a39728abcb69a9e5b5d6b0533d1af04d05662"
+}

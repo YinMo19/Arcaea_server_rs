@@ -39,6 +39,7 @@ pub async fn score_token() -> RouteResult<Value> {
 /// skill effects, and invasion mechanics. It validates the user's stamina and
 /// current world map state before allowing play.
 #[get("/score/token/world?<song_id>&<difficulty>&<stamina_multiply>&<fragment_multiply>&<prog_boost_multiply>&<beyond_boost_gauge_use>&<skill_id>&<is_skill_sealed>")]
+#[allow(clippy::too_many_arguments)]
 pub async fn score_token_world(
     user_auth: AuthGuard,
     score_service: &State<ScoreService>,

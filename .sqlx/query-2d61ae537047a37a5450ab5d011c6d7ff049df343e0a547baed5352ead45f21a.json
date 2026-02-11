@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user SET stamina = ?, max_stamina_ts = ? WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "2d61ae537047a37a5450ab5d011c6d7ff049df343e0a547baed5352ead45f21a"
+}

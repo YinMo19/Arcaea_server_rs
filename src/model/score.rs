@@ -3,6 +3,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
+type SongKey = (String, i32);
+type SongEntry = (usize, i32, f64);
+type SongEntryMap = HashMap<SongKey, Vec<SongEntry>>;
+
 /// Basic score data structure for score calculations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Score {
@@ -58,6 +62,7 @@ impl Score {
     }
 
     /// Set score data from individual components
+    #[allow(clippy::too_many_arguments)]
     pub fn set_score(
         &mut self,
         score: Option<i32>,
@@ -583,14 +588,13 @@ impl Potential {
         }
 
         // Complex unique song logic (simplified)
-        let mut unique_songs: std::collections::HashMap<(String, i32), Vec<(usize, i32, f64)>> =
-            std::collections::HashMap::new();
+        let mut unique_songs: SongEntryMap = HashMap::new();
 
         for (i, tuple) in tuples.iter().enumerate() {
             let key = (tuple.song_id.clone(), tuple.difficulty);
             unique_songs
                 .entry(key)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push((i, tuple.r_index, tuple.rating));
         }
 
@@ -671,6 +675,12 @@ impl UserScoreList {
                 score.score.song_name = Some("Unknown Song".to_string());
             }
         }
+    }
+}
+
+impl Default for UserScoreList {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

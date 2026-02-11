@@ -26,12 +26,12 @@ pub type DbPool = Pool<MySql>;
 pub struct Database;
 
 impl Database {
-    /// Create a new database connection pool
+    /// Create a database connection pool
     ///
     /// Reads the DATABASE_URL environment variable to establish
     /// the connection. Falls back to a default MySQL connection
     /// string if the environment variable is not set.
-    pub async fn new() -> Result<DbPool, sqlx::Error> {
+    pub async fn connect() -> Result<DbPool, sqlx::Error> {
         let database_url = env::var("DATABASE_URL").unwrap_or_else(|_| {
             "mysql://arcaea:yinmo19sprivite@localhost:3306/arcaea_core".to_string()
         });
@@ -59,7 +59,7 @@ pub struct AppState {
 impl AppState {
     /// Create a new application state instance
     pub async fn new() -> Result<Self, sqlx::Error> {
-        let db_pool = Database::new().await?;
+        let db_pool = Database::connect().await?;
         Ok(Self { db_pool })
     }
 }

@@ -23,6 +23,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// Constants for score calculations
 const BEST30_WEIGHT: f64 = 1.0 / 40.0;
 const RECENT10_WEIGHT: f64 = 1.0 / 40.0;
+type SongKey = (String, i32);
+type SongEntry = (usize, i32, f64);
+type SongEntryMap = HashMap<SongKey, Vec<SongEntry>>;
 
 /// Score service for handling score submission, validation, and calculations
 pub struct ScoreService {
@@ -267,7 +270,7 @@ impl ScoreService {
                     "course_id is required for new course session",
                 ));
             }
-        } else if course_play_state >= 0 && course_play_state <= 3 {
+        } else if (0..=3).contains(&course_play_state) {
             // Validate token and continue course
             if let Some(previous_token) = request.previous_token {
                 token = self.update_course_token(&previous_token, user_id).await?;
@@ -662,7 +665,7 @@ impl ScoreService {
             // Not enough people behind, show ranking
             sql_offset = total_count - limit;
         } else if max_local_position <= my_rank
-            && my_rank <= max_global_position - limit + max_local_position - 1
+            && my_rank < max_global_position - limit + max_local_position
         {
             // Enough people ahead, show ranking
             sql_offset = my_rank - max_local_position;
@@ -852,6 +855,7 @@ impl ScoreService {
         None
     }
 
+    #[allow(dead_code)]
     async fn get_world_map_stamina_cost(&self, user_id: i32) -> ArcResult<i32> {
         // Get user's current map
         let user = sqlx::query!("SELECT current_map FROM user WHERE user_id = ?", user_id)
@@ -1263,12 +1267,12 @@ impl ScoreService {
         };
 
         // Build unique_songs map exactly like Python
-        let mut unique_songs: HashMap<(String, i32), Vec<(usize, i32, f64)>> = HashMap::new();
+        let mut unique_songs: SongEntryMap = HashMap::new();
         for (i, tuple) in current_tuples.iter().enumerate() {
             let key = (tuple.song_id.clone(), tuple.difficulty);
             unique_songs
                 .entry(key)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push((i, tuple.r_index, tuple.rating));
         }
 
@@ -1292,7 +1296,7 @@ impl ScoreService {
         }
 
         // Filter songs with multiple entries
-        let mut filtered_songs: HashMap<(String, i32), Vec<(usize, i32, f64)>> = unique_songs
+        let mut filtered_songs: SongEntryMap = unique_songs
             .iter()
             .filter(|(_, entries)| entries.len() > 1)
             .map(|(k, v)| (k.clone(), v.clone()))
@@ -1474,6 +1478,7 @@ impl ScoreService {
     }
 
     /// Record user rating PTT changes to log database
+    #[allow(dead_code)]
     async fn record_rating_ptt(&self, _user_id: i32, _user_rating_ptt: f64) -> ArcResult<()> {
         // This would record to a separate log database
         // For now, this is a placeholder implementation

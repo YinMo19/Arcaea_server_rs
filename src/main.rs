@@ -122,7 +122,7 @@ async fn configure_rocket() -> Rocket<Build> {
     let mut rocket = rocket::build()
         .attach(CORS)
         .attach(AdHoc::on_ignite("Database", |rocket| async {
-            match Database::new().await {
+            match Database::connect().await {
                 Ok(pool) => {
                     log::info!("Database connection established");
                     rocket.manage(pool)

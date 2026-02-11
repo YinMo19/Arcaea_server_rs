@@ -229,7 +229,7 @@ impl PurchaseList {
     }
 
     /// Select purchases from database by type (placeholder method signature)
-    pub fn select_from_type(&self, purchase_type: &str) -> Self {
+    pub fn select_from_type(&self, _purchase_type: &str) -> Self {
         // This would filter purchases by type
         // For now, return self as placeholder
         self.clone()

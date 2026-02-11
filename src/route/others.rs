@@ -202,6 +202,7 @@ pub async fn applog_me(_log_data: Json<serde_json::Value>) -> RouteResult<EmptyR
 /// - Invalid payload / too many calls / unknown inner endpoint behaves like `error_return()`
 ///   (HTTP 500, `{"success": false, "error_code": 108}`).
 #[get("/compose/aggregate?<calls>")]
+#[allow(clippy::too_many_arguments)]
 pub async fn aggregate(
     calls: String,
     user_service: &State<UserService>,
