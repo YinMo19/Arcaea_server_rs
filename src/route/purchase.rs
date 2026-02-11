@@ -1,7 +1,8 @@
 use crate::route::common::{success_return, success_return_no_value, AuthGuard, RouteResult};
 use crate::service::PurchaseService;
-use rocket::serde::json::Json;
+use rocket::form::Form;
 use rocket::{get, post, routes, Route, State};
+use rocket::FromForm;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -45,24 +46,22 @@ pub struct RedeemResponse {
 }
 
 /// Pack/Single purchase request structure
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, FromForm)]
 pub struct PackSinglePurchaseRequest {
-    #[serde(default)]
     pub pack_id: Option<String>,
-    #[serde(default)]
     pub single_id: Option<String>,
 }
 
 /// Special item purchase request structure
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, FromForm)]
 pub struct SpecialItemPurchaseRequest {
-    pub item_id: String,
+    pub item_id: Option<String>,
 }
 
 /// Redeem code request structure
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, FromForm)]
 pub struct RedeemRequest {
-    pub code: String,
+    pub code: Option<String>,
 }
 
 /// Get pack purchase information endpoint
@@ -105,7 +104,7 @@ pub async fn bundle_bundle(purchase_service: &State<PurchaseService>) -> RouteRe
 pub async fn buy_pack_or_single(
     purchase_service: &State<PurchaseService>,
     auth: AuthGuard,
-    request: Json<PackSinglePurchaseRequest>,
+    request: Form<PackSinglePurchaseRequest>,
 ) -> RouteResult<Value> {
     let purchase_name = if let Some(ref pack_id) = request.pack_id {
         pack_id
@@ -130,10 +129,14 @@ pub async fn buy_pack_or_single(
 pub async fn buy_special(
     purchase_service: &State<PurchaseService>,
     auth: AuthGuard,
-    request: Json<SpecialItemPurchaseRequest>,
+    request: Form<SpecialItemPurchaseRequest>,
 ) -> RouteResult<Value> {
+    let item_id = request
+        .item_id
+        .as_deref()
+        .ok_or_else(|| crate::error::ArcError::input("`item_id` is required"))?;
     let result = purchase_service
-        .buy_special_item(auth.user_id, &request.item_id)
+        .buy_special_item(auth.user_id, item_id)
         .await?;
     Ok(success_return(result))
 }
@@ -161,10 +164,14 @@ pub async fn purchase_stamina(
 pub async fn redeem(
     purchase_service: &State<PurchaseService>,
     auth: AuthGuard,
-    request: Json<RedeemRequest>,
+    request: Form<RedeemRequest>,
 ) -> RouteResult<Value> {
+    let code = request
+        .code
+        .as_deref()
+        .ok_or_else(|| crate::error::ArcError::input("`code` is required"))?;
     let result = purchase_service
-        .redeem_code(auth.user_id, &request.code)
+        .redeem_code(auth.user_id, code)
         .await?;
     Ok(success_return(result))
 }
