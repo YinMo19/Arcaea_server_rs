@@ -50,3 +50,7 @@ openssl = ["dep:openssl"]
 [[bin]]
 name = "init_db"
 path = "src/bin/init_db.rs"
+
+[[bin]]
+name = "linkplayd"
+path = "src/bin/linkplayd.rs"
