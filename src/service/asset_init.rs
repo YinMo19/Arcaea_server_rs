@@ -477,16 +477,32 @@ impl AssetInitService {
 
         // Insert purchase items
         for item in purchase.items {
+            let item_id = item.id;
+            let item_type = item.item_type;
+            let amount = item.amount.unwrap_or(1);
+            let is_available = if item.is_available.unwrap_or(true) { 1 } else { 0 };
+
             query!(
                 "INSERT INTO purchase_item (purchase_name, item_id, type, amount) VALUES (?, ?, ?, ?)",
                 purchase.name,
-                item.id,
-                item.item_type,
-                item.amount.unwrap_or(1)
+                item_id,
+                item_type,
+                amount
             )
             .execute(&self.pool)
             .await
             .map_err(|e| ArcError::input(format!("Failed to insert purchase item: {e}")))?;
+
+            // Python parity: purchasable entries should also exist in `item`.
+            query!(
+                "INSERT IGNORE INTO item (item_id, type, is_available) VALUES (?, ?, ?)",
+                item_id,
+                item_type,
+                is_available
+            )
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ArcError::input(format!("Failed to insert purchasable item: {e}")))?;
         }
 
         Ok(())
