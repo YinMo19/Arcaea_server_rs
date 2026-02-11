@@ -118,8 +118,9 @@ async fn init_services(
 /// Configure the Rocket application
 async fn configure_rocket() -> Rocket<Build> {
     let prometheus = PrometheusMetrics::new();
+    let figment = rocket::Config::figment().merge(("cli_colors", false));
 
-    let mut rocket = rocket::build()
+    let mut rocket = rocket::custom(figment)
         .attach(CORS)
         .attach(AdHoc::on_ignite("Database", |rocket| async {
             match Database::connect().await {
@@ -238,6 +239,9 @@ fn normalize_prefix(prefix: &str) -> String {
 /// Application entry point
 #[launch]
 async fn rocket() -> _ {
+    // Load environment variables
+    dotenv::dotenv().ok();
+
     // init log
     tracing_subscriber::fmt::init();
 
@@ -245,9 +249,6 @@ async fn rocket() -> _ {
     log::info!("Arcaea Server Rust Edition");
     log::info!("Version: {}", Arcaea_server_rs::ARCAEA_SERVER_VERSION);
     log::info!("Starting server...");
-
-    // Load environment variables
-    dotenv::dotenv().ok();
 
     // Configure and launch the application
     configure_rocket().await

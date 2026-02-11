@@ -402,7 +402,7 @@ impl AssetInitService {
         let user_code = "123456789";
         let name = "admin";
         let email = "admin@admin.com";
-        let password_hash = "41e5653fc7aeb894026d6bb7b2db7f65902b454945fa8fd65a6327047b5277fb"; // admin
+        let password_hash = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"; // admin
         let now = current_timestamp_ms();
         let memories = 114514i32;
 

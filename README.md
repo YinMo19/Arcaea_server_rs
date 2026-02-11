@@ -27,6 +27,7 @@ source .env && sqlx database create && sqlx migrate run
 
 # 做完这一切之后，需要先初始化数据库，然后再开始跑
 cargo run --bin init_db
+# 初始用户账号密码是：admin / admin
 cargo run
 
 # 如果你要单独跑 linkplay 服务（UDP + TCP）
