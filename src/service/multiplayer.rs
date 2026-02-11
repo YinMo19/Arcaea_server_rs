@@ -7,7 +7,6 @@ use base64::Engine;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sqlx::Row;
 use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
@@ -125,11 +124,101 @@ impl MultiplayerService {
         }
     }
 
+    pub async fn room_create(
+        &self,
+        user_id: i32,
+        client_song_map: &HashMap<String, Vec<bool>>,
+    ) -> ArcResult<Value> {
+        self.ensure_linkplay_available()?;
+        let song_unlock = get_song_unlock(client_song_map);
+        let (name, rating_ptt, is_hide_rating) = self.select_user_about_link_play(user_id).await?;
+
+        let mut result = self
+            .remote_create_room(
+                &name,
+                &song_unlock,
+                rating_ptt,
+                is_hide_rating,
+                None,
+                user_id,
+            )
+            .await?;
+        self.add_endpoint_and_port(&mut result);
+        Ok(result)
+    }
+
+    pub async fn room_join(
+        &self,
+        user_id: i32,
+        room_code: &str,
+        client_song_map: &HashMap<String, Vec<bool>>,
+    ) -> ArcResult<Value> {
+        self.ensure_linkplay_available()?;
+        let song_unlock = get_song_unlock(client_song_map);
+        let (name, rating_ptt, is_hide_rating) = self.select_user_about_link_play(user_id).await?;
+
+        let mut result = self
+            .remote_join_room(
+                room_code,
+                &name,
+                &song_unlock,
+                rating_ptt,
+                is_hide_rating,
+                None,
+                user_id,
+            )
+            .await?;
+        self.add_endpoint_and_port(&mut result);
+        Ok(result)
+    }
+
+    pub async fn room_update(&self, user_id: i32, token: u64) -> ArcResult<Value> {
+        self.ensure_linkplay_available()?;
+        let (_, rating_ptt, is_hide_rating) = self.select_user_about_link_play(user_id).await?;
+
+        let mut result = self
+            .remote_update_room(token, rating_ptt, is_hide_rating, user_id)
+            .await?;
+        self.add_endpoint_and_port(&mut result);
+        Ok(result)
+    }
+
+    pub async fn room_status(&self, share_token: &str) -> ArcResult<Value> {
+        self.ensure_linkplay_available()?;
+        let room_data = self.remote_select_room(None, Some(share_token)).await?;
+        let room_code = room_data
+            .get("room_code")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        Ok(json!({ "roomId": room_code }))
+    }
+
+    pub async fn room_invite_share_token(&self, room_code: &str) -> ArcResult<String> {
+        self.ensure_linkplay_available()?;
+        let room_data = self.remote_select_room(Some(room_code), None).await?;
+        let share_token = room_data
+            .get("share_token")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+
+        if share_token.is_empty() {
+            return Err(ArcError::input("Missing share_token from link play server"));
+        }
+        Ok(share_token)
+    }
+
+    pub async fn user_linkplay_name(&self, user_id: i32) -> ArcResult<String> {
+        let (name, _, _) = self.select_user_about_link_play(user_id).await?;
+        Ok(name)
+    }
+
     pub async fn matchmaking_join(
         &self,
         user_id: i32,
         client_song_map: &HashMap<String, Vec<bool>>,
     ) -> ArcResult<Value> {
+        self.ensure_linkplay_available()?;
         let song_unlock = get_song_unlock(client_song_map);
         let (name, rating_ptt, is_hide_rating) = self.select_user_about_link_play(user_id).await?;
 
@@ -152,8 +241,7 @@ impl MultiplayerService {
 
         let matched = self.match_internal(user_id).await?;
         if let Some(mut r) = matched {
-            r["endPoint"] = Value::String(self.cfg.endpoint_host());
-            r["port"] = Value::Number(serde_json::Number::from(self.cfg.udp_port));
+            self.add_endpoint_and_port(&mut r);
             Ok(r)
         } else {
             Ok(json!({
@@ -164,10 +252,10 @@ impl MultiplayerService {
     }
 
     pub async fn matchmaking_status(&self, user_id: i32) -> ArcResult<Value> {
+        self.ensure_linkplay_available()?;
         let matched = self.match_internal(user_id).await?;
         if let Some(mut r) = matched {
-            r["endPoint"] = Value::String(self.cfg.endpoint_host());
-            r["port"] = Value::Number(serde_json::Number::from(self.cfg.udp_port));
+            self.add_endpoint_and_port(&mut r);
             Ok(r)
         } else {
             Ok(json!({
@@ -178,6 +266,7 @@ impl MultiplayerService {
     }
 
     pub async fn matchmaking_leave(&self, user_id: i32) -> ArcResult<()> {
+        self.ensure_linkplay_available()?;
         let mut state = self.state.lock().await;
         state.player_queue.remove(&user_id);
         Ok(())
@@ -368,27 +457,20 @@ impl MultiplayerService {
     }
 
     async fn select_user_about_link_play(&self, user_id: i32) -> ArcResult<(String, i32, bool)> {
-        let row =
-            sqlx::query("SELECT name, rating_ptt, is_hide_rating FROM user WHERE user_id = ?")
-                .bind(user_id)
-                .fetch_optional(&self.pool)
-                .await?;
+        let row = sqlx::query!(
+            "SELECT name, rating_ptt, is_hide_rating FROM user WHERE user_id = ?",
+            user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
 
         let Some(row) = row else {
             return Err(ArcError::no_data("No user.", 108));
         };
 
-        let name: String = row.try_get("name").unwrap_or_else(|_| "".to_string());
-        let rating_ptt: i32 = row
-            .try_get::<Option<i32>, _>("rating_ptt")
-            .ok()
-            .flatten()
-            .unwrap_or(0);
-        let is_hide_rating: i8 = row
-            .try_get::<Option<i8>, _>("is_hide_rating")
-            .ok()
-            .flatten()
-            .unwrap_or(0);
+        let name = row.name.unwrap_or_default();
+        let rating_ptt = row.rating_ptt.unwrap_or(0);
+        let is_hide_rating = row.is_hide_rating.unwrap_or(0);
 
         Ok((name, rating_ptt, is_hide_rating != 0))
     }
@@ -500,6 +582,78 @@ impl MultiplayerService {
             "token": token.to_string(),
             "key": key,
         }))
+    }
+
+    async fn remote_update_room(
+        &self,
+        token: u64,
+        rating_ptt: i32,
+        is_hide_rating: bool,
+        user_id: i32,
+    ) -> ArcResult<Value> {
+        let r = self
+            .remote_request(
+                "update_room",
+                json!({
+                    "token": token,
+                    "rating_ptt": rating_ptt,
+                    "is_hide_rating": is_hide_rating,
+                }),
+            )
+            .await?;
+        let rd = r
+            .get("data")
+            .ok_or_else(|| ArcError::input("Missing data from link play server"))?;
+
+        let room_code = rd
+            .get("room_code")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let room_id = rd
+            .get("room_id")
+            .and_then(Value::as_u64)
+            .unwrap_or_default();
+        let key = rd.get("key").and_then(Value::as_str).unwrap_or_default();
+        let player_id = rd
+            .get("player_id")
+            .and_then(Value::as_u64)
+            .unwrap_or_default();
+        let ordered_allowed_songs = rd
+            .get("song_unlock")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+
+        Ok(json!({
+            "roomId": room_id.to_string(),
+            "roomCode": room_code,
+            "orderedAllowedSongs": ordered_allowed_songs,
+            "shareToken": "abcde12345",
+            "userId": user_id,
+            "playerId": player_id.to_string(),
+            "token": token.to_string(),
+            "key": key,
+        }))
+    }
+
+    async fn remote_select_room(
+        &self,
+        room_code: Option<&str>,
+        share_token: Option<&str>,
+    ) -> ArcResult<Value> {
+        let r = self
+            .remote_request(
+                "select_room",
+                json!({
+                    "room_code": room_code,
+                    "share_token": share_token
+                }),
+            )
+            .await?;
+        let rd = r
+            .get("data")
+            .ok_or_else(|| ArcError::input("Missing data from link play server"))?;
+        Ok(rd.clone())
     }
 
     async fn remote_get_match_rooms(&self, limit: i32) -> ArcResult<Vec<MatchRoomCache>> {
@@ -705,6 +859,24 @@ impl MultiplayerService {
         }
         Ok(recv)
     }
+
+    fn ensure_linkplay_available(&self) -> ArcResult<()> {
+        if self.cfg.host.trim().is_empty() {
+            return Err(ArcError::Base {
+                message: "The link play server is unavailable.".to_string(),
+                error_code: 151,
+                api_error_code: -999,
+                extra_data: None,
+                status: 404,
+            });
+        }
+        Ok(())
+    }
+
+    fn add_endpoint_and_port(&self, value: &mut Value) {
+        value["endPoint"] = Value::String(self.cfg.endpoint_host());
+        value["port"] = Value::Number(serde_json::Number::from(self.cfg.udp_port));
+    }
 }
 
 fn get_song_unlock(client_song_map: &HashMap<String, Vec<bool>>) -> Vec<u8> {
@@ -771,4 +943,28 @@ fn now_usec() -> i64 {
 pub struct MatchmakingJoinRequest {
     #[serde(rename = "clientSongMap")]
     pub client_song_map: HashMap<String, Vec<bool>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MultiplayerUpdateRequest {
+    pub token: Value,
+}
+
+impl MultiplayerUpdateRequest {
+    pub fn token_u64(&self) -> ArcResult<u64> {
+        value_as_u64(&self.token).ok_or_else(|| ArcError::input("Invalid token."))
+    }
+}
+
+fn value_as_u64(v: &Value) -> Option<u64> {
+    if let Some(n) = v.as_u64() {
+        return Some(n);
+    }
+    if let Some(n) = v.as_i64() {
+        return u64::try_from(n).ok();
+    }
+    if let Some(s) = v.as_str() {
+        return s.parse::<u64>().ok();
+    }
+    None
 }

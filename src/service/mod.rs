@@ -21,7 +21,7 @@ pub use bundle::BundleService;
 pub use character::CharacterService;
 pub use download::DownloadService;
 pub use item::{ItemFactory, ItemService, UserItemList};
-pub use multiplayer::{MatchmakingJoinRequest, MultiplayerService};
+pub use multiplayer::{MatchmakingJoinRequest, MultiplayerService, MultiplayerUpdateRequest};
 pub use notification::NotificationService;
 pub use operations::OperationManager;
 pub use present::PresentService;
