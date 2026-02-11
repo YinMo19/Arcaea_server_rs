@@ -956,7 +956,17 @@ impl<'a> CommandParser<'a> {
     }
 
     fn dispatch_command(&mut self) -> Option<Vec<Vec<u8>>> {
-        match self.c_u8(2) {
+        let cmd = self.c_u8(2);
+        debug!(
+            "UDP command=0x{cmd:02x} room={} player_index={} state={} round_mode={} timed_mode={}",
+            self.room.room_code,
+            self.player_index,
+            self.room.state,
+            self.room.round_mode,
+            self.room.timed_mode
+        );
+
+        match cmd {
             0x01 => self.command_01(),
             0x02 => self.command_02(),
             0x03 => self.command_03(),
@@ -970,7 +980,17 @@ impl<'a> CommandParser<'a> {
             0x20 => self.command_20(),
             0x22 => self.command_22(),
             0x23 => self.command_23(),
-            _ => None,
+            // Compatibility: some clients may send room setting update on 0x24.
+            0x24 => self.command_22(),
+            _ => {
+                warn!(
+                    "Unknown UDP command=0x{cmd:02x} room={} player_index={} len={}",
+                    self.room.room_code,
+                    self.player_index,
+                    self.command.len()
+                );
+                None
+            }
         }
     }
 
@@ -1450,6 +1470,11 @@ impl<'a> CommandParser<'a> {
 
     fn command_23(&mut self) -> Option<Vec<Vec<u8>>> {
         self.sender.set_random_code(self.c_random_code());
+
+        // Keep Python behavior in voting paths: stale players should not block all-voted flow.
+        let _ = self
+            .room
+            .check_player_online(self.sender.timestamp, self.cfg);
 
         if self.room.player_num() < 2 {
             return Some(vec![self.sender.command_0d(self.room, 6)]);
