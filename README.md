@@ -30,6 +30,12 @@ cargo run --bin init_db
 # 初始用户账号密码是：admin / admin
 cargo run
 
+# 如果你用了反代域名（例如 https://arc.yinmo.site），建议在 .env 设置：
+# DOWNLOAD_LINK_PREFIX=https://arc.yinmo.site/download/
+# BUNDLE_DOWNLOAD_LINK_PREFIX=https://arc.yinmo.site/bundle_download/
+# LINKPLAY_DISPLAY_HOST=arc.yinmo.site
+# LINKPLAY_DISPLAY_PORT=10900
+
 # 如果你要单独跑 linkplay 服务（UDP + TCP）
 cargo run --bin linkplayd
 ```
@@ -45,6 +51,8 @@ cargo build --release
 - `LINKPLAY_HOST`（默认 `0.0.0.0`）
 - `LINKPLAY_UDP_PORT`（默认 `10900`）
 - `LINKPLAY_TCP_PORT`（默认 `10901`）
+- `LINKPLAY_DISPLAY_HOST`（对客户端返回的 Link Play 地址；为空时使用 `LINKPLAY_HOST`）
+- `LINKPLAY_DISPLAY_PORT`（对客户端返回的 Link Play 端口；默认使用 `LINKPLAY_UDP_PORT`）
 - `LINKPLAY_AUTHENTICATION`
 - `LINKPLAY_TCP_SECRET_KEY`
 

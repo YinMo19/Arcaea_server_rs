@@ -480,7 +480,11 @@ impl AssetInitService {
             let item_id = item.id;
             let item_type = item.item_type;
             let amount = item.amount.unwrap_or(1);
-            let is_available = if item.is_available.unwrap_or(true) { 1 } else { 0 };
+            let is_available = if item.is_available.unwrap_or(true) {
+                1
+            } else {
+                0
+            };
 
             query!(
                 "INSERT INTO purchase_item (purchase_name, item_id, type, amount) VALUES (?, ?, ?, ?)",

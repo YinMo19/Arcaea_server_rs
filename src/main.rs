@@ -7,8 +7,10 @@ use rocket::fairing::AdHoc;
 use rocket::{launch, Build, Rocket};
 
 use std::collections::HashSet;
+use std::env;
 use Arcaea_server_rs::constants::GAME_API_PREFIX;
 use Arcaea_server_rs::error::{bad_request, forbidden, internal_error, not_found, unauthorized};
+use Arcaea_server_rs::route::download::serve_download_file;
 use Arcaea_server_rs::route::others::bundle_download;
 use Arcaea_server_rs::route::CORS;
 use Arcaea_server_rs::service::{
@@ -38,6 +40,23 @@ async fn init_services(
     OperationManager,
     MultiplayerService,
 ) {
+    let download_link_prefix = env::var("DOWNLOAD_LINK_PREFIX")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| {
+            let v = config::CONFIG.download_link_prefix.trim();
+            if v.is_empty() {
+                None
+            } else {
+                Some(v.to_string())
+            }
+        });
+
+    let bundle_download_link_prefix = env::var("BUNDLE_DOWNLOAD_LINK_PREFIX")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| config::CONFIG.bundle_download_link_prefix.clone());
+
     // Initialize AssetManager with proper paths
     let asset_manager = std::sync::Arc::new(
         AssetManager::with_defaults(pool.clone())
@@ -59,7 +78,7 @@ async fn init_services(
     let download_service = DownloadService::new(
         pool.clone(),
         asset_manager.clone(),
-        None, // download_link_prefix
+        download_link_prefix,
         3600, // download_time_gap_limit (1 hour)
         100,  // download_times_limit
     );
@@ -69,7 +88,7 @@ async fn init_services(
     let mut bundle_service = BundleService::new(
         pool.clone(),
         std::path::PathBuf::from("bundles"),
-        config::CONFIG.bundle_download_link_prefix.clone(),
+        bundle_download_link_prefix,
     );
 
     // Initialize bundle service
@@ -182,7 +201,7 @@ async fn configure_rocket() -> Rocket<Build> {
             ],
         )
         .mount("/auth", Arcaea_server_rs::route::auth::routes())
-        .mount("/", rocket::routes![bundle_download])
+        .mount("/", rocket::routes![bundle_download, serve_download_file])
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::others::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::course::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::mission::routes())

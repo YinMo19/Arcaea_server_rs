@@ -181,6 +181,40 @@ impl ItemService {
         Ok(())
     }
 
+    /// Claim normal item with Python-compatible behavior (no availability gate)
+    ///
+    /// Python's purchase flow builds item objects with `is_available=True` and directly
+    /// inserts into `user_item` if absent. It does not hard-fail on missing/disabled rows
+    /// in `item` for pack/single purchase granting.
+    pub async fn claim_normal_item_python_compat(
+        &self,
+        user_id: i32,
+        item_id: &str,
+        item_type: &str,
+    ) -> ArcResult<()> {
+        let exists = sqlx::query!(
+            "SELECT EXISTS(SELECT 1 FROM user_item WHERE user_id = ? AND item_id = ? AND type = ?) as `exists`",
+            user_id,
+            item_id,
+            item_type
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        if exists.exists == 0 {
+            sqlx::query!(
+                "INSERT INTO user_item VALUES (?, ?, ?, 1)",
+                user_id,
+                item_id,
+                item_type
+            )
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+
     /// Claim positive item for user (with quantity)
     pub async fn claim_positive_item(
         &self,

@@ -27,8 +27,8 @@ const LINKPLAY_MATCH_UNLOCK_MIN: [i32; 8] = [1000, 800, 500, 300, 200, 100, 50, 
 struct LinkplayClientConfig {
     host: String,
     tcp_port: u16,
-    udp_port: u16,
     display_host: String,
+    display_port: u16,
     authentication: String,
     tcp_aes_key: [u8; 16],
 }
@@ -45,6 +45,10 @@ impl LinkplayClientConfig {
             .and_then(|s| s.parse::<u16>().ok())
             .unwrap_or(10900);
         let display_host = env::var("LINKPLAY_DISPLAY_HOST").unwrap_or_default();
+        let display_port = env::var("LINKPLAY_DISPLAY_PORT")
+            .ok()
+            .and_then(|s| s.parse::<u16>().ok())
+            .unwrap_or(udp_port);
         let authentication = env::var("LINKPLAY_AUTHENTICATION")
             .unwrap_or_else(|_| "my_link_play_server".to_string());
         let secret =
@@ -53,19 +57,35 @@ impl LinkplayClientConfig {
         Self {
             host,
             tcp_port,
-            udp_port,
             display_host,
+            display_port,
             authentication,
             tcp_aes_key: padded_key_16(&secret),
         }
     }
 
-    fn endpoint_host(&self) -> String {
-        if self.display_host.is_empty() {
-            self.host.clone()
-        } else {
-            self.display_host.clone()
+    fn endpoint_host(&self, request_host: Option<&str>) -> String {
+        if !self.display_host.is_empty() {
+            return self.display_host.clone();
         }
+
+        if let Some(host) = request_host {
+            let host = host.trim();
+            if !host.is_empty() {
+                // Match Python baseline: request.host.split(':')[0]
+                if let Some(stripped) = host.strip_prefix('[') {
+                    if let Some((ipv6, _)) = stripped.split_once(']') {
+                        return ipv6.to_string();
+                    }
+                }
+                if let Some((name, _)) = host.split_once(':') {
+                    return name.to_string();
+                }
+                return host.to_string();
+            }
+        }
+
+        self.host.clone()
     }
 }
 
@@ -128,6 +148,7 @@ impl MultiplayerService {
         &self,
         user_id: i32,
         client_song_map: &HashMap<String, Vec<bool>>,
+        request_host: Option<&str>,
     ) -> ArcResult<Value> {
         self.ensure_linkplay_available()?;
         let song_unlock = get_song_unlock(client_song_map);
@@ -143,7 +164,7 @@ impl MultiplayerService {
                 user_id,
             )
             .await?;
-        self.add_endpoint_and_port(&mut result);
+        self.add_endpoint_and_port(&mut result, request_host);
         Ok(result)
     }
 
@@ -152,6 +173,7 @@ impl MultiplayerService {
         user_id: i32,
         room_code: &str,
         client_song_map: &HashMap<String, Vec<bool>>,
+        request_host: Option<&str>,
     ) -> ArcResult<Value> {
         self.ensure_linkplay_available()?;
         let song_unlock = get_song_unlock(client_song_map);
@@ -168,18 +190,23 @@ impl MultiplayerService {
                 user_id,
             )
             .await?;
-        self.add_endpoint_and_port(&mut result);
+        self.add_endpoint_and_port(&mut result, request_host);
         Ok(result)
     }
 
-    pub async fn room_update(&self, user_id: i32, token: u64) -> ArcResult<Value> {
+    pub async fn room_update(
+        &self,
+        user_id: i32,
+        token: u64,
+        request_host: Option<&str>,
+    ) -> ArcResult<Value> {
         self.ensure_linkplay_available()?;
         let (_, rating_ptt, is_hide_rating) = self.select_user_about_link_play(user_id).await?;
 
         let mut result = self
             .remote_update_room(token, rating_ptt, is_hide_rating, user_id)
             .await?;
-        self.add_endpoint_and_port(&mut result);
+        self.add_endpoint_and_port(&mut result, request_host);
         Ok(result)
     }
 
@@ -217,6 +244,7 @@ impl MultiplayerService {
         &self,
         user_id: i32,
         client_song_map: &HashMap<String, Vec<bool>>,
+        request_host: Option<&str>,
     ) -> ArcResult<Value> {
         self.ensure_linkplay_available()?;
         let song_unlock = get_song_unlock(client_song_map);
@@ -241,7 +269,7 @@ impl MultiplayerService {
 
         let matched = self.match_internal(user_id).await?;
         if let Some(mut r) = matched {
-            self.add_endpoint_and_port(&mut r);
+            self.add_endpoint_and_port(&mut r, request_host);
             Ok(r)
         } else {
             Ok(json!({
@@ -251,11 +279,15 @@ impl MultiplayerService {
         }
     }
 
-    pub async fn matchmaking_status(&self, user_id: i32) -> ArcResult<Value> {
+    pub async fn matchmaking_status(
+        &self,
+        user_id: i32,
+        request_host: Option<&str>,
+    ) -> ArcResult<Value> {
         self.ensure_linkplay_available()?;
         let matched = self.match_internal(user_id).await?;
         if let Some(mut r) = matched {
-            self.add_endpoint_and_port(&mut r);
+            self.add_endpoint_and_port(&mut r, request_host);
             Ok(r)
         } else {
             Ok(json!({
@@ -874,9 +906,9 @@ impl MultiplayerService {
         Ok(())
     }
 
-    fn add_endpoint_and_port(&self, value: &mut Value) {
-        value["endPoint"] = Value::String(self.cfg.endpoint_host());
-        value["port"] = Value::Number(serde_json::Number::from(self.cfg.udp_port));
+    fn add_endpoint_and_port(&self, value: &mut Value, request_host: Option<&str>) {
+        value["endPoint"] = Value::String(self.cfg.endpoint_host(request_host));
+        value["port"] = Value::Number(serde_json::Number::from(self.cfg.display_port));
     }
 }
 

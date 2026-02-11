@@ -1,3 +1,4 @@
+use crate::context::ClientContext;
 use crate::route::common::{success_return, AuthGuard, EmptyResponse, RouteResult};
 use crate::service::{
     MatchmakingJoinRequest, MultiplayerService, MultiplayerUpdateRequest, NotificationService,
@@ -16,17 +17,38 @@ pub struct RoomStatusRequest {
     pub shareToken: String,
 }
 
+fn request_host(ctx: &ClientContext<'_>) -> Option<String> {
+    let forwarded = ctx
+        .get_header("X-Forwarded-Host")
+        .and_then(|v| v.split(',').next())
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(ToOwned::to_owned);
+    forwarded.or_else(|| {
+        ctx.get_header("Host")
+            .map(|v| v.as_str().trim())
+            .filter(|v| !v.is_empty())
+            .map(ToOwned::to_owned)
+    })
+}
+
 /// Room create endpoint
 ///
 /// Python baseline: `POST /multiplayer/me/room/create`
 #[post("/multiplayer/me/room/create", data = "<request>")]
 pub async fn room_create(
     multiplayer_service: &State<MultiplayerService>,
+    ctx: ClientContext<'_>,
     auth: AuthGuard,
     request: Json<MatchmakingJoinRequest>,
 ) -> RouteResult<Value> {
+    let request_host = request_host(&ctx);
     let result = multiplayer_service
-        .room_create(auth.user_id, &request.client_song_map)
+        .room_create(
+            auth.user_id,
+            &request.client_song_map,
+            request_host.as_deref(),
+        )
         .await?;
     Ok(success_return(result))
 }
@@ -37,12 +59,19 @@ pub async fn room_create(
 #[post("/multiplayer/me/room/join/<room_code>", data = "<request>")]
 pub async fn room_join(
     multiplayer_service: &State<MultiplayerService>,
+    ctx: ClientContext<'_>,
     auth: AuthGuard,
     room_code: String,
     request: Json<MatchmakingJoinRequest>,
 ) -> RouteResult<Value> {
+    let request_host = request_host(&ctx);
     let result = multiplayer_service
-        .room_join(auth.user_id, &room_code, &request.client_song_map)
+        .room_join(
+            auth.user_id,
+            &room_code,
+            &request.client_song_map,
+            request_host.as_deref(),
+        )
         .await?;
     Ok(success_return(result))
 }
@@ -53,11 +82,15 @@ pub async fn room_join(
 #[post("/multiplayer/me/update", data = "<request>")]
 pub async fn multiplayer_update(
     multiplayer_service: &State<MultiplayerService>,
+    ctx: ClientContext<'_>,
     auth: AuthGuard,
     request: Json<MultiplayerUpdateRequest>,
 ) -> RouteResult<Value> {
+    let request_host = request_host(&ctx);
     let token = request.token_u64()?;
-    let result = multiplayer_service.room_update(auth.user_id, token).await?;
+    let result = multiplayer_service
+        .room_update(auth.user_id, token, request_host.as_deref())
+        .await?;
     Ok(success_return(result))
 }
 
@@ -108,11 +141,17 @@ pub async fn room_status(
 #[post("/multiplayer/me/matchmaking/join", data = "<request>")]
 pub async fn matchmaking_join(
     multiplayer_service: &State<MultiplayerService>,
+    ctx: ClientContext<'_>,
     auth: AuthGuard,
     request: Json<MatchmakingJoinRequest>,
 ) -> RouteResult<Value> {
+    let request_host = request_host(&ctx);
     let result = multiplayer_service
-        .matchmaking_join(auth.user_id, &request.client_song_map)
+        .matchmaking_join(
+            auth.user_id,
+            &request.client_song_map,
+            request_host.as_deref(),
+        )
         .await?;
     Ok(success_return(result))
 }
@@ -123,9 +162,13 @@ pub async fn matchmaking_join(
 #[post("/multiplayer/me/matchmaking/status")]
 pub async fn matchmaking_status(
     multiplayer_service: &State<MultiplayerService>,
+    ctx: ClientContext<'_>,
     auth: AuthGuard,
 ) -> RouteResult<Value> {
-    let result = multiplayer_service.matchmaking_status(auth.user_id).await?;
+    let request_host = request_host(&ctx);
+    let result = multiplayer_service
+        .matchmaking_status(auth.user_id, request_host.as_deref())
+        .await?;
     Ok(success_return(result))
 }
 

@@ -1,5 +1,6 @@
 use crate::config::Constants;
 use crate::error::{ArcError, ArcResult};
+use crate::model::item::ItemTypes;
 use crate::service::{ItemService, UserService};
 use serde_json::{json, Value};
 use sqlx::{MySql, Pool};
@@ -303,9 +304,22 @@ impl PurchaseService {
             let item_type = item.item_type;
             let amount = item.amount.unwrap_or(1);
 
-            self.item_service
-                .claim_item(user_id, &item_id, &item_type, amount)
-                .await?;
+            match item_type.as_str() {
+                ItemTypes::WORLD_SONG
+                | ItemTypes::WORLD_UNLOCK
+                | ItemTypes::COURSE_BANNER
+                | ItemTypes::SINGLE
+                | ItemTypes::PACK => {
+                    self.item_service
+                        .claim_normal_item_python_compat(user_id, &item_id, &item_type)
+                        .await?;
+                }
+                _ => {
+                    self.item_service
+                        .claim_item(user_id, &item_id, &item_type, amount)
+                        .await?;
+                }
+            }
         }
 
         // Get updated user info
