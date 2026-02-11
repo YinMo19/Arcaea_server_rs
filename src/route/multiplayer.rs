@@ -66,7 +66,11 @@ pub async fn multiplayer_update(
 /// Python baseline: `POST /multiplayer/me/room/<room_code>/invite`
 // `/room/join/invite` can match both this route and `room_join`, so keep this
 // route at a lower priority to avoid Rocket route collision at launch.
-#[post("/multiplayer/me/room/<room_code>/invite", data = "<request>", rank = 2)]
+#[post(
+    "/multiplayer/me/room/<room_code>/invite",
+    data = "<request>",
+    rank = 2
+)]
 pub async fn room_invite(
     multiplayer_service: &State<MultiplayerService>,
     notification_service: &State<NotificationService>,

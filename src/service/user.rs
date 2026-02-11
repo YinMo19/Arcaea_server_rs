@@ -9,8 +9,8 @@ use crate::service::CharacterService;
 use base64::{engine::general_purpose, Engine as _};
 use rand::Rng;
 use serde_json::Value;
-use sqlx::{MySql, Pool};
 use sha2::{Digest, Sha256};
+use sqlx::{MySql, Pool};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 

@@ -8,7 +8,6 @@ use rocket::{Request, Response};
 use serde_json;
 use std::io::Cursor;
 
-
 /// User database model representing the user table
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct User {

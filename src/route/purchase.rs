@@ -1,8 +1,8 @@
 use crate::route::common::{success_return, success_return_no_value, AuthGuard, RouteResult};
 use crate::service::PurchaseService;
 use rocket::form::Form;
-use rocket::{get, post, routes, Route, State};
 use rocket::FromForm;
+use rocket::{get, post, routes, Route, State};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -170,9 +170,7 @@ pub async fn redeem(
         .code
         .as_deref()
         .ok_or_else(|| crate::error::ArcError::input("`code` is required"))?;
-    let result = purchase_service
-        .redeem_code(auth.user_id, code)
-        .await?;
+    let result = purchase_service.redeem_code(auth.user_id, code).await?;
     Ok(success_return(result))
 }
 

@@ -1240,10 +1240,7 @@ impl<'a> CommandParser<'a> {
 
         let new_diff = self.c_u8(33);
         if self.room.players[self.player_index].score.difficulty != new_diff
-            && !matches!(
-                self.room.players[self.player_index].player_state,
-                5..=8
-            )
+            && !matches!(self.room.players[self.player_index].player_state, 5..=8)
         {
             flag_12 = true;
             self.room.players[self.player_index].score.difficulty = new_diff;
@@ -2325,10 +2322,7 @@ fn encrypt_tcp_response(key: &[u8; 16], data: &Value) -> io::Result<Vec<u8>> {
     Ok(out)
 }
 
-fn encrypt_bytes(
-    key: &[u8; 16],
-    plaintext: &[u8],
-) -> Result<EncryptionPayload, String> {
+fn encrypt_bytes(key: &[u8; 16], plaintext: &[u8]) -> Result<EncryptionPayload, String> {
     let cipher = Aes128Gcm::new_from_slice(key).map_err(|e| e.to_string())?;
 
     let mut iv = [0u8; 12];
