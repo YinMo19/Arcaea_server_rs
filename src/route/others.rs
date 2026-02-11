@@ -160,6 +160,27 @@ pub async fn insight_complete(
     }))
 }
 
+/// Awaken Maya endpoint
+///
+/// Python baseline: `POST /unlock/me/awaken_maya`
+#[post("/unlock/me/awaken_maya")]
+pub async fn awaken_maya(
+    character_service: &State<CharacterService>,
+    user_service: &State<UserService>,
+    auth: AuthGuard,
+) -> RouteResult<Value> {
+    // Python baseline: ignore uncap errors and still return current character state.
+    let _ = user_service.character_uncap(auth.user_id, 71).await;
+    let updated_character = character_service
+        .get_user_character_info(auth.user_id, 71)
+        .await?;
+
+    Ok(success_return(serde_json::json!({
+        "user_id": auth.user_id,
+        "updated_characters": [updated_character]
+    })))
+}
+
 /// Application log endpoint
 ///
 /// Receives client-side exception logs but doesn't process them.
@@ -390,6 +411,7 @@ pub fn routes() -> Vec<Route> {
         finale_start,
         finale_end,
         insight_complete,
+        awaken_maya,
         applog_me,
         aggregate,
         bundle_download

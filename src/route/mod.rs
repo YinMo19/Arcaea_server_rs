@@ -1,7 +1,10 @@
 pub mod auth;
 pub mod common;
+pub mod course;
 pub mod download;
 pub mod friend;
+pub mod legacy;
+pub mod mission;
 pub mod multiplayer;
 
 pub mod others;

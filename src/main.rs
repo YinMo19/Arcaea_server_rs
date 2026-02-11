@@ -6,6 +6,7 @@
 use rocket::fairing::AdHoc;
 use rocket::{launch, Build, Rocket};
 
+use std::collections::HashSet;
 use Arcaea_server_rs::constants::GAME_API_PREFIX;
 use Arcaea_server_rs::error::{bad_request, forbidden, internal_error, not_found, unauthorized};
 use Arcaea_server_rs::route::others::bundle_download;
@@ -118,7 +119,7 @@ async fn init_services(
 async fn configure_rocket() -> Rocket<Build> {
     let prometheus = PrometheusMetrics::new();
 
-    rocket::build()
+    let mut rocket = rocket::build()
         .attach(CORS)
         .attach(AdHoc::on_ignite("Database", |rocket| async {
             match Database::new().await {
@@ -170,9 +171,20 @@ async fn configure_rocket() -> Rocket<Build> {
         .attach(prometheus.clone())
         .mount("/metrics", prometheus)
         .mount("/user", Arcaea_server_rs::route::user::routes())
+        .mount(
+            "/account",
+            rocket::routes![
+                Arcaea_server_rs::route::user::register,
+                Arcaea_server_rs::route::user::user_delete,
+                Arcaea_server_rs::route::user::email_resend_verify,
+                Arcaea_server_rs::route::user::email_verify
+            ],
+        )
         .mount("/auth", Arcaea_server_rs::route::auth::routes())
         .mount("/", rocket::routes![bundle_download])
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::others::routes())
+        .mount(GAME_API_PREFIX, Arcaea_server_rs::route::course::routes())
+        .mount(GAME_API_PREFIX, Arcaea_server_rs::route::mission::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::friend::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::download::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::score::routes())
@@ -192,7 +204,35 @@ async fn configure_rocket() -> Rocket<Build> {
                 unauthorized,
                 forbidden,
             ],
-        )
+        );
+
+    let mut seen_old_prefixes = HashSet::new();
+    for prefix in Arcaea_server_rs::constants::OLD_GAME_API_PREFIX {
+        let p = normalize_prefix(prefix);
+        if !p.is_empty() && seen_old_prefixes.insert(p.clone()) {
+            rocket = rocket.mount(&p, Arcaea_server_rs::route::legacy::routes());
+        }
+    }
+    for prefix in &config::CONFIG.old_game_api_prefix {
+        let p = normalize_prefix(prefix);
+        if !p.is_empty() && seen_old_prefixes.insert(p.clone()) {
+            rocket = rocket.mount(&p, Arcaea_server_rs::route::legacy::routes());
+        }
+    }
+
+    rocket
+}
+
+fn normalize_prefix(prefix: &str) -> String {
+    let trimmed = prefix.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if trimmed.starts_with('/') {
+        trimmed.to_string()
+    } else {
+        format!("/{trimmed}")
+    }
 }
 
 /// Application entry point
