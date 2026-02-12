@@ -556,6 +556,7 @@ impl UserService {
         user_info.singles = self.get_user_singles(user_id).await?;
         user_info.world_songs = self.get_user_world_songs(user_id).await?;
         user_info.world_unlocks = self.get_user_world_unlocks(user_id).await?;
+        user_info.course_banners = self.get_user_course_banners(user_id).await?;
         user_info.user_missions = self.get_user_missions(user_id).await?;
 
         user_info.stamina = self.get_user_stamina(user_id).await?;
@@ -984,6 +985,18 @@ impl UserService {
         };
 
         Ok(world_unlocks)
+    }
+
+    /// Get user course banners
+    async fn get_user_course_banners(&self, user_id: i32) -> ArcResult<Vec<Value>> {
+        let banners = sqlx::query_scalar!(
+            "SELECT item_id FROM user_item WHERE user_id = ? AND type = 'course_banner' ORDER BY item_id",
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(banners.into_iter().map(Value::String).collect())
     }
 
     /// Get user mission statuses
