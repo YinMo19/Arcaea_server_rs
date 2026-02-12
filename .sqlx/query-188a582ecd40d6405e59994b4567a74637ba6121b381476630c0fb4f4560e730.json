@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                    INSERT INTO user_char_full (\n                        user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag\n                    ) VALUES (?, ?, ?, ?, ?, 0, 0)\n                    ON DUPLICATE KEY UPDATE\n                        level = GREATEST(level, VALUES(level)),\n                        exp = GREATEST(exp, VALUES(exp)),\n                        is_uncapped = GREATEST(is_uncapped, VALUES(is_uncapped))\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "188a582ecd40d6405e59994b4567a74637ba6121b381476630c0fb4f4560e730"
+}

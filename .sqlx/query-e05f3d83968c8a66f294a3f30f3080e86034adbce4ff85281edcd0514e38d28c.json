@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user_char SET level = ?, exp = ? WHERE user_id = ? AND character_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "e05f3d83968c8a66f294a3f30f3080e86034adbce4ff85281edcd0514e38d28c"
+}

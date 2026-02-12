@@ -8,7 +8,7 @@
         "name": "total_steps",
         "type_info": {
           "type": "LongLong",
-          "flags": "BINARY",
+          "flags": "NOT_NULL | BINARY",
           "char_set": 63,
           "max_size": 21
         }
@@ -18,7 +18,7 @@
       "Right": 1
     },
     "nullable": [
-      true
+      false
     ]
   },
   "hash": "a2e52b09731cd4a1d268d62709e082aa7bb0d23847d0e33036dc08acc777dab6"

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user_world SET curr_position = ?, curr_capture = ?, is_locked = 0 WHERE user_id = ? AND map_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "51713a2c2410490feb1bfa0086c119921d51849ac4dda79b915338cab848ff23"
+}

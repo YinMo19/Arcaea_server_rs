@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE songplay_token SET course_state = ?, course_score = ?, course_clear_type = ? WHERE token = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "44a455843f17ba57ffc4a0f2594cce2e0c5f3b99c3fa4612d96eca6af58dd6fb"
+}

@@ -1,0 +1,36 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT high_score, best_clear_type FROM user_course WHERE user_id = ? AND course_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "high_score",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "best_clear_type",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "7de06e29dcab8fcf1bd003866561f1256c310beb7e4aeccc5b7ccb15c2e8a660"
+}

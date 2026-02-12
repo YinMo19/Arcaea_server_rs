@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                INSERT INTO item (item_id, type, is_available)\n                VALUES (?, 'course_banner', 1)\n                ON DUPLICATE KEY UPDATE is_available = VALUES(is_available)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "f0c86697273864cd76d64db4ce00a580a2baac8b82f5f8c6caf7c74ffdebc0a6"
+}

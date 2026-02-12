@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                INSERT INTO char_item (character_id, item_id, type, amount)\n                VALUES (?, ?, ?, ?)\n                ON DUPLICATE KEY UPDATE amount = VALUES(amount)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "523add6920997f8d6ee91c49215453f4697c853841336883f3dc21f8cc9432e1"
+}

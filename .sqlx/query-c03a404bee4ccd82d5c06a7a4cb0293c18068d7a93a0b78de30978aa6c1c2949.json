@@ -1,0 +1,36 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT mission_id, status FROM user_mission WHERE user_id = ? ORDER BY mission_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mission_id",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "status",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "c03a404bee4ccd82d5c06a7a4cb0293c18068d7a93a0b78de30978aa6c1c2949"
+}

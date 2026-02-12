@@ -1,11 +1,11 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT stamina FROM user WHERE user_id = ?",
+  "query": "SELECT status FROM user_mission WHERE user_id = ? AND mission_id = ?",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "stamina",
+        "name": "status",
         "type_info": {
           "type": "Long",
           "flags": "",
@@ -15,11 +15,11 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
       true
     ]
   },
-  "hash": "1844c2d2bb4eb6f92d5815ac01dadb1b28f24f779ad9acd6dd533f966ccf50ce"
+  "hash": "1d94fa5bd3b2becc1632e67cde8245add543c3df00d9e58936a74fb437ef577d"
 }

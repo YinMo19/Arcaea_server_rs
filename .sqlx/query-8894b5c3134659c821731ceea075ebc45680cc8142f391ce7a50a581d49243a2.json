@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                INSERT INTO `character` (\n                    character_id, name, max_level, frag1, prog1, overdrive1,\n                    frag20, prog20, overdrive20, frag30, prog30, overdrive30,\n                    skill_id, skill_unlock_level, skill_requires_uncap,\n                    skill_id_uncap, char_type, is_uncapped\n                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n                ON DUPLICATE KEY UPDATE\n                    name = VALUES(name),\n                    max_level = VALUES(max_level),\n                    frag1 = VALUES(frag1),\n                    prog1 = VALUES(prog1),\n                    overdrive1 = VALUES(overdrive1),\n                    frag20 = VALUES(frag20),\n                    prog20 = VALUES(prog20),\n                    overdrive20 = VALUES(overdrive20),\n                    frag30 = VALUES(frag30),\n                    prog30 = VALUES(prog30),\n                    overdrive30 = VALUES(overdrive30),\n                    skill_id = VALUES(skill_id),\n                    skill_unlock_level = VALUES(skill_unlock_level),\n                    skill_requires_uncap = VALUES(skill_requires_uncap),\n                    skill_id_uncap = VALUES(skill_id_uncap),\n                    char_type = VALUES(char_type),\n                    is_uncapped = VALUES(is_uncapped)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 18
+    },
+    "nullable": []
+  },
+  "hash": "8894b5c3134659c821731ceea075ebc45680cc8142f391ce7a50a581d49243a2"
+}

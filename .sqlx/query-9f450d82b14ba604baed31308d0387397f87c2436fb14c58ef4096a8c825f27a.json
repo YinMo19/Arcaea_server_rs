@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user SET world_mode_locked_end_ts = ? WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "9f450d82b14ba604baed31308d0387397f87c2436fb14c58ef4096a8c825f27a"
+}

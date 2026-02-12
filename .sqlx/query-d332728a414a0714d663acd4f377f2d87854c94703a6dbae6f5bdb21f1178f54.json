@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user SET prog_boost = 0 WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "d332728a414a0714d663acd4f377f2d87854c94703a6dbae6f5bdb21f1178f54"
+}

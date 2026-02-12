@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user_mission SET status = 4 WHERE user_id = ? AND mission_id = ? AND status = 2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "1c975e13ea0c9007f7314414b0b2ad32e3d2c818143ffd232a5400d0dca4a45a"
+}

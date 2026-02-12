@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user_char_full SET is_uncapped = 1, is_uncapped_override = 0 WHERE user_id = ? AND character_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "a6dab742599fb6fb13845ca21ca1f991fce037afd218a145a1fbb550aa7f87a8"
+}

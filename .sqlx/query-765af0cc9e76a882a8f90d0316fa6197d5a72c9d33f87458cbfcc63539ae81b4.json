@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO user_course (user_id, course_id, high_score, best_clear_type)\n                 VALUES (?, ?, ?, ?)\n                 ON DUPLICATE KEY UPDATE high_score = VALUES(high_score), best_clear_type = VALUES(best_clear_type)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "765af0cc9e76a882a8f90d0316fa6197d5a72c9d33f87458cbfcc63539ae81b4"
+}

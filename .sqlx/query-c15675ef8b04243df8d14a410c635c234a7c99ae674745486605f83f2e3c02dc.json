@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user SET beyond_boost_gauge = ? WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "c15675ef8b04243df8d14a410c635c234a7c99ae674745486605f83f2e3c02dc"
+}

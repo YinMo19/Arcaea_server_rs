@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT 1 as value",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "char_set": 63,
+          "max_size": 1
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "22cb6a400ba206ca267d1593bf451701db21e517538c8a9a24506ba4f8915a8b"
+}
