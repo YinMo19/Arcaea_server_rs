@@ -3,3 +3,7 @@ url = "mysql://username:password@localhost:3306/arcaea_core"
 
 [default]
 port = 8090
+
+[default.limits]
+form = "16MiB"
+data-form = "16MiB"

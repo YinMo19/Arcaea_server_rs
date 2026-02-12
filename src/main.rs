@@ -4,6 +4,7 @@
 //! with database connections, services, and routes.
 
 use rocket::fairing::AdHoc;
+use rocket::data::{Limits, ToByteUnit};
 use rocket::{launch, Build, Rocket};
 
 use std::collections::HashSet;
@@ -137,7 +138,14 @@ async fn init_services(
 /// Configure the Rocket application
 async fn configure_rocket() -> Rocket<Build> {
     let prometheus = PrometheusMetrics::new();
-    let figment = rocket::Config::figment().merge(("cli_colors", false));
+    let figment = rocket::Config::figment()
+        .merge(("cli_colors", false))
+        .merge((
+            "limits",
+            Limits::new()
+                .limit("form", 16.mebibytes())
+                .limit("data-form", 16.mebibytes()),
+        ));
     let game_user_prefix = format!("{GAME_API_PREFIX}/user");
     let game_account_prefix = format!("{GAME_API_PREFIX}/account");
 
