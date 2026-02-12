@@ -46,7 +46,9 @@ impl Database {
 
     /// Check if the database connection is healthy
     pub async fn check_health(pool: &DbPool) -> Result<(), sqlx::Error> {
-        sqlx::query("SELECT 1").execute(pool).await?;
+        let _ = sqlx::query_scalar!("SELECT 1 as value")
+            .fetch_one(pool)
+            .await?;
         Ok(())
     }
 }

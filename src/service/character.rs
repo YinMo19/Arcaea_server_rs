@@ -738,8 +738,6 @@ impl CharacterService {
         user_id: i32,
         character_id: i32,
     ) -> ArcResult<UserCharacterInfo> {
-        let table_name = self.get_user_char_table();
-
         // Get current uncap condition
         let (is_uncapped, is_uncapped_override) = self
             .get_user_character_uncap_condition(user_id, character_id)
@@ -768,15 +766,25 @@ impl CharacterService {
         .await?;
 
         // Update character table
-        let query = format!(
-            "UPDATE {table_name} SET is_uncapped_override = ? WHERE user_id = ? AND character_id = ?"
-        );
-        sqlx::query(&query)
-            .bind(if new_override { 1 } else { 0 })
-            .bind(user_id)
-            .bind(character_id)
+        if CONFIG.character_full_unlock {
+            sqlx::query!(
+                "UPDATE user_char_full SET is_uncapped_override = ? WHERE user_id = ? AND character_id = ?",
+                if new_override { 1 } else { 0 },
+                user_id,
+                character_id
+            )
             .execute(&self.pool)
             .await?;
+        } else {
+            sqlx::query!(
+                "UPDATE user_char SET is_uncapped_override = ? WHERE user_id = ? AND character_id = ?",
+                if new_override { 1 } else { 0 },
+                user_id,
+                character_id
+            )
+            .execute(&self.pool)
+            .await?;
+        }
 
         // Return updated character info
         self.get_user_character_info(user_id, character_id).await
@@ -866,16 +874,24 @@ impl CharacterService {
             }
         }
 
-        // Update character uncap state - use the correct table based on config
-        let table_name = self.get_user_char_table();
-        let query = format!(
-            "UPDATE {table_name} SET is_uncapped = 1, is_uncapped_override = 0 WHERE user_id = ? AND character_id = ?"
-        );
-        sqlx::query(&query)
-            .bind(user_id)
-            .bind(character_id)
+        // Update character uncap state
+        if CONFIG.character_full_unlock {
+            sqlx::query!(
+                "UPDATE user_char_full SET is_uncapped = 1, is_uncapped_override = 0 WHERE user_id = ? AND character_id = ?",
+                user_id,
+                character_id
+            )
             .execute(&self.pool)
             .await?;
+        } else {
+            sqlx::query!(
+                "UPDATE user_char SET is_uncapped = 1, is_uncapped_override = 0 WHERE user_id = ? AND character_id = ?",
+                user_id,
+                character_id
+            )
+            .execute(&self.pool)
+            .await?;
+        }
 
         // Return updated character info
         self.get_user_character_info(user_id, character_id).await
@@ -912,17 +928,27 @@ impl CharacterService {
         char_info.level.add_exp(exp_addition)?;
 
         // Update database
-        let table_name = self.get_user_char_table();
-        let query = format!(
-            "UPDATE {table_name} SET level = ?, exp = ? WHERE user_id = ? AND character_id = ?"
-        );
-        sqlx::query(&query)
-            .bind(char_info.level.level)
-            .bind(char_info.level.exp)
-            .bind(user_id)
-            .bind(character_id)
+        if CONFIG.character_full_unlock {
+            sqlx::query!(
+                "UPDATE user_char_full SET level = ?, exp = ? WHERE user_id = ? AND character_id = ?",
+                char_info.level.level,
+                char_info.level.exp,
+                user_id,
+                character_id
+            )
             .execute(&self.pool)
             .await?;
+        } else {
+            sqlx::query!(
+                "UPDATE user_char SET level = ?, exp = ? WHERE user_id = ? AND character_id = ?",
+                char_info.level.level,
+                char_info.level.exp,
+                user_id,
+                character_id
+            )
+            .execute(&self.pool)
+            .await?;
+        }
 
         Ok(char_info)
     }
@@ -991,17 +1017,24 @@ impl CharacterService {
         user_id: i32,
         character_id: i32,
     ) -> ArcResult<()> {
-        let table_name = self.get_user_char_table();
-
         // Toggle skill flag
-        let query = format!(
-            "UPDATE {table_name} SET skill_flag = 1 - skill_flag WHERE user_id = ? AND character_id = ?"
-        );
-        sqlx::query(&query)
-            .bind(user_id)
-            .bind(character_id)
+        if CONFIG.character_full_unlock {
+            sqlx::query!(
+                "UPDATE user_char_full SET skill_flag = 1 - skill_flag WHERE user_id = ? AND character_id = ?",
+                user_id,
+                character_id
+            )
             .execute(&self.pool)
             .await?;
+        } else {
+            sqlx::query!(
+                "UPDATE user_char SET skill_flag = 1 - skill_flag WHERE user_id = ? AND character_id = ?",
+                user_id,
+                character_id
+            )
+            .execute(&self.pool)
+            .await?;
+        }
 
         Ok(())
     }
@@ -1094,14 +1127,23 @@ impl CharacterService {
 
     /// Remove a character from user (if needed for debugging or admin purposes)
     pub async fn remove_character(&self, user_id: i32, character_id: i32) -> ArcResult<()> {
-        let table_name = self.get_user_char_table();
-
-        let query = format!("DELETE FROM {table_name} WHERE user_id = ? AND character_id = ?");
-        sqlx::query(&query)
-            .bind(user_id)
-            .bind(character_id)
+        if CONFIG.character_full_unlock {
+            sqlx::query!(
+                "DELETE FROM user_char_full WHERE user_id = ? AND character_id = ?",
+                user_id,
+                character_id
+            )
             .execute(&self.pool)
             .await?;
+        } else {
+            sqlx::query!(
+                "DELETE FROM user_char WHERE user_id = ? AND character_id = ?",
+                user_id,
+                character_id
+            )
+            .execute(&self.pool)
+            .await?;
+        }
 
         Ok(())
     }

@@ -20,7 +20,7 @@ use base64::{engine::general_purpose, Engine as _};
 use md5;
 use rand::Rng;
 use serde_json::json;
-use sqlx::{MySqlPool, Row};
+use sqlx::MySqlPool;
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -1630,58 +1630,46 @@ impl ScoreService {
     async fn handle_world_mode(&self, user_play: &mut UserPlay) -> ArcResult<JsonMap> {
         let user_id = user_play.user_score.user_id;
 
-        let user_row = sqlx::query(
+        let user_row = sqlx::query!(
             "SELECT character_id, is_skill_sealed, current_map, world_mode_locked_end_ts, beyond_boost_gauge
              FROM user WHERE user_id = ?",
+            user_id
         )
-        .bind(user_id)
         .fetch_one(&self.pool)
         .await?;
 
-        let mut character_id = user_row
-            .try_get::<Option<i32>, _>("character_id")?
-            .unwrap_or(0);
-        let is_skill_sealed = user_row
-            .try_get::<Option<i8>, _>("is_skill_sealed")?
-            .unwrap_or(0)
-            != 0;
-        let mut current_map = user_row
-            .try_get::<Option<String>, _>("current_map")?
-            .unwrap_or_default();
+        let mut character_id = user_row.character_id.unwrap_or(0);
+        let is_skill_sealed = user_row.is_skill_sealed.unwrap_or(0) != 0;
+        let mut current_map = user_row.current_map.unwrap_or_default();
         if current_map.is_empty() {
             current_map = "tutorial".to_string();
         }
-        let mut world_mode_locked_end_ts = user_row
-            .try_get::<Option<i64>, _>("world_mode_locked_end_ts")?
-            .unwrap_or(-1);
-        let mut beyond_boost_gauge = user_row
-            .try_get::<Option<f64>, _>("beyond_boost_gauge")?
-            .unwrap_or(0.0);
+        let mut world_mode_locked_end_ts = user_row.world_mode_locked_end_ts.unwrap_or(-1);
+        let mut beyond_boost_gauge = user_row.beyond_boost_gauge.unwrap_or(0.0);
 
         let parser = get_map_parser();
         let map = parser.load_world_map(&current_map)?;
 
-        let user_world = sqlx::query(
+        let user_world = sqlx::query!(
             "SELECT curr_position, curr_capture, is_locked FROM user_world WHERE user_id = ? AND map_id = ?",
+            user_id,
+            &current_map
         )
-        .bind(user_id)
-        .bind(&current_map)
         .fetch_optional(&self.pool)
         .await?;
 
         let (mut curr_position, mut curr_capture, is_locked) = if let Some(row) = user_world {
             (
-                row.try_get::<Option<i32>, _>("curr_position")?.unwrap_or(0),
-                row.try_get::<Option<f64>, _>("curr_capture")?
-                    .unwrap_or(0.0),
-                row.try_get::<Option<i8>, _>("is_locked")?.unwrap_or(1) != 0,
+                row.curr_position.unwrap_or(0),
+                row.curr_capture.unwrap_or(0.0),
+                row.is_locked.unwrap_or(1) != 0,
             )
         } else {
-            sqlx::query(
+            sqlx::query!(
                 "INSERT INTO user_world (user_id, map_id, curr_position, curr_capture, is_locked) VALUES (?, ?, 0, 0, 1)",
+                user_id,
+                &current_map
             )
-            .bind(user_id)
-            .bind(&current_map)
             .execute(&self.pool)
             .await?;
             (0, 0.0, true)
@@ -1727,8 +1715,7 @@ impl ScoreService {
         }
 
         if user_play.prog_boost_multiply != 0 {
-            sqlx::query("UPDATE user SET prog_boost = 0 WHERE user_id = ?")
-                .bind(user_id)
+            sqlx::query!("UPDATE user SET prog_boost = 0 WHERE user_id = ?", user_id)
                 .execute(&self.pool)
                 .await?;
         }
@@ -1869,27 +1856,24 @@ impl ScoreService {
         if let Some(last_step) = steps_for_climbing_pre_reset.last() {
             if last_step.step_type.iter().any(|x| x == "plusstamina") {
                 if let Some(plus_stamina) = last_step.plus_stamina_value {
-                    let stamina_row =
-                        sqlx::query("SELECT max_stamina_ts, stamina FROM user WHERE user_id = ?")
-                            .bind(user_id)
-                            .fetch_one(&self.pool)
-                            .await?;
+                    let stamina_row = sqlx::query!(
+                        "SELECT max_stamina_ts, stamina FROM user WHERE user_id = ?",
+                        user_id
+                    )
+                    .fetch_one(&self.pool)
+                    .await?;
                     let mut stamina = StaminaImpl::new(
-                        stamina_row
-                            .try_get::<Option<i32>, _>("stamina")?
-                            .unwrap_or(0),
-                        stamina_row
-                            .try_get::<Option<i64>, _>("max_stamina_ts")?
-                            .unwrap_or(0),
+                        stamina_row.stamina.unwrap_or(0),
+                        stamina_row.max_stamina_ts.unwrap_or(0),
                     );
                     let current_stamina = stamina.get_current_stamina();
                     stamina.set_stamina(current_stamina + plus_stamina);
-                    sqlx::query(
+                    sqlx::query!(
                         "UPDATE user SET stamina = ?, max_stamina_ts = ? WHERE user_id = ?",
+                        stamina.get_current_stamina(),
+                        stamina.max_stamina_ts(),
+                        user_id
                     )
-                    .bind(stamina.get_current_stamina())
-                    .bind(stamina.max_stamina_ts())
-                    .bind(user_id)
                     .execute(&self.pool)
                     .await?;
                 }
@@ -1915,9 +1899,11 @@ impl ScoreService {
                 if skill_id == "skill_fatalis" {
                     world_mode_locked_end_ts =
                         current_timestamp() + Constants::SKILL_FATALIS_WORLD_LOCKED_TIME;
-                    sqlx::query("UPDATE user SET world_mode_locked_end_ts = ? WHERE user_id = ?")
-                        .bind(world_mode_locked_end_ts)
-                        .bind(user_id)
+                    sqlx::query!(
+                        "UPDATE user SET world_mode_locked_end_ts = ? WHERE user_id = ?",
+                        world_mode_locked_end_ts,
+                        user_id
+                    )
                         .execute(&self.pool)
                         .await?;
                 } else if skill_id == "skill_maya" {
@@ -1937,9 +1923,11 @@ impl ScoreService {
                 if beyond_boost_gauge.abs() <= 1e-5 {
                     beyond_boost_gauge = 0.0;
                 }
-                sqlx::query("UPDATE user SET beyond_boost_gauge = ? WHERE user_id = ?")
-                    .bind(beyond_boost_gauge)
-                    .bind(user_id)
+                sqlx::query!(
+                    "UPDATE user SET beyond_boost_gauge = ? WHERE user_id = ?",
+                    beyond_boost_gauge,
+                    user_id
+                )
                     .execute(&self.pool)
                     .await?;
             }
@@ -1948,9 +1936,11 @@ impl ScoreService {
             if beyond_boost_gauge > 200.0 {
                 beyond_boost_gauge = 200.0;
             }
-            sqlx::query("UPDATE user SET beyond_boost_gauge = ? WHERE user_id = ?")
-                .bind(beyond_boost_gauge)
-                .bind(user_id)
+            sqlx::query!(
+                "UPDATE user SET beyond_boost_gauge = ? WHERE user_id = ?",
+                beyond_boost_gauge,
+                user_id
+            )
                 .execute(&self.pool)
                 .await?;
         }
@@ -1959,13 +1949,13 @@ impl ScoreService {
             curr_position = 0;
         }
 
-        sqlx::query(
+        sqlx::query!(
             "UPDATE user_world SET curr_position = ?, curr_capture = ?, is_locked = 0 WHERE user_id = ? AND map_id = ?",
+            curr_position,
+            curr_capture,
+            user_id,
+            &current_map
         )
-        .bind(curr_position)
-        .bind(curr_capture)
-        .bind(user_id)
-        .bind(&current_map)
         .execute(&self.pool)
         .await?;
 
@@ -2094,19 +2084,18 @@ impl ScoreService {
         let mut course_score = user_play.course_score + user_play.user_score.score.score;
         let mut course_clear_type = user_play.course_clear_type;
 
-        let user_course = sqlx::query(
+        let user_course = sqlx::query!(
             "SELECT high_score, best_clear_type FROM user_course WHERE user_id = ? AND course_id = ?",
+            user_id,
+            &course_id
         )
-        .bind(user_id)
-        .bind(&course_id)
         .fetch_optional(&self.pool)
         .await?;
 
         let (mut high_score, mut best_clear_type) = if let Some(row) = user_course {
             (
-                row.try_get::<Option<i32>, _>("high_score")?.unwrap_or(0),
-                row.try_get::<Option<i32>, _>("best_clear_type")?
-                    .unwrap_or(0),
+                row.high_score.unwrap_or(0),
+                row.best_clear_type.unwrap_or(0),
             )
         } else {
             (0, 0)
@@ -2123,26 +2112,26 @@ impl ScoreService {
             course_score = 0;
             course_clear_type = 0;
 
-            sqlx::query(
+            sqlx::query!(
                 "UPDATE songplay_token SET course_state = ?, course_score = ?, course_clear_type = ? WHERE token = ?",
+                user_play.course_play_state,
+                course_score,
+                course_clear_type,
+                &user_play.song_token
             )
-            .bind(user_play.course_play_state)
-            .bind(course_score)
-            .bind(course_clear_type)
-            .bind(&user_play.song_token)
             .execute(&self.pool)
             .await?;
 
             if need_upsert {
-                sqlx::query(
+                sqlx::query!(
                     "INSERT INTO user_course (user_id, course_id, high_score, best_clear_type)
                      VALUES (?, ?, ?, ?)
                      ON DUPLICATE KEY UPDATE high_score = VALUES(high_score), best_clear_type = VALUES(best_clear_type)",
+                    user_id,
+                    &course_id,
+                    high_score,
+                    best_clear_type
                 )
-                .bind(user_id)
-                .bind(&course_id)
-                .bind(high_score)
-                .bind(best_clear_type)
                 .execute(&self.pool)
                 .await?;
             }
@@ -2157,31 +2146,31 @@ impl ScoreService {
             course_clear_type = user_play.user_score.score.clear_type;
         }
 
-        sqlx::query(
+        sqlx::query!(
             "UPDATE songplay_token SET course_state = ?, course_score = ?, course_clear_type = ? WHERE token = ?",
+            user_play.course_play_state,
+            course_score,
+            course_clear_type,
+            &user_play.song_token
         )
-        .bind(user_play.course_play_state)
-        .bind(course_score)
-        .bind(course_clear_type)
-        .bind(&user_play.song_token)
         .execute(&self.pool)
         .await?;
 
         let mut rewards = Vec::new();
         if user_play.course_play_state == 4 {
             if best_clear_type == 0 {
-                let course_items = sqlx::query(
+                let course_items = sqlx::query!(
                     "SELECT item_id, type, amount FROM course_item WHERE course_id = ?",
+                    &course_id
                 )
-                .bind(&course_id)
                 .fetch_all(&self.pool)
                 .await?;
 
                 let item_service = ItemService::new(self.pool.clone());
                 for row in course_items {
-                    let item_id = row.try_get::<String, _>("item_id")?;
-                    let item_type = row.try_get::<String, _>("type")?;
-                    let amount = row.try_get::<Option<i32>, _>("amount")?.unwrap_or(1);
+                    let item_id = row.item_id;
+                    let item_type = row.r#type;
+                    let amount = row.amount.unwrap_or(1);
                     item_service
                         .claim_item(user_id, &item_id, &item_type, amount)
                         .await?;
@@ -2200,15 +2189,15 @@ impl ScoreService {
         }
 
         if need_upsert {
-            sqlx::query(
+            sqlx::query!(
                 "INSERT INTO user_course (user_id, course_id, high_score, best_clear_type)
                  VALUES (?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE high_score = VALUES(high_score), best_clear_type = VALUES(best_clear_type)",
+                user_id,
+                &course_id,
+                high_score,
+                best_clear_type
             )
-            .bind(user_id)
-            .bind(&course_id)
-            .bind(high_score)
-            .bind(best_clear_type)
             .execute(&self.pool)
             .await?;
         }
@@ -2230,16 +2219,16 @@ impl ScoreService {
     }
 
     async fn get_user_course_banners(&self, user_id: i32) -> ArcResult<Vec<Value>> {
-        let rows = sqlx::query(
+        let rows = sqlx::query!(
             "SELECT item_id FROM user_item WHERE user_id = ? AND type = 'course_banner'",
+            user_id
         )
-        .bind(user_id)
         .fetch_all(&self.pool)
         .await?;
 
         let mut banners = Vec::with_capacity(rows.len());
         for row in rows {
-            banners.push(Value::String(row.try_get::<String, _>("item_id")?));
+            banners.push(Value::String(row.item_id));
         }
         Ok(banners)
     }
