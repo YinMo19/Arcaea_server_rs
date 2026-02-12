@@ -20,7 +20,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 const PROTOCOL_NAME: [u8; 2] = [0x06, 0x16];
 const PROTOCOL_VERSION: u8 = 0x0E;
@@ -924,6 +924,7 @@ impl<'a> CommandParser<'a> {
 
         let client_no = self.c_u32(12);
         let start = client_no.max(self.room.players[self.player_index].start_command_num);
+        let mut sent_queue_upto = self.room.players[self.player_index].start_command_num;
 
         let mut flag_13 = false;
         for i in start as usize..self.room.command_queue.len() {
@@ -934,6 +935,13 @@ impl<'a> CommandParser<'a> {
                 flag_13 = true;
             }
             out.push(self.room.command_queue[i].clone());
+            sent_queue_upto = (i as u32).saturating_add(1);
+        }
+
+        // Prevent replaying the same stale queue window forever when client_no
+        // does not advance (observed during real-client setting toggles).
+        if sent_queue_upto > self.room.players[self.player_index].start_command_num {
+            self.room.players[self.player_index].start_command_num = sent_queue_upto;
         }
 
         if !self.room.players[self.player_index]
@@ -957,14 +965,6 @@ impl<'a> CommandParser<'a> {
 
     fn dispatch_command(&mut self) -> Option<Vec<Vec<u8>>> {
         let cmd = self.c_u8(2);
-        debug!(
-            "UDP command=0x{cmd:02x} room={} player_index={} state={} round_mode={} timed_mode={}",
-            self.room.room_code,
-            self.player_index,
-            self.room.state,
-            self.room.round_mode,
-            self.room.timed_mode
-        );
 
         match cmd {
             0x01 => self.command_01(),
@@ -1053,8 +1053,8 @@ impl<'a> CommandParser<'a> {
             self.room.song_idx = song_idx;
 
             let cmd11 = self.sender.command_11(self.room);
-            let cmd13 = self.sender.command_13(self.room);
             self.room.command_queue.push(cmd11);
+            let cmd13 = self.sender.command_13(self.room);
             self.room.command_queue.push(cmd13);
         }
 
@@ -1120,8 +1120,8 @@ impl<'a> CommandParser<'a> {
                     flag = 1;
                     self.room.delete_player(i, self.cfg);
                     let cmd12 = self.sender.command_12(self.room, i);
-                    let cmd14 = self.sender.command_14(self.room);
                     self.room.command_queue.push(cmd12);
+                    let cmd14 = self.sender.command_14(self.room);
                     self.room.command_queue.push(cmd14);
                     break;
                 }
@@ -1201,6 +1201,7 @@ impl<'a> CommandParser<'a> {
 
         let mut flag_11 = false;
         let mut flag_12 = false;
+        let mut deleted_current_player = false;
 
         if self.room.players[self.player_index].online == 0 {
             flag_12 = true;
@@ -1213,9 +1214,10 @@ impl<'a> CommandParser<'a> {
         {
             self.room.delete_player(self.player_index, self.cfg);
             let cmd12 = self.sender.command_12(self.room, self.player_index);
-            let cmd14 = self.sender.command_14(self.room);
             self.room.command_queue.push(cmd12);
+            let cmd14 = self.sender.command_14(self.room);
             self.room.command_queue.push(cmd14);
+            deleted_current_player = true;
         }
 
         if self.room.is_ready(1, 1)
@@ -1252,50 +1254,53 @@ impl<'a> CommandParser<'a> {
             }
         }
 
-        let new_player_state = self.c_u8(32);
-        if self.room.players[self.player_index].player_state != new_player_state {
-            flag_12 = true;
-            self.room.players[self.player_index].player_state = new_player_state;
-        }
-
-        let new_diff = self.c_u8(33);
-        if self.room.players[self.player_index].score.difficulty != new_diff
-            && !matches!(self.room.players[self.player_index].player_state, 5..=8)
-        {
-            flag_12 = true;
-            self.room.players[self.player_index].score.difficulty = new_diff;
-        }
-
-        let new_clear = self.c_u8(34);
-        if self.room.players[self.player_index].score.cleartype != new_clear
-            && !matches!(self.room.players[self.player_index].player_state, 7 | 8)
-        {
-            flag_12 = true;
-            self.room.players[self.player_index].score.cleartype = new_clear;
-        }
-
-        let download = self.c_u8(35);
-        if self.room.players[self.player_index].download_percent != download {
-            flag_12 = true;
-            self.room.players[self.player_index].download_percent = download;
-        }
-
-        let character_id = self.c_u8(36);
-        if self.room.players[self.player_index].character_id != character_id {
-            flag_12 = true;
-            self.room.players[self.player_index].character_id = character_id;
-        }
-
-        let uncapped = self.c_u8(37);
-        if self.room.players[self.player_index].is_uncapped != uncapped {
-            flag_12 = true;
-            self.room.players[self.player_index].is_uncapped = uncapped;
-        }
-
         let score_24 = self.c_u32(24);
-        if self.room.state == 3 && self.room.players[self.player_index].score.score != score_24 {
-            flag_12 = true;
-            self.room.players[self.player_index].score.score = score_24;
+        if !deleted_current_player {
+            let new_player_state = self.c_u8(32);
+            if self.room.players[self.player_index].player_state != new_player_state {
+                flag_12 = true;
+                self.room.players[self.player_index].player_state = new_player_state;
+            }
+
+            let new_diff = self.c_u8(33);
+            if self.room.players[self.player_index].score.difficulty != new_diff
+                && !matches!(self.room.players[self.player_index].player_state, 5..=8)
+            {
+                flag_12 = true;
+                self.room.players[self.player_index].score.difficulty = new_diff;
+            }
+
+            let new_clear = self.c_u8(34);
+            if self.room.players[self.player_index].score.cleartype != new_clear
+                && !matches!(self.room.players[self.player_index].player_state, 7 | 8)
+            {
+                flag_12 = true;
+                self.room.players[self.player_index].score.cleartype = new_clear;
+            }
+
+            let download = self.c_u8(35);
+            if self.room.players[self.player_index].download_percent != download {
+                flag_12 = true;
+                self.room.players[self.player_index].download_percent = download;
+            }
+
+            let character_id = self.c_u8(36);
+            if self.room.players[self.player_index].character_id != character_id {
+                flag_12 = true;
+                self.room.players[self.player_index].character_id = character_id;
+            }
+
+            let uncapped = self.c_u8(37);
+            if self.room.players[self.player_index].is_uncapped != uncapped {
+                flag_12 = true;
+                self.room.players[self.player_index].is_uncapped = uncapped;
+            }
+
+            if self.room.state == 3 && self.room.players[self.player_index].score.score != score_24
+            {
+                flag_12 = true;
+                self.room.players[self.player_index].score.score = score_24;
+            }
         }
 
         if self.room.is_ready(3, 4)
@@ -1372,8 +1377,8 @@ impl<'a> CommandParser<'a> {
             {
                 self.room.delete_player(self.player_index, self.cfg);
                 let cmd12 = self.sender.command_12(self.room, self.player_index);
-                let cmd14 = self.sender.command_14(self.room);
                 self.room.command_queue.push(cmd12);
+                let cmd14 = self.sender.command_14(self.room);
                 self.room.command_queue.push(cmd14);
             }
 
@@ -1407,11 +1412,10 @@ impl<'a> CommandParser<'a> {
         self.room.delete_player(self.player_index, self.cfg);
 
         let cmd12 = self.sender.command_12(self.room, self.player_index);
-        let cmd13 = self.sender.command_13(self.room);
-        let cmd14 = self.sender.command_14(self.room);
-
         self.room.command_queue.push(cmd12);
+        let cmd13 = self.sender.command_13(self.room);
         self.room.command_queue.push(cmd13);
+        let cmd14 = self.sender.command_14(self.room);
         self.room.command_queue.push(cmd14);
 
         None
@@ -1461,8 +1465,8 @@ impl<'a> CommandParser<'a> {
         }
 
         let cmd11 = self.sender.command_11(self.room);
-        let cmd13 = self.sender.command_13(self.room);
         self.room.command_queue.push(cmd11);
+        let cmd13 = self.sender.command_13(self.room);
         self.room.command_queue.push(cmd13);
 
         Some(vec![self.sender.command_0d(self.room, 1)])
@@ -2113,14 +2117,13 @@ async fn run_tcp_server(state: Arc<RwLock<Store>>, cfg: Arc<LinkplayConfig>) -> 
     info!("Link Play TCP server listening on {addr}");
 
     loop {
-        let (stream, peer) = listener.accept().await?;
-        debug!("Accepted TCP connection from {peer}");
+        let (stream, _peer) = listener.accept().await?;
 
         let state = state.clone();
         let cfg = cfg.clone();
         tokio::spawn(async move {
             if let Err(err) = handle_tcp_connection(stream, state, cfg).await {
-                debug!("TCP connection closed: {err}");
+                warn!("TCP connection closed: {err}");
             }
         });
     }
@@ -2281,10 +2284,7 @@ async fn run_udp_server(state: Arc<RwLock<Store>>, cfg: Arc<LinkplayConfig>) -> 
 
         let payload = match decrypt_bytes(&session.key, &iv, &tag, packet[36..].to_vec()) {
             Ok(v) => v,
-            Err(err) => {
-                debug!("UDP decrypt failed from {peer}: {err}");
-                continue;
-            }
+            Err(_) => continue,
         };
 
         if payload.len() < 3 || payload[0..2] != PROTOCOL_NAME {
@@ -2312,10 +2312,7 @@ async fn run_udp_server(state: Arc<RwLock<Store>>, cfg: Arc<LinkplayConfig>) -> 
         for cmd in commands {
             let (resp_iv, resp_tag, resp_cipher) = match encrypt_bytes(&session.key, &cmd) {
                 Ok(v) => v,
-                Err(err) => {
-                    debug!("UDP encrypt response failed: {err}");
-                    continue;
-                }
+                Err(_) => continue,
             };
 
             let mut out = Vec::with_capacity(8 + 12 + 16 + resp_cipher.len());
