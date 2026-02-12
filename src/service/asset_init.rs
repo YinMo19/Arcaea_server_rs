@@ -105,6 +105,31 @@ impl AssetInitService {
         Ok(())
     }
 
+    /// Sync packs and singles from runtime assets into purchase-related tables.
+    ///
+    /// This is safe to run on every startup: rows are upserted.
+    pub async fn sync_purchases_from_assets(&self) -> ArcResult<(usize, usize)> {
+        let packs = Self::load_purchase_assets("packs.json")?;
+        let singles = Self::load_purchase_assets("singles.json")?;
+
+        for pack in &packs {
+            self.insert_purchase_item(pack).await?;
+        }
+        for single in &singles {
+            self.insert_purchase_item(single).await?;
+        }
+
+        Ok((packs.len(), singles.len()))
+    }
+
+    fn load_purchase_assets(file_name: &str) -> ArcResult<Vec<PurchaseItem>> {
+        let path = asset_path(file_name);
+        let data = std::fs::read_to_string(&path)
+            .map_err(|e| ArcError::input(format!("Failed to read {}: {e}", path.display())))?;
+        serde_json::from_str(&data)
+            .map_err(|e| ArcError::input(format!("Failed to parse {file_name}: {e}")))
+    }
+
     /// Initialize character data
     async fn initialize_characters(&self, arc_data: &ArcData) -> ArcResult<()> {
         log::info!("Initializing characters...");
@@ -249,14 +274,9 @@ impl AssetInitService {
     async fn initialize_packs(&self) -> ArcResult<()> {
         log::info!("Initializing packs...");
 
-        let packs_path = asset_path("packs.json");
-        let packs_data = std::fs::read_to_string(&packs_path).map_err(|e| {
-            ArcError::input(format!("Failed to read {}: {e}", packs_path.display()))
-        })?;
-        let packs: Vec<PurchaseItem> = serde_json::from_str(&packs_data)
-            .map_err(|e| ArcError::input(format!("Failed to parse packs.json: {e}")))?;
+        let packs = Self::load_purchase_assets("packs.json")?;
 
-        for pack in packs {
+        for pack in &packs {
             self.insert_purchase_item(pack).await?;
         }
 
@@ -268,14 +288,9 @@ impl AssetInitService {
     async fn initialize_singles(&self) -> ArcResult<()> {
         log::info!("Initializing singles...");
 
-        let singles_path = asset_path("singles.json");
-        let singles_data = std::fs::read_to_string(&singles_path).map_err(|e| {
-            ArcError::input(format!("Failed to read {}: {e}", singles_path.display()))
-        })?;
-        let singles: Vec<PurchaseItem> = serde_json::from_str(&singles_data)
-            .map_err(|e| ArcError::input(format!("Failed to parse singles.json: {e}")))?;
+        let singles = Self::load_purchase_assets("singles.json")?;
 
-        for single in singles {
+        for single in &singles {
             self.insert_purchase_item(single).await?;
         }
 
@@ -415,28 +430,32 @@ impl AssetInitService {
     }
 
     /// Insert a purchase item with its details
-    async fn insert_purchase_item(&self, purchase: PurchaseItem) -> ArcResult<()> {
+    async fn insert_purchase_item(&self, purchase: &PurchaseItem) -> ArcResult<()> {
         // Insert purchase
         query!(
             r#"
             INSERT INTO purchase (purchase_name, price, orig_price, discount_from, discount_to, discount_reason)
             VALUES (?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                price = VALUES(price),
+                orig_price = VALUES(orig_price),
+                discount_from = VALUES(discount_from),
+                discount_to = VALUES(discount_to),
+                discount_reason = VALUES(discount_reason)
             "#,
             purchase.name,
             purchase.price,
             purchase.orig_price,
             purchase.discount_from,
             purchase.discount_to,
-            purchase.discount_reason
+            purchase.discount_reason.as_deref()
         )
         .execute(&self.pool)
         .await
         .map_err(|e| ArcError::input(format!("Failed to insert purchase: {e}")))?;
 
         // Insert purchase items
-        for item in purchase.items {
-            let item_id = item.id;
-            let item_type = item.item_type;
+        for item in &purchase.items {
             let amount = item.amount.unwrap_or(1);
             let is_available = if item.is_available.unwrap_or(true) {
                 1
@@ -445,10 +464,11 @@ impl AssetInitService {
             };
 
             query!(
-                "INSERT INTO purchase_item (purchase_name, item_id, type, amount) VALUES (?, ?, ?, ?)",
+                "INSERT INTO purchase_item (purchase_name, item_id, type, amount) VALUES (?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE amount = VALUES(amount)",
                 purchase.name,
-                item_id,
-                item_type,
+                item.id,
+                item.item_type,
                 amount
             )
             .execute(&self.pool)
@@ -457,9 +477,10 @@ impl AssetInitService {
 
             // Python parity: purchasable entries should also exist in `item`.
             query!(
-                "INSERT IGNORE INTO item (item_id, type, is_available) VALUES (?, ?, ?)",
-                item_id,
-                item_type,
+                "INSERT INTO item (item_id, type, is_available) VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE is_available = VALUES(is_available)",
+                item.id,
+                item.item_type,
                 is_available
             )
             .execute(&self.pool)

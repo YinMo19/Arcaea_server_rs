@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO item (item_id, type, is_available) VALUES (?, ?, ?)\n                 ON DUPLICATE KEY UPDATE is_available = VALUES(is_available)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "b97913ea2420c74c763f467265eecc77f3ac7c06c3587bbc336fee11e0260118"
+}

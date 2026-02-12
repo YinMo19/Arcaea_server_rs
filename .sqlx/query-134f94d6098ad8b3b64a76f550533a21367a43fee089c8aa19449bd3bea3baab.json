@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            INSERT INTO purchase (purchase_name, price, orig_price, discount_from, discount_to, discount_reason)\n            VALUES (?, ?, ?, ?, ?, ?)\n            ON DUPLICATE KEY UPDATE\n                price = VALUES(price),\n                orig_price = VALUES(orig_price),\n                discount_from = VALUES(discount_from),\n                discount_to = VALUES(discount_to),\n                discount_reason = VALUES(discount_reason)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "134f94d6098ad8b3b64a76f550533a21367a43fee089c8aa19449bd3bea3baab"
+}

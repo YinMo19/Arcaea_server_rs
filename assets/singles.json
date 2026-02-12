@@ -2116,5 +2116,131 @@
 		],
 		"orig_price": 100,
 		"price": 100
+	},
+	{
+		"name": "eternitybreak",
+		"items": [
+			{
+				"id": "eternitybreak",
+				"type": "single",
+				"is_available": true
+			},
+			{
+				"id": "core_generic",
+				"type": "core",
+				"amount": 1,
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "xterfusion",
+		"items": [
+			{
+				"id": "xterfusion",
+				"type": "single",
+				"is_available": true
+			},
+			{
+				"id": "core_generic",
+				"type": "core",
+				"amount": 1,
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "angelsboundary",
+		"items": [
+			{
+				"id": "angelsboundary",
+				"type": "single",
+				"is_available": true
+			},
+			{
+				"id": "core_generic",
+				"type": "core",
+				"amount": 1,
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "grandspell",
+		"items": [
+			{
+				"id": "grandspell",
+				"type": "single",
+				"is_available": true
+			},
+			{
+				"id": "core_generic",
+				"type": "core",
+				"amount": 1,
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "paranoidarc",
+		"items": [
+			{
+				"id": "paranoidarc",
+				"type": "single",
+				"is_available": true
+			},
+			{
+				"id": "core_generic",
+				"type": "core",
+				"amount": 1,
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "subsphere",
+		"items": [
+			{
+				"id": "subsphere",
+				"type": "single",
+				"is_available": true
+			},
+			{
+				"id": "core_generic",
+				"type": "core",
+				"amount": 1,
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
+	},
+	{
+		"name": "theraft",
+		"items": [
+			{
+				"id": "theraft",
+				"type": "single",
+				"is_available": true
+			},
+			{
+				"id": "core_generic",
+				"type": "core",
+				"amount": 1,
+				"is_available": true
+			}
+		],
+		"orig_price": 100,
+		"price": 100
 	}
 ]

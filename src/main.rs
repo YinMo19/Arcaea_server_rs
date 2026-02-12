@@ -15,7 +15,8 @@ use Arcaea_server_rs::route::download::serve_download_file;
 use Arcaea_server_rs::route::others::bundle_download;
 use Arcaea_server_rs::route::CORS;
 use Arcaea_server_rs::service::{
-    arc_data::arc_data_file_path_from_env, AssetManager, BundleService, CharacterService,
+    arc_data::arc_data_file_path_from_env, AssetInitService, AssetManager, BundleService,
+    CharacterService,
     DownloadService, ItemService, MultiplayerService, NotificationService, OperationManager,
     PresentService, PurchaseService, ScoreService, UserService, WorldService,
 };
@@ -101,6 +102,7 @@ async fn init_services(
     log::info!("Bundle service initialized successfully");
 
     let character_service = CharacterService::new(pool.clone());
+    let asset_init_service = AssetInitService::new(pool.clone());
 
     if config::CONFIG.update_with_new_character_data {
         let sync_path = arc_data_file_path_from_env();
@@ -117,6 +119,21 @@ async fn init_services(
                 log::error!("Failed to sync arc_data: {e}");
                 std::process::exit(1);
             }
+        }
+    }
+
+    log::info!("Syncing packs/singles from runtime assets...");
+    match asset_init_service.sync_purchases_from_assets().await {
+        Ok((pack_count, single_count)) => {
+            log::info!(
+                "Purchase asset sync completed: {} packs, {} singles.",
+                pack_count,
+                single_count
+            );
+        }
+        Err(e) => {
+            log::error!("Failed to sync purchase assets: {e}");
+            std::process::exit(1);
         }
     }
 
