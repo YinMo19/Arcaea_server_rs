@@ -560,6 +560,7 @@ impl UserService {
 
         // Load recent score
         user_info.recent_score = self.get_user_recent_scores(user_id).await?;
+        user_info.global_rank = Some(self.get_global_rank(user_id).await?);
 
         Ok(user_info)
     }
