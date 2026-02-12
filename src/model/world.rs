@@ -1,6 +1,103 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Raw world-map asset shape used for JSON file deserialization.
+#[derive(Debug, Clone, Deserialize)]
+pub struct WorldMapFile {
+    #[serde(default)]
+    pub chapter: Option<i32>,
+    #[serde(default)]
+    pub is_repeatable: bool,
+    #[serde(default)]
+    pub is_beyond: bool,
+    #[serde(default)]
+    pub is_legacy: bool,
+    #[serde(default)]
+    pub is_breached: bool,
+    #[serde(default)]
+    pub beyond_health: Option<i32>,
+    #[serde(default)]
+    pub character_affinity: Vec<i32>,
+    #[serde(default)]
+    pub affinity_multiplier: Vec<f64>,
+    #[serde(default = "default_available_from")]
+    pub available_from: i64,
+    #[serde(default = "default_available_to")]
+    pub available_to: i64,
+    #[serde(default)]
+    pub require_id: Option<String>,
+    #[serde(default)]
+    pub require_type: Option<String>,
+    #[serde(default = "default_require_value")]
+    pub require_value: i32,
+    #[serde(default)]
+    pub coordinate: Option<String>,
+    #[serde(default)]
+    pub custom_bg: Option<String>,
+    #[serde(default)]
+    pub stamina_cost: Option<i32>,
+    #[serde(default)]
+    pub require_localunlock_songid: Option<String>,
+    #[serde(default)]
+    pub require_localunlock_challengeid: Option<String>,
+    #[serde(default)]
+    pub chain_info: Option<serde_json::Value>,
+    #[serde(default)]
+    pub disable_over: Option<bool>,
+    #[serde(default)]
+    pub new_law: Option<String>,
+    #[serde(default, alias = "requires")]
+    pub requires_any: Option<Vec<serde_json::Value>>,
+    #[serde(default)]
+    pub steps: Vec<WorldStepFile>,
+}
+
+/// Raw world-step shape used for JSON file deserialization.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct WorldStepFile {
+    #[serde(default)]
+    pub capture: i32,
+    #[serde(default)]
+    pub items: Vec<StepItemFile>,
+    #[serde(default)]
+    pub restrict_id: Option<String>,
+    #[serde(default)]
+    pub restrict_ids: Option<Vec<String>>,
+    #[serde(default)]
+    pub restrict_type: Option<String>,
+    #[serde(default)]
+    pub restrict_difficulty: Option<i32>,
+    #[serde(default)]
+    pub step_type: Vec<String>,
+    #[serde(default)]
+    pub speed_limit_value: Option<i32>,
+    #[serde(default)]
+    pub plus_stamina_value: Option<i32>,
+}
+
+/// Raw step-item shape used for JSON file deserialization.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct StepItemFile {
+    #[serde(default, alias = "item_id")]
+    pub id: String,
+    #[serde(rename = "type", default)]
+    pub item_type: String,
+    #[serde(default)]
+    pub amount: i32,
+}
+
+const fn default_available_from() -> i64 {
+    -1
+}
+
+const fn default_available_to() -> i64 {
+    9_999_999_999_999
+}
+
+const fn default_require_value() -> i32 {
+    1
+}
+
 /// World map structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldMap {

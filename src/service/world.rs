@@ -80,34 +80,18 @@ impl MapParser {
                 message: format!("Failed to read map file {path}: {e}"),
             })?;
 
-            let map_data: serde_json::Value =
+            let map_data: WorldMapFile =
                 serde_json::from_str(&content).map_err(|e| ArcError::Database {
                     message: format!("Failed to parse map JSON {path}: {e}"),
                 })?;
 
             let world_map_info = WorldMapInfo {
                 map_id: map_id.to_string(),
-                chapter: map_data
-                    .get("chapter")
-                    .and_then(|v| v.as_i64())
-                    .map(|v| v as i32),
-                is_repeatable: map_data
-                    .get("is_repeatable")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false),
-                is_beyond: map_data
-                    .get("is_beyond")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false),
-                is_legacy: map_data
-                    .get("is_legacy")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false),
-                step_count: map_data
-                    .get("steps")
-                    .and_then(|v| v.as_array())
-                    .map(|v| v.len() as i32)
-                    .unwrap_or(0),
+                chapter: map_data.chapter,
+                is_repeatable: map_data.is_repeatable,
+                is_beyond: map_data.is_beyond,
+                is_legacy: map_data.is_legacy,
+                step_count: map_data.steps.len() as i32,
             };
 
             return Ok(world_map_info);
@@ -123,192 +107,68 @@ impl MapParser {
                 message: format!("Failed to read map file {path}: {e}"),
             })?;
 
-            let map_data: serde_json::Value =
+            let map_data: WorldMapFile =
                 serde_json::from_str(&content).map_err(|e| ArcError::Database {
                     message: format!("Failed to parse map JSON {path}: {e}"),
                 })?;
 
             let mut world_map = WorldMap {
                 map_id: map_id.to_string(),
-                is_legacy: map_data
-                    .get("is_legacy")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false),
-                is_beyond: map_data
-                    .get("is_beyond")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false),
-                is_breached: map_data
-                    .get("is_breached")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false),
-                beyond_health: map_data
-                    .get("beyond_health")
-                    .and_then(|v| v.as_i64())
-                    .map(|v| v as i32),
-                character_affinity: map_data
-                    .get("character_affinity")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|v| v.as_i64().map(|i| i as i32))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                affinity_multiplier: map_data
-                    .get("affinity_multiplier")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| arr.iter().filter_map(|v| v.as_f64()).collect())
-                    .unwrap_or_default(),
-                chapter: map_data
-                    .get("chapter")
-                    .and_then(|v| v.as_i64())
-                    .map(|v| v as i32),
-                available_from: map_data
-                    .get("available_from")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(-1),
-                available_to: map_data
-                    .get("available_to")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(9999999999999),
-                is_repeatable: map_data
-                    .get("is_repeatable")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false),
-                require_id: map_data
-                    .get("require_id")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
-                require_type: map_data
-                    .get("require_type")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
-                require_value: map_data
-                    .get("require_value")
-                    .and_then(|v| v.as_i64())
-                    .map(|v| v as i32)
-                    .unwrap_or(1),
-                coordinate: map_data
-                    .get("coordinate")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
-                custom_bg: map_data
-                    .get("custom_bg")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
-                stamina_cost: map_data
-                    .get("stamina_cost")
-                    .and_then(|v| v.as_i64())
-                    .map(|v| v as i32),
+                is_legacy: map_data.is_legacy,
+                is_beyond: map_data.is_beyond,
+                is_breached: map_data.is_breached,
+                beyond_health: map_data.beyond_health,
+                character_affinity: map_data.character_affinity,
+                affinity_multiplier: map_data.affinity_multiplier,
+                chapter: map_data.chapter,
+                available_from: map_data.available_from,
+                available_to: map_data.available_to,
+                is_repeatable: map_data.is_repeatable,
+                require_id: map_data.require_id,
+                require_type: map_data.require_type,
+                require_value: map_data.require_value,
+                coordinate: map_data.coordinate,
+                custom_bg: map_data.custom_bg,
+                stamina_cost: map_data.stamina_cost,
                 step_count: 0,
-                require_localunlock_songid: map_data
-                    .get("require_localunlock_songid")
-                    .and_then(|v| v.as_str())
-                    .map_or(Some(String::from("")), |s| Some(s.to_string())),
-                require_localunlock_challengeid: map_data
-                    .get("require_localunlock_challengeid")
-                    .and_then(|v| v.as_str())
-                    .map_or(Some(String::from("")), |s| Some(s.to_string())),
-                chain_info: map_data.get("chain_info").cloned(),
-                disable_over: map_data.get("disable_over").and_then(|v| v.as_bool()),
-                new_law: map_data
-                    .get("new_law")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
-                requires_any: map_data
-                    .get("requires_any")
-                    .and_then(|v| v.as_array())
-                    .cloned(),
+                require_localunlock_songid: Some(
+                    map_data.require_localunlock_songid.unwrap_or_default(),
+                ),
+                require_localunlock_challengeid: Some(
+                    map_data.require_localunlock_challengeid.unwrap_or_default(),
+                ),
+                chain_info: map_data.chain_info,
+                disable_over: map_data.disable_over,
+                new_law: map_data.new_law,
+                requires_any: map_data.requires_any,
                 steps: Vec::new(),
             };
 
-            // Parse steps
-            if let Some(steps_array) = map_data.get("steps").and_then(|v| v.as_array()) {
-                for (index, step_data) in steps_array.iter().enumerate() {
-                    let mut step = WorldStep {
-                        position: index as i32,
-                        capture: step_data
-                            .get("capture")
-                            .and_then(|v| v.as_i64())
-                            .map(|v| v as i32)
-                            .unwrap_or(0),
-                        items: Vec::new(),
-                        restrict_id: step_data
-                            .get("restrict_id")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string()),
-                        restrict_ids: step_data
-                            .get("restrict_ids")
-                            .and_then(|v| v.as_array())
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                    .collect()
-                            }),
-                        restrict_type: step_data
-                            .get("restrict_type")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string()),
-                        restrict_difficulty: step_data
-                            .get("restrict_difficulty")
-                            .and_then(|v| v.as_i64())
-                            .map(|v| v as i32),
-                        step_type: step_data
-                            .get("step_type")
-                            .and_then(|v| v.as_array())
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                    .collect()
-                            })
-                            .unwrap_or_default(),
-                        speed_limit_value: step_data
-                            .get("speed_limit_value")
-                            .and_then(|v| v.as_i64())
-                            .map(|v| v as i32),
-                        plus_stamina_value: step_data
-                            .get("plus_stamina_value")
-                            .and_then(|v| v.as_i64())
-                            .map(|v| v as i32),
-                    };
-
-                    // Parse items
-                    if let Some(items_array) = step_data.get("items").and_then(|v| v.as_array()) {
-                        for item_data in items_array {
-                            let mut item_id = item_data
-                                .get("item_id")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string();
-                            if item_id.is_empty() {
-                                item_id = item_data
-                                    .get("id")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .to_string();
-                            }
-
-                            let item = StepItem {
-                                item_id,
-                                item_type: item_data
-                                    .get("type")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                amount: item_data
-                                    .get("amount")
-                                    .and_then(|v| v.as_i64())
-                                    .map(|v| v as i32)
-                                    .unwrap_or(0),
-                            };
-                            step.items.push(item);
-                        }
-                    }
-
-                    world_map.steps.push(step);
-                }
-            }
+            world_map.steps = map_data
+                .steps
+                .into_iter()
+                .enumerate()
+                .map(|(index, step)| WorldStep {
+                    position: index as i32,
+                    capture: step.capture,
+                    items: step
+                        .items
+                        .into_iter()
+                        .map(|item| StepItem {
+                            item_id: item.id,
+                            item_type: item.item_type,
+                            amount: item.amount,
+                        })
+                        .collect(),
+                    restrict_id: step.restrict_id,
+                    restrict_ids: step.restrict_ids,
+                    restrict_type: step.restrict_type,
+                    restrict_difficulty: step.restrict_difficulty,
+                    step_type: step.step_type,
+                    speed_limit_value: step.speed_limit_value,
+                    plus_stamina_value: step.plus_stamina_value,
+                })
+                .collect();
 
             world_map.step_count = world_map.steps.len() as i32;
             return Ok(world_map);
