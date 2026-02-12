@@ -1,6 +1,6 @@
 use crate::route::common::{success_return, AuthGuard, RouteResult};
 use crate::service::WorldService;
-use rocket::serde::json::Json;
+use rocket::form::Form;
 use rocket::{get, post, routes, Route, State};
 use serde::{Deserialize, Serialize};
 
@@ -21,9 +21,10 @@ pub struct WorldMapResponse {
 }
 
 /// Map enter request structure
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, rocket::FromForm)]
 pub struct MapEnterRequest {
     pub map_id: String,
+    pub local_unlock: Option<String>,
 }
 
 /// Map enter response structure
@@ -57,7 +58,7 @@ pub async fn world_all(
 pub async fn world_in(
     world_service: &State<WorldService>,
     auth: AuthGuard,
-    request: Json<MapEnterRequest>,
+    request: Form<MapEnterRequest>,
 ) -> RouteResult<serde_json::Value> {
     let map_data = world_service
         .enter_map(auth.user_id, &request.map_id)
