@@ -358,16 +358,25 @@ pub struct UserPlay {
     pub beyond_boost_gauge_usage: i32,
 
     // Course mode fields
+    pub course_id: Option<String>,
     pub course_play_state: i32,
+    pub course_score: i32,
+    pub course_clear_type: i32,
 
     // Special skill fields
     pub combo_interval_bonus: Option<i32>,
     pub hp_interval_bonus: Option<i32>,
     pub fever_bonus: Option<i32>,
+    pub rank_bonus: Option<i32>,
+    pub maya_gauge: Option<i32>,
+    pub nextstage_bonus: Option<i32>,
     pub skill_cytusii_flag: Option<String>,
     pub skill_chinatsu_flag: Option<String>,
     pub highest_health: Option<i32>,
     pub lowest_health: Option<i32>,
+    pub room_code: Option<String>,
+    pub room_total_score: Option<i32>,
+    pub room_total_players: Option<i32>,
     pub invasion_flag: i32,
 
     // World mode calculation fields - simplified for now
@@ -430,6 +439,13 @@ impl UserPlay {
         // Validate fever bonus (but don't add to hash)
         if let Some(fever_bonus) = self.fever_bonus {
             if fever_bonus < 0 || fever_bonus > self.user_score.score.perfect_count * 5 {
+                return false;
+            }
+        }
+
+        // Validate rank bonus (but don't add to hash)
+        if let Some(rank_bonus) = self.rank_bonus {
+            if !(0..=4).contains(&rank_bonus) {
                 return false;
             }
         }

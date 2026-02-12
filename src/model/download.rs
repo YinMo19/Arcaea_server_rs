@@ -135,8 +135,14 @@ pub struct ScoreSubmission {
     pub combo_interval_bonus: Option<i32>,
     pub hp_interval_bonus: Option<i32>,
     pub fever_bonus: Option<i32>,
+    pub rank_bonus: Option<i32>,
+    pub maya_gauge: Option<i32>,
+    pub nextstage_bonus: Option<i32>,
     pub highest_health: Option<i32>,
     pub lowest_health: Option<i32>,
+    pub room_code: Option<String>,
+    pub room_total_score: Option<i32>,
+    pub room_total_players: Option<i32>,
 }
 
 /// Score response data
@@ -157,6 +163,9 @@ pub struct WorldTokenRequest {
     pub fragment_multiply: Option<i32>,
     pub prog_boost_multiply: Option<i32>,
     pub beyond_boost_gauge_use: Option<i32>,
+    pub character_id: Option<i32>,
+    pub is_char_uncapped_override: Option<String>,
+    pub select_session: Option<String>,
     pub skill_id: Option<String>,
     pub is_skill_sealed: Option<String>,
 }

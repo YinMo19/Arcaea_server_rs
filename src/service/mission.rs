@@ -35,18 +35,35 @@ impl MissionService {
         let _ = mission_rewards(mission_id)
             .ok_or_else(|| ArcError::no_data(format!("Mission `{mission_id}` not found"), 108))?;
 
-        sqlx::query!(
-            "INSERT INTO user_mission (user_id, mission_id, status) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE status = VALUES(status)",
+        let current = sqlx::query!(
+            "SELECT status FROM user_mission WHERE user_id = ? AND mission_id = ?",
             user_id,
-            mission_id,
-            2
+            mission_id
         )
-        .execute(&self.pool)
+        .fetch_optional(&self.pool)
         .await?;
+
+        let current_status = current.and_then(|row| row.status).unwrap_or(0);
+        let next_status = if matches!(current_status, 3 | 4) {
+            current_status
+        } else {
+            2
+        };
+
+        if next_status == 2 {
+            sqlx::query!(
+                "INSERT INTO user_mission (user_id, mission_id, status) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE status = VALUES(status)",
+                user_id,
+                mission_id,
+                2
+            )
+            .execute(&self.pool)
+            .await?;
+        }
 
         Ok(json!({
             "mission_id": mission_id,
-            "status": "cleared",
+            "status": mission_status_name(next_status),
         }))
     }
 
@@ -54,14 +71,50 @@ impl MissionService {
         let rewards = mission_rewards(mission_id)
             .ok_or_else(|| ArcError::no_data(format!("Mission `{mission_id}` not found"), 108))?;
 
-        sqlx::query!(
-            "INSERT INTO user_mission (user_id, mission_id, status) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE status = VALUES(status)",
+        let current = sqlx::query!(
+            "SELECT status FROM user_mission WHERE user_id = ? AND mission_id = ?",
             user_id,
-            mission_id,
-            4
+            mission_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let current_status = current.and_then(|row| row.status).unwrap_or(0);
+
+        if current_status == 3 || current_status == 4 {
+            let items = rewards
+                .iter()
+                .map(|reward| {
+                    json!({
+                        "id": reward.item_id,
+                        "type": reward.item_type,
+                        "amount": reward.amount,
+                    })
+                })
+                .collect::<Vec<_>>();
+
+            return Ok(json!({
+                "mission_id": mission_id,
+                "status": mission_status_name(current_status),
+                "items": items,
+            }));
+        }
+
+        if current_status != 2 {
+            return Err(ArcError::input("Mission is not cleared."));
+        }
+
+        let updated = sqlx::query!(
+            "UPDATE user_mission SET status = 4 WHERE user_id = ? AND mission_id = ? AND status = 2",
+            user_id,
+            mission_id
         )
         .execute(&self.pool)
         .await?;
+
+        if updated.rows_affected() == 0 {
+            return Err(ArcError::input("Mission claim state is invalid."));
+        }
 
         for reward in &rewards {
             self.item_service
@@ -134,5 +187,15 @@ fn mission_rewards(mission_id: &str) -> Option<Vec<MissionReward>> {
         "mission_5_4_courseclear" => Some(one("core_generic", "core", 3)),
         "mission_5_end" => Some(one("pick_ticket", "pick_ticket", 1)),
         _ => None,
+    }
+}
+
+fn mission_status_name(status: i32) -> &'static str {
+    match status {
+        1 => "inprogress",
+        2 => "cleared",
+        3 => "prevclaimedfragmission",
+        4 => "claimed",
+        _ => "locked",
     }
 }

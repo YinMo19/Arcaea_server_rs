@@ -56,7 +56,7 @@ pub struct WorldMapFile {
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct WorldStepFile {
     #[serde(default)]
-    pub capture: i32,
+    pub capture: f64,
     #[serde(default)]
     pub items: Vec<StepItemFile>,
     #[serde(default)]
@@ -194,13 +194,13 @@ pub struct UserMap {
     #[serde(flatten)]
     pub map: WorldMap,
     pub curr_position: i32,
-    pub curr_capture: i32,
+    pub curr_capture: f64,
     pub is_locked: bool,
     pub user_id: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prev_position: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub prev_capture: Option<i32>,
+    pub prev_capture: Option<f64>,
 }
 
 impl UserMap {
@@ -265,7 +265,7 @@ impl UserMap {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldStep {
     pub position: i32,
-    pub capture: i32,
+    pub capture: f64,
     pub items: Vec<StepItem>,
     pub restrict_id: Option<String>,
     pub restrict_ids: Option<Vec<String>>,
@@ -369,7 +369,7 @@ pub struct UserWorldEntry {
     pub user_id: i32,
     pub map_id: String,
     pub curr_position: i32,
-    pub curr_capture: i32,
+    pub curr_capture: f64,
     pub is_locked: bool,
 }
 
@@ -394,7 +394,7 @@ pub struct WorldMapResponse {
 pub struct MapEnterResponse {
     pub map_id: String,
     pub curr_position: i32,
-    pub curr_capture: i32,
+    pub curr_capture: f64,
     pub is_locked: bool,
     pub user_id: i32,
 }

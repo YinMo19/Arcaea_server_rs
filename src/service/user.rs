@@ -2,9 +2,10 @@ use crate::config::{Constants, CONFIG};
 use crate::error::{ArcError, ArcResult};
 use crate::model::user::{UserCoreInfo, UserRecentScore};
 use crate::model::{
-    Stamina, UpdateCharacter, User, UserAuth, UserCodeMapping, UserCredentials, UserExists,
-    UserInfo, UserLoginDevice, UserLoginDto, UserRegisterDto,
+    UpdateCharacter, User, UserAuth, UserCodeMapping, UserCredentials, UserExists, UserInfo,
+    UserLoginDevice, UserLoginDto, UserRegisterDto,
 };
+use crate::service::world::StaminaImpl;
 use crate::service::CharacterService;
 use base64::{engine::general_purpose, Engine as _};
 use rand::Rng;
@@ -555,6 +556,7 @@ impl UserService {
         user_info.singles = self.get_user_singles(user_id).await?;
         user_info.world_songs = self.get_user_world_songs(user_id).await?;
         user_info.world_unlocks = self.get_user_world_unlocks(user_id).await?;
+        user_info.user_missions = self.get_user_missions(user_id).await?;
 
         user_info.stamina = self.get_user_stamina(user_id).await?;
 
@@ -809,32 +811,41 @@ impl UserService {
             .fetch_optional(&self.pool)
             .await?;
 
-        let (scores_data, clearlamps_data, clearedsongs_data, unlocklist_data, installid_data, devicemodelname_data, story_data, created_at, finalestate_data) =
-            if let Some(data) = save_data {
-                (
-                    Self::load_cloud_array_value(data.scores_data.as_deref()),
-                    Self::load_cloud_array_value(data.clearlamps_data.as_deref()),
-                    Self::load_cloud_array_value(data.clearedsongs_data.as_deref()),
-                    Self::load_cloud_array_value(data.unlocklist_data.as_deref()),
-                    Self::load_cloud_val_string(data.installid_data.as_deref()),
-                    Self::load_cloud_val_string(data.devicemodelname_data.as_deref()),
-                    Self::load_cloud_array_value(data.story_data.as_deref()),
-                    data.createdAt.unwrap_or(0),
-                    data.finalestate_data.unwrap_or_default(),
-                )
-            } else {
-                (
-                    serde_json::json!([]),
-                    serde_json::json!([]),
-                    serde_json::json!([]),
-                    serde_json::json!([]),
-                    String::new(),
-                    String::new(),
-                    serde_json::json!([]),
-                    0,
-                    String::new(),
-                )
-            };
+        let (
+            scores_data,
+            clearlamps_data,
+            clearedsongs_data,
+            unlocklist_data,
+            installid_data,
+            devicemodelname_data,
+            story_data,
+            created_at,
+            finalestate_data,
+        ) = if let Some(data) = save_data {
+            (
+                Self::load_cloud_array_value(data.scores_data.as_deref()),
+                Self::load_cloud_array_value(data.clearlamps_data.as_deref()),
+                Self::load_cloud_array_value(data.clearedsongs_data.as_deref()),
+                Self::load_cloud_array_value(data.unlocklist_data.as_deref()),
+                Self::load_cloud_val_string(data.installid_data.as_deref()),
+                Self::load_cloud_val_string(data.devicemodelname_data.as_deref()),
+                Self::load_cloud_array_value(data.story_data.as_deref()),
+                data.createdAt.unwrap_or(0),
+                data.finalestate_data.unwrap_or_default(),
+            )
+        } else {
+            (
+                serde_json::json!([]),
+                serde_json::json!([]),
+                serde_json::json!([]),
+                serde_json::json!([]),
+                String::new(),
+                String::new(),
+                serde_json::json!([]),
+                0,
+                String::new(),
+            )
+        };
 
         let response = serde_json::json!({
             "user_id": user_id,
@@ -951,6 +962,26 @@ impl UserService {
         };
 
         Ok(world_unlocks)
+    }
+
+    /// Get user mission statuses
+    async fn get_user_missions(&self, user_id: i32) -> ArcResult<Vec<Value>> {
+        let missions = sqlx::query!(
+            "SELECT mission_id, status FROM user_mission WHERE user_id = ? ORDER BY mission_id",
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(missions
+            .into_iter()
+            .map(|mission| {
+                serde_json::json!({
+                    "mission_id": mission.mission_id,
+                    "status": mission_status_name(mission.status.unwrap_or(0)),
+                })
+            })
+            .collect())
     }
 
     /// Get user recent scores
@@ -1354,16 +1385,26 @@ impl UserService {
     ///
     /// Increases the user's stamina by the specified amount.
     pub async fn add_stamina(&self, user_id: i32, amount: i32) -> ArcResult<()> {
-        let current_stamina = sqlx::query!("SELECT stamina FROM user WHERE user_id = ?", user_id)
-            .fetch_optional(&self.pool)
-            .await?;
+        let current_stamina = sqlx::query!(
+            "SELECT max_stamina_ts, stamina FROM user WHERE user_id = ?",
+            user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
 
         match current_stamina {
             Some(stamina_row) => {
-                let new_stamina = stamina_row.stamina.unwrap_or(0) + amount;
+                let mut stamina = StaminaImpl::new(
+                    stamina_row.stamina.unwrap_or(0),
+                    stamina_row.max_stamina_ts.unwrap_or(0),
+                );
+                let next_stamina = stamina.get_current_stamina() + amount;
+                stamina.set_stamina(next_stamina);
+
                 sqlx::query!(
-                    "UPDATE user SET stamina = ? WHERE user_id = ?",
-                    new_stamina,
+                    "UPDATE user SET stamina = ?, max_stamina_ts = ? WHERE user_id = ?",
+                    stamina.get_current_stamina(),
+                    stamina.max_stamina_ts(),
                     user_id
                 )
                 .execute(&self.pool)
@@ -1389,12 +1430,12 @@ impl UserService {
         .fetch_one(&self.pool)
         .await?;
 
-        let stamina = Stamina {
-            stamina: stamina_info.stamina.unwrap_or(12),
-            max_stamina_ts: stamina_info.max_stamina_ts.unwrap_or(0),
-        };
+        let stamina = StaminaImpl::new(
+            stamina_info.stamina.unwrap_or(12),
+            stamina_info.max_stamina_ts.unwrap_or(0),
+        );
 
-        Ok(stamina.calculate_current_stamina(12, 1800000))
+        Ok(stamina.get_current_stamina())
     }
 
     /// Add a friend to the user's friend list
@@ -1723,5 +1764,15 @@ impl UserService {
         });
 
         Ok(friends)
+    }
+}
+
+fn mission_status_name(status: i32) -> &'static str {
+    match status {
+        1 => "inprogress",
+        2 => "cleared",
+        3 => "prevclaimedfragmission",
+        4 => "claimed",
+        _ => "locked",
     }
 }

@@ -38,7 +38,7 @@ pub async fn score_token() -> RouteResult<Value> {
 /// This endpoint generates a token for world mode play, handling stamina costs,
 /// skill effects, and invasion mechanics. It validates the user's stamina and
 /// current world map state before allowing play.
-#[get("/score/token/world?<song_id>&<difficulty>&<stamina_multiply>&<fragment_multiply>&<prog_boost_multiply>&<beyond_boost_gauge_use>&<skill_id>&<is_skill_sealed>")]
+#[get("/score/token/world?<song_id>&<difficulty>&<stamina_multiply>&<fragment_multiply>&<prog_boost_multiply>&<beyond_boost_gauge_use>&<character_id>&<is_char_uncapped_override>&<select_session>&<skill_id>&<is_skill_sealed>")]
 #[allow(clippy::too_many_arguments)]
 pub async fn score_token_world(
     user_auth: AuthGuard,
@@ -49,6 +49,9 @@ pub async fn score_token_world(
     fragment_multiply: Option<i32>,
     prog_boost_multiply: Option<i32>,
     beyond_boost_gauge_use: Option<i32>,
+    character_id: Option<i32>,
+    is_char_uncapped_override: Option<String>,
+    select_session: Option<String>,
     skill_id: Option<String>,
     is_skill_sealed: Option<String>,
 ) -> RouteResult<WorldTokenResponse> {
@@ -59,6 +62,9 @@ pub async fn score_token_world(
         fragment_multiply,
         prog_boost_multiply,
         beyond_boost_gauge_use,
+        character_id,
+        is_char_uncapped_override,
+        select_session,
         skill_id,
         is_skill_sealed,
     };

@@ -11,11 +11,16 @@ use crate::model::score::{
     Potential, RankingScoreRow, RankingScoreRowComplete, Recent30Tuple, Score, UserPlay, UserScore,
 };
 use crate::model::user::User;
+use crate::model::world::WorldStep;
+use crate::service::character::CharacterService;
+use crate::service::item::ItemService;
+use crate::service::user::UserService;
 use crate::service::world::{get_map_parser, StaminaImpl};
 use base64::{engine::general_purpose, Engine as _};
 use md5;
 use rand::Rng;
-use sqlx::MySqlPool;
+use serde_json::json;
+use sqlx::{MySqlPool, Row};
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -26,6 +31,7 @@ const RECENT10_WEIGHT: f64 = 1.0 / 40.0;
 type SongKey = (String, i32);
 type SongEntry = (usize, i32, f64);
 type SongEntryMap = HashMap<SongKey, Vec<SongEntry>>;
+type JsonMap = HashMap<String, Value>;
 
 /// Score service for handling score submission, validation, and calculations
 pub struct ScoreService {
@@ -49,6 +55,8 @@ impl ScoreService {
         user_id: i32,
         request: WorldTokenRequest,
     ) -> ArcResult<WorldTokenResponse> {
+        self.sync_world_token_user_state(user_id, &request).await?;
+
         let user = self.get_user_info(user_id).await?;
 
         let stamina_multiply = request.stamina_multiply.unwrap_or(1);
@@ -101,8 +109,24 @@ impl ScoreService {
 
         // Get user map and character info for stamina and skill processing
         let stamina_cost = self.get_user_current_map(user_id).await?;
-        let mut stamina =
-            StaminaImpl::new(user.stamina.unwrap_or(0), user.max_stamina_ts.unwrap_or(0));
+        let raw_stamina = user.stamina.unwrap_or(0);
+        let raw_max_stamina_ts = user.max_stamina_ts.unwrap_or(0);
+        let mut stamina = StaminaImpl::new(raw_stamina, raw_max_stamina_ts);
+
+        // Auto-repair legacy stamina state:
+        // if overcap stamina exists while max_stamina_ts is still in the future, normalize it
+        // to Python's stamina setter semantics before validation.
+        if raw_stamina > Constants::MAX_STAMINA && raw_max_stamina_ts > current_timestamp() {
+            stamina.set_stamina(raw_stamina);
+            sqlx::query!(
+                "UPDATE user SET stamina = ?, max_stamina_ts = ? WHERE user_id = ?",
+                stamina.get_current_stamina(),
+                stamina.max_stamina_ts(),
+                user_id
+            )
+            .execute(&self.pool)
+            .await?;
+        }
         let current_stamina = stamina.get_current_stamina();
 
         if current_stamina < stamina_cost * stamina_multiply {
@@ -332,14 +356,23 @@ impl ScoreService {
             fragment_multiply: 100,
             prog_boost_multiply: 0,
             beyond_boost_gauge_usage: 0,
+            course_id: None,
             course_play_state: -1,
+            course_score: 0,
+            course_clear_type: 3,
             combo_interval_bonus: submission.combo_interval_bonus,
             hp_interval_bonus: submission.hp_interval_bonus,
             fever_bonus: submission.fever_bonus,
+            rank_bonus: submission.rank_bonus,
+            maya_gauge: submission.maya_gauge,
+            nextstage_bonus: submission.nextstage_bonus,
             skill_cytusii_flag: None,
             skill_chinatsu_flag: None,
             highest_health: submission.highest_health,
             lowest_health: submission.lowest_health,
+            room_code: submission.room_code.clone(),
+            room_total_score: submission.room_total_score,
+            room_total_players: submission.room_total_players,
             invasion_flag: 0,
             ptt: None,
         };
@@ -378,7 +411,7 @@ impl ScoreService {
         }
 
         // Upload score (which handles rating calculation internally)
-        self.upload_score(&mut user_play).await?;
+        let mut result = self.upload_score(&mut user_play).await?;
 
         // Python baseline response: (world/course payload) + common fields
         let potential = self.calculate_user_potential(user_id).await?;
@@ -388,7 +421,6 @@ impl ScoreService {
         let user_rating = self.get_user_rating_ptt(user_id).await?;
         let global_rank = self.get_user_global_rank(user_id).await?;
 
-        let mut result = HashMap::new();
         result.insert("user_rating".to_string(), Value::from(user_rating));
         result.insert(
             "finale_challenge_higher".to_string(),
@@ -756,6 +788,105 @@ impl ScoreService {
 
     // Helper methods
 
+    async fn sync_world_token_user_state(
+        &self,
+        user_id: i32,
+        request: &WorldTokenRequest,
+    ) -> ArcResult<()> {
+        let has_character_selection = request.character_id.is_some();
+        let has_skill_sealed = request.is_skill_sealed.is_some();
+        let has_uncap_override = request.is_char_uncapped_override.is_some();
+
+        if !has_character_selection && !has_skill_sealed && !has_uncap_override {
+            return Ok(());
+        }
+
+        let user = self.get_user_info(user_id).await?;
+        let mut target_character_id = user.character_id.unwrap_or(0);
+        let mut target_is_skill_sealed = user.is_skill_sealed.unwrap_or(0);
+        let mut target_is_uncapped = user.is_char_uncapped.unwrap_or(0);
+        let mut target_is_uncapped_override = user.is_char_uncapped_override.unwrap_or(0);
+
+        if let Some(character_id) = request.character_id {
+            target_character_id = character_id;
+
+            if CONFIG.character_full_unlock {
+                let row = sqlx::query!(
+                    "SELECT is_uncapped, is_uncapped_override FROM user_char_full WHERE user_id = ? AND character_id = ?",
+                    user_id,
+                    character_id
+                )
+                .fetch_optional(&self.pool)
+                .await?;
+
+                if let Some(row) = row {
+                    target_is_uncapped = row.is_uncapped.unwrap_or(0);
+                    target_is_uncapped_override = row.is_uncapped_override.unwrap_or(0);
+                } else {
+                    // Python baseline (`change_character`) uses fallback false/false when character row is absent.
+                    target_is_uncapped = 0;
+                    target_is_uncapped_override = 0;
+                }
+            } else {
+                let row = sqlx::query!(
+                    "SELECT is_uncapped, is_uncapped_override FROM user_char WHERE user_id = ? AND character_id = ?",
+                    user_id,
+                    character_id
+                )
+                .fetch_optional(&self.pool)
+                .await?;
+
+                if let Some(row) = row {
+                    target_is_uncapped = row.is_uncapped.unwrap_or(0);
+                    target_is_uncapped_override = row.is_uncapped_override.unwrap_or(0);
+                } else {
+                    // Python baseline (`change_character`) uses fallback false/false when character row is absent.
+                    target_is_uncapped = 0;
+                    target_is_uncapped_override = 0;
+                }
+            }
+        }
+
+        if let Some(skill_sealed) = request
+            .is_skill_sealed
+            .as_deref()
+            .and_then(parse_bool_string)
+        {
+            target_is_skill_sealed = if skill_sealed { 1 } else { 0 };
+        }
+
+        if let Some(uncap_override) = request
+            .is_char_uncapped_override
+            .as_deref()
+            .and_then(parse_bool_string)
+        {
+            target_is_uncapped_override = if uncap_override { 1 } else { 0 };
+        }
+
+        if target_is_uncapped == 0 {
+            target_is_uncapped_override = 0;
+        }
+
+        if target_character_id != user.character_id.unwrap_or(0)
+            || target_is_skill_sealed != user.is_skill_sealed.unwrap_or(0)
+            || target_is_uncapped != user.is_char_uncapped.unwrap_or(0)
+            || target_is_uncapped_override != user.is_char_uncapped_override.unwrap_or(0)
+        {
+            sqlx::query!(
+                "UPDATE user SET character_id = ?, is_skill_sealed = ?, is_char_uncapped = ?, is_char_uncapped_override = ? WHERE user_id = ?",
+                target_character_id,
+                target_is_skill_sealed,
+                target_is_uncapped,
+                target_is_uncapped_override,
+                user_id
+            )
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+
     async fn get_user_info(&self, user_id: i32) -> ArcResult<User> {
         sqlx::query_as!(User, "SELECT * FROM user WHERE user_id = ?", user_id)
             .fetch_one(&self.pool)
@@ -957,25 +1088,34 @@ impl ScoreService {
         Ok(new_token)
     }
 
-    async fn upload_score(&self, user_play: &mut UserPlay) -> ArcResult<()> {
+    async fn upload_score(&self, user_play: &mut UserPlay) -> ArcResult<JsonMap> {
         let user_id = user_play.user_score.user_id;
 
         // Get play state first (Python baseline: token may be missing; only used to detect world/course mode).
         if user_play.song_token == "1145141919810" {
             // Hardcoded bypass token
             user_play.is_world_mode = Some(false);
+            user_play.course_id = None;
             user_play.course_play_state = -1;
+            user_play.course_score = 0;
+            user_play.course_clear_type = 3;
         } else if let Some(play_state) = self.get_play_state(&user_play.song_token, user_id).await?
         {
             let course_id = play_state.course_id.clone().unwrap_or_default();
             if course_id.is_empty() {
                 // World mode: course_id is an empty string in Python
                 user_play.is_world_mode = Some(true);
+                user_play.course_id = None;
                 user_play.course_play_state = -1;
+                user_play.course_score = 0;
+                user_play.course_clear_type = 3;
             } else {
                 // Course mode
                 user_play.is_world_mode = Some(false);
+                user_play.course_id = Some(course_id);
                 user_play.course_play_state = play_state.course_state;
+                user_play.course_score = play_state.course_score;
+                user_play.course_clear_type = play_state.course_clear_type;
             }
 
             user_play.stamina_multiply = play_state.stamina_multiply;
@@ -988,7 +1128,10 @@ impl ScoreService {
         } else {
             // Missing token: treat as non-world/non-course (same as Python)
             user_play.is_world_mode = Some(false);
+            user_play.course_id = None;
             user_play.course_play_state = -1;
+            user_play.course_score = 0;
+            user_play.course_clear_type = 3;
         }
 
         // Get rating by calc (like Python version)
@@ -1048,16 +1191,14 @@ impl ScoreService {
         self.update_user_rating(user_id).await?;
 
         // Handle world mode if applicable
+        let mut mode_payload = HashMap::new();
         if user_play.is_world_mode == Some(true) {
-            self.handle_world_mode(user_play).await?;
+            mode_payload = self.handle_world_mode(user_play).await?;
+        } else if user_play.course_play_state >= 0 {
+            mode_payload = self.handle_course_mode(user_play).await?;
         }
 
-        // Handle course mode if applicable
-        if user_play.course_play_state >= 0 {
-            self.handle_course_mode(user_play).await?;
-        }
-
-        Ok(())
+        Ok(mode_payload)
     }
 
     async fn update_best_score(&self, user_play: &mut UserPlay) -> ArcResult<()> {
@@ -1485,33 +1626,622 @@ impl ScoreService {
         Ok(())
     }
 
-    /// Handle world mode calculations
-    async fn handle_world_mode(&self, user_play: &mut UserPlay) -> ArcResult<()> {
-        // Get user's current world map info
-        let _user_current_map = self
-            .get_user_current_map(user_play.user_score.user_id)
+    /// Handle world mode calculations and build Python-compatible payload.
+    async fn handle_world_mode(&self, user_play: &mut UserPlay) -> ArcResult<JsonMap> {
+        let user_id = user_play.user_score.user_id;
+
+        let user_row = sqlx::query(
+            "SELECT character_id, is_skill_sealed, current_map, world_mode_locked_end_ts, beyond_boost_gauge
+             FROM user WHERE user_id = ?",
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        let mut character_id = user_row
+            .try_get::<Option<i32>, _>("character_id")?
+            .unwrap_or(0);
+        let is_skill_sealed = user_row
+            .try_get::<Option<i8>, _>("is_skill_sealed")?
+            .unwrap_or(0)
+            != 0;
+        let mut current_map = user_row
+            .try_get::<Option<String>, _>("current_map")?
+            .unwrap_or_default();
+        if current_map.is_empty() {
+            current_map = "tutorial".to_string();
+        }
+        let mut world_mode_locked_end_ts = user_row
+            .try_get::<Option<i64>, _>("world_mode_locked_end_ts")?
+            .unwrap_or(-1);
+        let mut beyond_boost_gauge = user_row
+            .try_get::<Option<f64>, _>("beyond_boost_gauge")?
+            .unwrap_or(0.0);
+
+        let parser = get_map_parser();
+        let map = parser.load_world_map(&current_map)?;
+
+        let user_world = sqlx::query(
+            "SELECT curr_position, curr_capture, is_locked FROM user_world WHERE user_id = ? AND map_id = ?",
+        )
+        .bind(user_id)
+        .bind(&current_map)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let (mut curr_position, mut curr_capture, is_locked) = if let Some(row) = user_world {
+            (
+                row.try_get::<Option<i32>, _>("curr_position")?.unwrap_or(0),
+                row.try_get::<Option<f64>, _>("curr_capture")?
+                    .unwrap_or(0.0),
+                row.try_get::<Option<i8>, _>("is_locked")?.unwrap_or(1) != 0,
+            )
+        } else {
+            sqlx::query(
+                "INSERT INTO user_world (user_id, map_id, curr_position, curr_capture, is_locked) VALUES (?, ?, 0, 0, 1)",
+            )
+            .bind(user_id)
+            .bind(&current_map)
+            .execute(&self.pool)
+            .await?;
+            (0, 0.0, true)
+        };
+
+        if is_locked {
+            return Err(ArcError::MapLocked {
+                message: "The map is locked.".to_string(),
+                error_code: 108,
+                api_error_code: -100,
+                extra_data: None,
+                status: 200,
+            });
+        }
+
+        let prev_position = curr_position;
+        let prev_capture = curr_capture;
+
+        if !is_skill_sealed
+            && (user_play.invasion_flag == 1
+                || (user_play.invasion_flag == 2 && user_play.user_score.score.health <= 0))
+        {
+            character_id = 72;
+        }
+
+        let character_service = CharacterService::new(self.pool.clone());
+        let mut character = character_service
+            .get_user_character_info(user_id, character_id)
+            .await?;
+        let mut skill_id_displayed = character.skill_id_displayed();
+
+        if is_skill_sealed {
+            character.skill.skill_id = None;
+            character.skill.skill_id_uncap = None;
+            character.skill.skill_unlock_level = i32::MAX;
+            character.frag.set_parameter(50.0, 50.0, 50.0);
+            character.prog.set_parameter(50.0, 50.0, 50.0);
+            character.overdrive.set_parameter(50.0, 50.0, 50.0);
+            character.frag.addition = 0.0;
+            character.prog.addition = 0.0;
+            character.overdrive.addition = 0.0;
+            skill_id_displayed = None;
+        }
+
+        if user_play.prog_boost_multiply != 0 {
+            sqlx::query("UPDATE user SET prog_boost = 0 WHERE user_id = ?")
+                .bind(user_id)
+                .execute(&self.pool)
+                .await?;
+        }
+
+        self.clear_user_songplay_tokens(user_id).await?;
+
+        let rating = user_play.user_score.score.rating;
+        let stamina_multiply = user_play.stamina_multiply as f64;
+        let fragment_multiply = user_play.fragment_multiply as f64;
+        let prog_boost_multiply = user_play.prog_boost_multiply as f64;
+        let beyond_boost_usage = user_play.beyond_boost_gauge_usage as f64;
+
+        let frag_value = character.frag_value();
+        let mut prog_value = character.prog_value();
+        let overdrive_value = character.overdrive_value();
+
+        let (
+            base_progress,
+            progress_normalized,
+            final_progress,
+            mut partner_multiply,
+            _step_times,
+            affinity_multiply,
+            new_law_multiply,
+        ) = if map.is_beyond {
+            let base_progress = rating.sqrt() * 0.43
+                + if user_play.user_score.score.clear_type == 0 {
+                    25.0 / 28.0
+                } else {
+                    75.0 / 28.0
+                };
+            let step_times = stamina_multiply * fragment_multiply / 100.0
+                * (1.0 + prog_boost_multiply / 100.0 + beyond_boost_usage / 100.0);
+
+            let partner_multiply = overdrive_value / 50.0;
+            let mut affinity_multiply = 1.0;
+            let mut new_law_multiply = 1.0;
+
+            let progress_normalized = if map.is_breached {
+                if let Some(new_law) = &map.new_law {
+                    let new_law_prog = match new_law.as_str() {
+                        "over100_step50" => Some(overdrive_value + prog_value / 2.0),
+                        "frag50" => Some(frag_value),
+                        "lowlevel" => {
+                            Some(50.0 * f64::max(1.0, 2.0 - 0.1 * character.level.level as f64))
+                        }
+                        "antiheroism" => {
+                            let x = (overdrive_value - frag_value).abs();
+                            let y = (overdrive_value - prog_value).abs();
+                            Some(overdrive_value - (x - y).abs())
+                        }
+                        _ => None,
+                    };
+                    if let Some(v) = new_law_prog {
+                        new_law_multiply = v / 50.0;
+                    }
+                }
+                if map.disable_over.unwrap_or(false) {
+                    base_progress * new_law_multiply
+                } else {
+                    base_progress * partner_multiply * new_law_multiply
+                }
+            } else {
+                if let Some(idx) = map
+                    .character_affinity
+                    .iter()
+                    .position(|&id| id == character.character_id)
+                {
+                    if let Some(multiplier) = map.affinity_multiplier.get(idx) {
+                        affinity_multiply = *multiplier;
+                    }
+                }
+                base_progress * partner_multiply * affinity_multiply
+            };
+
+            let final_progress = progress_normalized * step_times;
+            (
+                base_progress,
+                progress_normalized,
+                final_progress,
+                partner_multiply,
+                step_times,
+                affinity_multiply,
+                new_law_multiply,
+            )
+        } else {
+            let base_progress = 2.5 + 2.45 * rating.sqrt();
+            let partner_multiply = prog_value / 50.0;
+            let progress_normalized = base_progress * partner_multiply;
+            let step_times =
+                stamina_multiply * fragment_multiply / 100.0 * (prog_boost_multiply / 100.0 + 1.0);
+            let final_progress = progress_normalized * step_times;
+            (
+                base_progress,
+                progress_normalized,
+                final_progress,
+                partner_multiply,
+                step_times,
+                1.0,
+                1.0,
+            )
+        };
+
+        let (next_position, next_capture) = climb_user_map(
+            &map.steps,
+            map.is_beyond,
+            map.beyond_health.unwrap_or(0) as f64,
+            prev_position,
+            prev_capture,
+            final_progress,
+        );
+        curr_position = next_position;
+        curr_capture = next_capture;
+
+        let item_service = ItemService::new(self.pool.clone());
+        let mut rewards = Vec::new();
+        if curr_position > prev_position {
+            for i in (prev_position + 1)..=curr_position {
+                if let Some(step) = map.steps.get(i as usize) {
+                    if !step.items.is_empty() {
+                        rewards.push(json!({
+                            "position": step.position,
+                            "items": step.items.iter().map(step_item_to_value).collect::<Vec<_>>()
+                        }));
+                    }
+
+                    for item in &step.items {
+                        item_service
+                            .claim_item(user_id, &item.item_id, &item.item_type, item.amount)
+                            .await?;
+                    }
+                }
+            }
+        }
+
+        let steps_for_climbing_pre_reset =
+            steps_for_climbing(&map.steps, prev_position, curr_position);
+        if let Some(last_step) = steps_for_climbing_pre_reset.last() {
+            if last_step.step_type.iter().any(|x| x == "plusstamina") {
+                if let Some(plus_stamina) = last_step.plus_stamina_value {
+                    let stamina_row =
+                        sqlx::query("SELECT max_stamina_ts, stamina FROM user WHERE user_id = ?")
+                            .bind(user_id)
+                            .fetch_one(&self.pool)
+                            .await?;
+                    let mut stamina = StaminaImpl::new(
+                        stamina_row
+                            .try_get::<Option<i32>, _>("stamina")?
+                            .unwrap_or(0),
+                        stamina_row
+                            .try_get::<Option<i64>, _>("max_stamina_ts")?
+                            .unwrap_or(0),
+                    );
+                    let current_stamina = stamina.get_current_stamina();
+                    stamina.set_stamina(current_stamina + plus_stamina);
+                    sqlx::query(
+                        "UPDATE user SET stamina = ?, max_stamina_ts = ? WHERE user_id = ?",
+                    )
+                    .bind(stamina.get_current_stamina())
+                    .bind(stamina.max_stamina_ts())
+                    .bind(user_id)
+                    .execute(&self.pool)
+                    .await?;
+                }
+            }
+        }
+
+        if !CONFIG.character_full_unlock && !is_skill_sealed {
+            let exp_addition =
+                stamina_multiply * (prog_boost_multiply / 100.0 + 1.0) * rating * 6.0;
+            if exp_addition != 0.0 {
+                character = character_service
+                    .upgrade_character(user_id, character.character_id, exp_addition)
+                    .await?;
+                prog_value = character.prog_value();
+                if !map.is_beyond {
+                    partner_multiply = prog_value / 50.0;
+                }
+            }
+        }
+
+        if !is_skill_sealed {
+            if let Some(skill_id) = skill_id_displayed.as_deref() {
+                if skill_id == "skill_fatalis" {
+                    world_mode_locked_end_ts =
+                        current_timestamp() + Constants::SKILL_FATALIS_WORLD_LOCKED_TIME;
+                    sqlx::query("UPDATE user SET world_mode_locked_end_ts = ? WHERE user_id = ?")
+                        .bind(world_mode_locked_end_ts)
+                        .bind(user_id)
+                        .execute(&self.pool)
+                        .await?;
+                } else if skill_id == "skill_maya" {
+                    character_service
+                        .change_character_skill_state(user_id, character.character_id)
+                        .await?;
+                    character.skill_flag = !character.skill_flag;
+                }
+            }
+        }
+
+        if map.is_beyond {
+            if user_play.beyond_boost_gauge_usage > 0
+                && user_play.beyond_boost_gauge_usage as f64 <= beyond_boost_gauge
+            {
+                beyond_boost_gauge -= user_play.beyond_boost_gauge_usage as f64;
+                if beyond_boost_gauge.abs() <= 1e-5 {
+                    beyond_boost_gauge = 0.0;
+                }
+                sqlx::query("UPDATE user SET beyond_boost_gauge = ? WHERE user_id = ?")
+                    .bind(beyond_boost_gauge)
+                    .bind(user_id)
+                    .execute(&self.pool)
+                    .await?;
+            }
+        } else {
+            beyond_boost_gauge += 2.45 * rating.sqrt() + 27.0;
+            if beyond_boost_gauge > 200.0 {
+                beyond_boost_gauge = 200.0;
+            }
+            sqlx::query("UPDATE user SET beyond_boost_gauge = ? WHERE user_id = ?")
+                .bind(beyond_boost_gauge)
+                .bind(user_id)
+                .execute(&self.pool)
+                .await?;
+        }
+
+        if curr_position == map.step_count - 1 && map.is_repeatable {
+            curr_position = 0;
+        }
+
+        sqlx::query(
+            "UPDATE user_world SET curr_position = ?, curr_capture = ?, is_locked = 0 WHERE user_id = ? AND map_id = ?",
+        )
+        .bind(curr_position)
+        .bind(curr_capture)
+        .bind(user_id)
+        .bind(&current_map)
+        .execute(&self.pool)
+        .await?;
+
+        let user_service = UserService::new(self.pool.clone());
+        user_service
+            .update_user_world_complete_info(user_id)
             .await?;
 
-        // This would implement the complex world mode logic from Python:
-        // - Check map type (normal, beyond, breached)
-        // - Apply character skills
-        // - Calculate progress
-        // - Update map position
-        // - Handle rewards
+        let (current_stamina, max_stamina_ts) = self.get_user_stamina_info(user_id).await?;
+        let steps_for_response = steps_for_climbing(&map.steps, prev_position, curr_position);
 
-        // For now, this is a placeholder implementation
-        Ok(())
+        let mut user_map = json!({
+            "user_id": user_id,
+            "curr_position": curr_position,
+            "curr_capture": curr_capture,
+            "is_locked": false,
+            "map_id": current_map,
+            "prev_capture": prev_capture,
+            "prev_position": prev_position,
+            "beyond_health": map.beyond_health
+        });
+
+        let mut char_stats = json!({
+            "character_id": character.character_id,
+            "frag": character.frag_value(),
+            "prog": character.prog_value(),
+            "overdrive": character.overdrive_value()
+        });
+
+        if let Some(skill_state) = character.skill_state() {
+            if let Value::Object(ref mut map_obj) = char_stats {
+                map_obj.insert("skill_state".to_string(), Value::String(skill_state));
+            }
+        }
+
+        let mut result = HashMap::new();
+        result.insert("rewards".to_string(), Value::Array(rewards));
+        result.insert("exp".to_string(), json!(character.level.exp));
+        result.insert("level".to_string(), json!(character.level.level));
+        result.insert("base_progress".to_string(), json!(base_progress));
+        result.insert("progress".to_string(), json!(final_progress));
+        result.insert("user_map".to_string(), user_map.clone());
+        result.insert("char_stats".to_string(), char_stats);
+        result.insert("current_stamina".to_string(), json!(current_stamina));
+        result.insert("max_stamina_ts".to_string(), json!(max_stamina_ts));
+        result.insert(
+            "world_mode_locked_end_ts".to_string(),
+            json!(world_mode_locked_end_ts),
+        );
+        result.insert("beyond_boost_gauge".to_string(), json!(beyond_boost_gauge));
+        result.insert(
+            "progress_before_sub_boost".to_string(),
+            json!(final_progress),
+        );
+        result.insert("progress_sub_boost_amount".to_string(), json!(0));
+        result.insert("partner_multiply".to_string(), json!(partner_multiply));
+
+        if user_play.stamina_multiply != 1 {
+            result.insert(
+                "stamina_multiply".to_string(),
+                json!(user_play.stamina_multiply),
+            );
+        }
+        if user_play.fragment_multiply != 100 {
+            result.insert(
+                "fragment_multiply".to_string(),
+                json!(user_play.fragment_multiply),
+            );
+        }
+        if user_play.prog_boost_multiply != 0 {
+            result.insert(
+                "prog_boost_multiply".to_string(),
+                json!(user_play.prog_boost_multiply),
+            );
+        }
+
+        if map.is_beyond {
+            result.insert(
+                "pre_boost_progress".to_string(),
+                json!(progress_normalized * fragment_multiply / 100.0),
+            );
+            if let Value::Object(ref mut map_obj) = user_map {
+                map_obj.insert("steps".to_string(), json!(steps_for_response.len() as i32));
+            }
+            result.insert("user_map".to_string(), user_map);
+            result.insert("affinity_multiply".to_string(), json!(affinity_multiply));
+            if user_play.beyond_boost_gauge_usage != 0 {
+                result.insert(
+                    "beyond_boost_gauge_usage".to_string(),
+                    json!(user_play.beyond_boost_gauge_usage),
+                );
+            }
+            if map.is_breached {
+                result.insert("new_law_multiply".to_string(), json!(new_law_multiply));
+            }
+        } else {
+            result.insert(
+                "progress_partial_after_stat".to_string(),
+                json!(progress_normalized),
+            );
+            result.insert("partner_adjusted_prog".to_string(), json!(prog_value));
+            if let Value::Object(ref mut map_obj) = user_map {
+                map_obj.insert(
+                    "steps".to_string(),
+                    Value::Array(
+                        steps_for_response
+                            .iter()
+                            .map(|step| step.to_dict())
+                            .collect::<Vec<_>>(),
+                    ),
+                );
+            }
+            result.insert("user_map".to_string(), user_map);
+        }
+
+        Ok(result)
     }
 
-    /// Handle course mode calculations
-    async fn handle_course_mode(&self, _user_play: &mut UserPlay) -> ArcResult<()> {
-        // This would implement course mode logic:
-        // - Update course progress
-        // - Check course completion
-        // - Handle course rewards
+    /// Handle course mode calculations and build Python-compatible payload.
+    async fn handle_course_mode(&self, user_play: &mut UserPlay) -> ArcResult<JsonMap> {
+        let user_id = user_play.user_score.user_id;
+        let Some(course_id) = user_play.course_id.clone() else {
+            return Ok(HashMap::new());
+        };
 
-        // For now, this is a placeholder implementation
-        Ok(())
+        let mut course_score = user_play.course_score + user_play.user_score.score.score;
+        let mut course_clear_type = user_play.course_clear_type;
+
+        let user_course = sqlx::query(
+            "SELECT high_score, best_clear_type FROM user_course WHERE user_id = ? AND course_id = ?",
+        )
+        .bind(user_id)
+        .bind(&course_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let (mut high_score, mut best_clear_type) = if let Some(row) = user_course {
+            (
+                row.try_get::<Option<i32>, _>("high_score")?.unwrap_or(0),
+                row.try_get::<Option<i32>, _>("best_clear_type")?
+                    .unwrap_or(0),
+            )
+        } else {
+            (0, 0)
+        };
+
+        let mut need_upsert = false;
+        if course_score > high_score {
+            high_score = course_score;
+            need_upsert = true;
+        }
+
+        if user_play.user_score.score.health < 0 {
+            user_play.course_play_state = 5;
+            course_score = 0;
+            course_clear_type = 0;
+
+            sqlx::query(
+                "UPDATE songplay_token SET course_state = ?, course_score = ?, course_clear_type = ? WHERE token = ?",
+            )
+            .bind(user_play.course_play_state)
+            .bind(course_score)
+            .bind(course_clear_type)
+            .bind(&user_play.song_token)
+            .execute(&self.pool)
+            .await?;
+
+            if need_upsert {
+                sqlx::query(
+                    "INSERT INTO user_course (user_id, course_id, high_score, best_clear_type)
+                     VALUES (?, ?, ?, ?)
+                     ON DUPLICATE KEY UPDATE high_score = VALUES(high_score), best_clear_type = VALUES(best_clear_type)",
+                )
+                .bind(user_id)
+                .bind(&course_id)
+                .bind(high_score)
+                .bind(best_clear_type)
+                .execute(&self.pool)
+                .await?;
+            }
+
+            return Ok(HashMap::new());
+        }
+
+        user_play.course_play_state += 1;
+        if Score::get_song_state(course_clear_type)
+            > Score::get_song_state(user_play.user_score.score.clear_type)
+        {
+            course_clear_type = user_play.user_score.score.clear_type;
+        }
+
+        sqlx::query(
+            "UPDATE songplay_token SET course_state = ?, course_score = ?, course_clear_type = ? WHERE token = ?",
+        )
+        .bind(user_play.course_play_state)
+        .bind(course_score)
+        .bind(course_clear_type)
+        .bind(&user_play.song_token)
+        .execute(&self.pool)
+        .await?;
+
+        let mut rewards = Vec::new();
+        if user_play.course_play_state == 4 {
+            if best_clear_type == 0 {
+                let course_items = sqlx::query(
+                    "SELECT item_id, type, amount FROM course_item WHERE course_id = ?",
+                )
+                .bind(&course_id)
+                .fetch_all(&self.pool)
+                .await?;
+
+                let item_service = ItemService::new(self.pool.clone());
+                for row in course_items {
+                    let item_id = row.try_get::<String, _>("item_id")?;
+                    let item_type = row.try_get::<String, _>("type")?;
+                    let amount = row.try_get::<Option<i32>, _>("amount")?.unwrap_or(1);
+                    item_service
+                        .claim_item(user_id, &item_id, &item_type, amount)
+                        .await?;
+                    rewards.push(json!({
+                        "id": item_id,
+                        "type": item_type,
+                        "amount": amount
+                    }));
+                }
+            }
+
+            if Score::get_song_state(course_clear_type) > Score::get_song_state(best_clear_type) {
+                best_clear_type = course_clear_type;
+                need_upsert = true;
+            }
+        }
+
+        if need_upsert {
+            sqlx::query(
+                "INSERT INTO user_course (user_id, course_id, high_score, best_clear_type)
+                 VALUES (?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE high_score = VALUES(high_score), best_clear_type = VALUES(best_clear_type)",
+            )
+            .bind(user_id)
+            .bind(&course_id)
+            .bind(high_score)
+            .bind(best_clear_type)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        if user_play.course_play_state == 4 {
+            let (stamina, max_stamina_ts) = self.get_user_stamina_info(user_id).await?;
+            let mut result = HashMap::new();
+            result.insert("rewards".to_string(), Value::Array(rewards));
+            result.insert("current_stamina".to_string(), json!(stamina));
+            result.insert("max_stamina_ts".to_string(), json!(max_stamina_ts));
+            result.insert(
+                "user_course_banners".to_string(),
+                Value::Array(self.get_user_course_banners(user_id).await?),
+            );
+            return Ok(result);
+        }
+
+        Ok(HashMap::new())
+    }
+
+    async fn get_user_course_banners(&self, user_id: i32) -> ArcResult<Vec<Value>> {
+        let rows = sqlx::query(
+            "SELECT item_id FROM user_item WHERE user_id = ? AND type = 'course_banner'",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut banners = Vec::with_capacity(rows.len());
+        for row in rows {
+            banners.push(Value::String(row.try_get::<String, _>("item_id")?));
+        }
+        Ok(banners)
     }
 
     /// Get user's current world map stamina cost
@@ -1585,6 +2315,93 @@ impl ScoreService {
     }
 }
 
+fn step_item_to_value(item: &crate::model::world::StepItem) -> Value {
+    json!({
+        "id": item.item_id,
+        "type": item.item_type,
+        "amount": item.amount
+    })
+}
+
+fn steps_for_climbing(
+    steps: &[WorldStep],
+    prev_position: i32,
+    curr_position: i32,
+) -> Vec<WorldStep> {
+    if curr_position < prev_position || steps.is_empty() {
+        return Vec::new();
+    }
+
+    let start = prev_position.max(0) as usize;
+    let mut end = (curr_position + 1).max(0) as usize;
+    end = end.min(steps.len());
+    if start >= end {
+        return Vec::new();
+    }
+
+    steps[start..end].to_vec()
+}
+
+fn climb_user_map(
+    steps: &[WorldStep],
+    is_beyond: bool,
+    beyond_health: f64,
+    prev_position: i32,
+    prev_capture: f64,
+    step_value: f64,
+) -> (i32, f64) {
+    if step_value < 0.0 || steps.is_empty() {
+        return (prev_position.max(0), prev_capture.max(0.0));
+    }
+
+    if is_beyond {
+        let mut curr_capture = prev_capture + step_value;
+        if curr_capture > beyond_health {
+            curr_capture = beyond_health;
+        }
+
+        let mut i = 0usize;
+        let mut t = prev_capture + step_value;
+        while i < steps.len() && t > 0.0 {
+            let dt = steps[i].capture as f64;
+            if dt > t {
+                t = 0.0;
+            } else {
+                t -= dt;
+                i += 1;
+            }
+        }
+
+        let curr_position = if i >= steps.len() {
+            steps.len() as i32 - 1
+        } else {
+            i as i32
+        };
+        return (curr_position, curr_capture);
+    }
+
+    let mut i = prev_position.max(0) as usize;
+    let mut j = prev_capture;
+    let mut t = step_value;
+    while t > 0.0 && i < steps.len() {
+        let dt = steps[i].capture as f64 - j;
+        if dt > t {
+            j += t;
+            t = 0.0;
+        } else {
+            t -= dt;
+            j = 0.0;
+            i += 1;
+        }
+    }
+
+    if i >= steps.len() {
+        (steps.len() as i32 - 1, 0.0)
+    } else {
+        (i as i32, j)
+    }
+}
+
 /// Generate a random song token
 fn generate_song_token() -> String {
     let mut random_bytes = [0u8; 64];
@@ -1615,6 +2432,16 @@ fn get_world_value_name(index: i32) -> String {
         1 => "prog".to_string(),
         2 => "over".to_string(),
         _ => "frag".to_string(),
+    }
+}
+
+fn parse_bool_string(value: &str) -> Option<bool> {
+    if value.eq_ignore_ascii_case("true") {
+        Some(true)
+    } else if value.eq_ignore_ascii_case("false") {
+        Some(false)
+    } else {
+        None
     }
 }
 

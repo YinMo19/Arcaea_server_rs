@@ -32,7 +32,7 @@ pub struct MapEnterRequest {
 pub struct MapEnterResponse {
     pub map_id: String,
     pub curr_position: i32,
-    pub curr_capture: i32,
+    pub curr_capture: f64,
     pub is_locked: bool,
     pub user_id: i32,
 }
