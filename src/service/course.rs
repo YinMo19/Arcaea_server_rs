@@ -2,6 +2,7 @@ use crate::config::Constants;
 use crate::error::ArcResult;
 use crate::DbPool;
 use serde_json::{json, Value};
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
@@ -26,11 +27,12 @@ impl CourseService {
         .and_then(|r| r.amount)
         .unwrap_or(0);
 
-        let course_rows = sqlx::query!(
+        let mut course_rows = sqlx::query!(
             "SELECT course_id, course_name, dan_name, style, gauge_requirement, flag_as_hidden_when_requirements_not_met, can_start FROM course ORDER BY course_id"
         )
         .fetch_all(&self.pool)
         .await?;
+        course_rows.sort_by(|a, b| compare_course_id(&a.course_id, &b.course_id));
 
         let chart_rows = sqlx::query!(
             "SELECT course_id, song_id, difficulty, flag_as_hidden, song_index FROM course_chart ORDER BY course_id, song_index"
@@ -158,4 +160,28 @@ fn course_reward_string(item_id: &str, item_type: &str, amount: i32) -> String {
         "core" => format!("{item_id}_{amount}"),
         _ => item_id.to_string(),
     }
+}
+
+fn compare_course_id(a: &str, b: &str) -> Ordering {
+    let (a_prefix, a_suffix) = split_course_id(a);
+    let (b_prefix, b_suffix) = split_course_id(b);
+
+    match a_prefix.cmp(b_prefix) {
+        Ordering::Equal => match (a_suffix, b_suffix) {
+            (Some(x), Some(y)) => x.cmp(&y),
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (None, None) => a.cmp(b),
+        },
+        ordering => ordering,
+    }
+}
+
+fn split_course_id(course_id: &str) -> (&str, Option<i32>) {
+    if let Some((prefix, suffix)) = course_id.rsplit_once('-') {
+        if let Ok(index) = suffix.parse::<i32>() {
+            return (prefix, Some(index));
+        }
+    }
+    (course_id, None)
 }
