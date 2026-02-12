@@ -593,15 +593,37 @@ impl UserService {
         column: &str,
         value: &str,
     ) -> ArcResult<()> {
-        // Note: This is potentially unsafe due to SQL injection risk
-        // In a real implementation, you should validate the column name
-        // and use a match statement or enum for allowed columns
-        let query = format!("UPDATE user SET {column} = ? WHERE user_id = ?");
-        sqlx::query(&query)
-            .bind(value)
-            .bind(user_id)
-            .execute(&self.pool)
-            .await?;
+        match column {
+            "favorite_character" => {
+                let favorite_character: i32 = value
+                    .parse()
+                    .map_err(|_| ArcError::input("Invalid favorite_character value."))?;
+                sqlx::query!(
+                    "UPDATE user SET favorite_character = ? WHERE user_id = ?",
+                    favorite_character,
+                    user_id
+                )
+                .execute(&self.pool)
+                .await?;
+            }
+            "is_hide_rating" => {
+                let is_hide_rating: i32 = value
+                    .parse()
+                    .map_err(|_| ArcError::input("Invalid is_hide_rating value."))?;
+                sqlx::query!(
+                    "UPDATE user SET is_hide_rating = ? WHERE user_id = ?",
+                    is_hide_rating,
+                    user_id
+                )
+                .execute(&self.pool)
+                .await?;
+            }
+            _ => {
+                return Err(ArcError::input(format!(
+                    "Unsupported user column for update_user_column: {column}"
+                )));
+            }
+        }
 
         Ok(())
     }
@@ -1369,14 +1391,41 @@ impl UserService {
     where
         T: serde::Serialize + Send + Sync,
     {
-        let value_str = serde_json::to_string(value)?;
-        let sql = format!("UPDATE user SET {column} = ? WHERE user_id = ?");
+        let value_json = serde_json::to_value(value)?;
 
-        sqlx::query(&sql)
-            .bind(value_str)
-            .bind(user_id)
-            .execute(&self.pool)
-            .await?;
+        match column {
+            "prog_boost" => {
+                let prog_boost = value_json
+                    .as_i64()
+                    .ok_or_else(|| ArcError::input("Invalid prog_boost value."))?;
+                let prog_boost = i32::try_from(prog_boost)
+                    .map_err(|_| ArcError::input("Invalid prog_boost value range."))?;
+                sqlx::query!(
+                    "UPDATE user SET prog_boost = ? WHERE user_id = ?",
+                    prog_boost,
+                    user_id
+                )
+                .execute(&self.pool)
+                .await?;
+            }
+            "world_mode_locked_end_ts" => {
+                let world_mode_locked_end_ts = value_json
+                    .as_i64()
+                    .ok_or_else(|| ArcError::input("Invalid world_mode_locked_end_ts value."))?;
+                sqlx::query!(
+                    "UPDATE user SET world_mode_locked_end_ts = ? WHERE user_id = ?",
+                    world_mode_locked_end_ts,
+                    user_id
+                )
+                .execute(&self.pool)
+                .await?;
+            }
+            _ => {
+                return Err(ArcError::input(format!(
+                    "Unsupported user column for update_user_one_column: {column}"
+                )));
+            }
+        }
 
         Ok(())
     }
