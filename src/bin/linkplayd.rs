@@ -924,7 +924,6 @@ impl<'a> CommandParser<'a> {
 
         let client_no = self.c_u32(12);
         let start = client_no.max(self.room.players[self.player_index].start_command_num);
-        let mut sent_queue_upto = self.room.players[self.player_index].start_command_num;
 
         let mut flag_13 = false;
         for i in start as usize..self.room.command_queue.len() {
@@ -935,13 +934,6 @@ impl<'a> CommandParser<'a> {
                 flag_13 = true;
             }
             out.push(self.room.command_queue[i].clone());
-            sent_queue_upto = (i as u32).saturating_add(1);
-        }
-
-        // Prevent replaying the same stale queue window forever when client_no
-        // does not advance (observed during real-client setting toggles).
-        if sent_queue_upto > self.room.players[self.player_index].start_command_num {
-            self.room.players[self.player_index].start_command_num = sent_queue_upto;
         }
 
         if !self.room.players[self.player_index]

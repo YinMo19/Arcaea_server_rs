@@ -138,6 +138,8 @@ async fn init_services(
 async fn configure_rocket() -> Rocket<Build> {
     let prometheus = PrometheusMetrics::new();
     let figment = rocket::Config::figment().merge(("cli_colors", false));
+    let game_user_prefix = format!("{GAME_API_PREFIX}/user");
+    let game_account_prefix = format!("{GAME_API_PREFIX}/account");
 
     let mut rocket = rocket::custom(figment)
         .attach(CORS)
@@ -191,8 +193,18 @@ async fn configure_rocket() -> Rocket<Build> {
         .attach(prometheus.clone())
         .mount("/metrics", prometheus)
         .mount("/user", Arcaea_server_rs::route::user::routes())
+        .mount(game_user_prefix, Arcaea_server_rs::route::user::routes())
         .mount(
             "/account",
+            rocket::routes![
+                Arcaea_server_rs::route::user::register,
+                Arcaea_server_rs::route::user::user_delete,
+                Arcaea_server_rs::route::user::email_resend_verify,
+                Arcaea_server_rs::route::user::email_verify
+            ],
+        )
+        .mount(
+            game_account_prefix,
             rocket::routes![
                 Arcaea_server_rs::route::user::register,
                 Arcaea_server_rs::route::user::user_delete,

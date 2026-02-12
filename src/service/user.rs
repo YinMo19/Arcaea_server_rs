@@ -38,6 +38,10 @@ impl UserService {
             .as_millis() as i64
     }
 
+    fn md5_hex(value: &str) -> String {
+        format!("{:x}", md5::compute(value.as_bytes()))
+    }
+
     /// Hash password using SHA-256
     fn hash_password(password: &str) -> String {
         let mut hasher = Sha256::new();
@@ -683,19 +687,38 @@ impl UserService {
         is_skill_sealed: bool,
     ) -> ArcResult<()> {
         // Get character uncap status
-        let char_info = sqlx::query!(
-            "SELECT is_uncapped, is_uncapped_override FROM user_char WHERE user_id = ? AND character_id = ?",
-            user_id,
-            character_id
-        )
-        .fetch_optional(&self.pool)
-        .await?;
+        let char_info = if CONFIG.character_full_unlock {
+            sqlx::query!(
+                "SELECT is_uncapped, is_uncapped_override FROM user_char_full WHERE user_id = ? AND character_id = ?",
+                user_id,
+                character_id
+            )
+            .fetch_optional(&self.pool)
+            .await?
+            .map(|row| {
+                (
+                    row.is_uncapped.unwrap_or(0),
+                    row.is_uncapped_override.unwrap_or(0),
+                )
+            })
+        } else {
+            sqlx::query!(
+                "SELECT is_uncapped, is_uncapped_override FROM user_char WHERE user_id = ? AND character_id = ?",
+                user_id,
+                character_id
+            )
+            .fetch_optional(&self.pool)
+            .await?
+            .map(|row| {
+                (
+                    row.is_uncapped.unwrap_or(0),
+                    row.is_uncapped_override.unwrap_or(0),
+                )
+            })
+        };
 
         let (is_uncapped, is_uncapped_override) = if let Some(info) = char_info {
-            (
-                info.is_uncapped.unwrap_or(0),
-                info.is_uncapped_override.unwrap_or(0),
-            )
+            info
         } else {
             (0, 0) // Default values if character not found
         };
@@ -785,42 +808,66 @@ impl UserService {
             .fetch_optional(&self.pool)
             .await?;
 
-        if let Some(data) = save_data {
-            let response = serde_json::json!({
-                "user_id": user_id,
-                "story": {
-                    "": serde_json::from_str::<serde_json::Value>(&data.story_data.unwrap_or_default()).unwrap_or(serde_json::json!([]))
-                },
-                "devicemodelname": {
-                    "val": serde_json::from_str::<serde_json::Value>(&data.devicemodelname_data.unwrap_or_default()).unwrap_or(serde_json::json!(""))
-                },
-                "installid": {
-                    "val": serde_json::from_str::<serde_json::Value>(&data.installid_data.unwrap_or_default()).unwrap_or(serde_json::json!(""))
-                },
-                "unlocklist": {
-                    "": serde_json::from_str::<serde_json::Value>(&data.unlocklist_data.unwrap_or_default()).unwrap_or(serde_json::json!([]))
-                },
-                "clearedsongs": {
-                    "": serde_json::from_str::<serde_json::Value>(&data.clearedsongs_data.unwrap_or_default()).unwrap_or(serde_json::json!([]))
-                },
-                "clearlamps": {
-                    "": serde_json::from_str::<serde_json::Value>(&data.clearlamps_data.unwrap_or_default()).unwrap_or(serde_json::json!([]))
-                },
-                "scores": {
-                    "": serde_json::from_str::<serde_json::Value>(&data.scores_data.unwrap_or_default()).unwrap_or(serde_json::json!([]))
-                },
-                "version": {
-                    "val": 1
-                },
-                "createdAt": data.createdAt.unwrap_or(0),
-                "finalestate": {
-                    "val": data.finalestate_data.unwrap_or_default()
-                }
-            });
-            Ok(response)
-        } else {
-            Err(ArcError::no_data("User has no cloud save data", 108))
-        }
+        let (scores_data, clearlamps_data, clearedsongs_data, unlocklist_data, installid_data, devicemodelname_data, story_data, created_at, finalestate_data) =
+            if let Some(data) = save_data {
+                (
+                    Self::load_cloud_array_value(data.scores_data.as_deref()),
+                    Self::load_cloud_array_value(data.clearlamps_data.as_deref()),
+                    Self::load_cloud_array_value(data.clearedsongs_data.as_deref()),
+                    Self::load_cloud_array_value(data.unlocklist_data.as_deref()),
+                    Self::load_cloud_val_string(data.installid_data.as_deref()),
+                    Self::load_cloud_val_string(data.devicemodelname_data.as_deref()),
+                    Self::load_cloud_array_value(data.story_data.as_deref()),
+                    data.createdAt.unwrap_or(0),
+                    data.finalestate_data.unwrap_or_default(),
+                )
+            } else {
+                (
+                    serde_json::json!([]),
+                    serde_json::json!([]),
+                    serde_json::json!([]),
+                    serde_json::json!([]),
+                    String::new(),
+                    String::new(),
+                    serde_json::json!([]),
+                    0,
+                    String::new(),
+                )
+            };
+
+        let response = serde_json::json!({
+            "user_id": user_id,
+            "story": {
+                "": story_data
+            },
+            "devicemodelname": {
+                "val": devicemodelname_data
+            },
+            "installid": {
+                "val": installid_data
+            },
+            "unlocklist": {
+                "": unlocklist_data
+            },
+            "clearedsongs": {
+                "": clearedsongs_data
+            },
+            "clearlamps": {
+                "": clearlamps_data
+            },
+            "scores": {
+                "": scores_data
+            },
+            "version": {
+                "val": 1
+            },
+            "createdAt": created_at,
+            "finalestate": {
+                "val": finalestate_data
+            }
+        });
+
+        Ok(response)
     }
 
     /// Get user cores information
@@ -950,10 +997,35 @@ impl UserService {
         user_id: i32,
         save_request: &crate::route::user::CloudSaveRequest,
     ) -> ArcResult<()> {
-        // TODO: Implement checksum validation like in Python version
-        // For now, just update the data
-
         let current_time = Self::current_timestamp();
+        let scores_data =
+            Self::normalize_cloud_array(&save_request.scores_data, &save_request.scores_checksum)?;
+        let clearlamps_data = Self::normalize_cloud_array(
+            &save_request.clearlamps_data,
+            &save_request.clearlamps_checksum,
+        )?;
+        let clearedsongs_data = Self::normalize_cloud_array(
+            &save_request.clearedsongs_data,
+            &save_request.clearedsongs_checksum,
+        )?;
+        let unlocklist_data = Self::normalize_cloud_array(
+            &save_request.unlocklist_data,
+            &save_request.unlocklist_checksum,
+        )?;
+        let installid_data = Self::normalize_cloud_val(
+            &save_request.installid_data,
+            &save_request.installid_checksum,
+        )?;
+        let devicemodelname_data = Self::normalize_cloud_val(
+            &save_request.devicemodelname_data,
+            &save_request.devicemodelname_checksum,
+        )?;
+        let story_data =
+            Self::normalize_cloud_array(&save_request.story_data, &save_request.story_checksum)?;
+        let finalestate_data = Self::normalize_cloud_finalestate(
+            save_request.finalestate_data.as_deref(),
+            save_request.finalestate_checksum.as_deref(),
+        )?;
 
         sqlx::query!(
             "INSERT INTO user_save (user_id, scores_data, clearlamps_data, clearedsongs_data, unlocklist_data, installid_data, devicemodelname_data, story_data, createdAt, finalestate_data)
@@ -969,20 +1041,122 @@ impl UserService {
              createdAt = VALUES(createdAt),
              finalestate_data = VALUES(finalestate_data)",
             user_id,
-            save_request.scores_data,
-            save_request.clearlamps_data,
-            save_request.clearedsongs_data,
-            save_request.unlocklist_data,
-            save_request.installid_data,
-            save_request.devicemodelname_data,
-            save_request.story_data,
+            scores_data,
+            clearlamps_data,
+            clearedsongs_data,
+            unlocklist_data,
+            installid_data,
+            devicemodelname_data,
+            story_data,
             current_time,
-            save_request.finalestate_data
+            finalestate_data
         )
         .execute(&self.pool)
         .await?;
 
         Ok(())
+    }
+
+    fn verify_cloud_checksum(value: &str, checksum: &str) -> ArcResult<()> {
+        if Self::md5_hex(value) != checksum.to_ascii_lowercase() {
+            return Err(ArcError::input("Hash value of cloud save data mismatches."));
+        }
+        Ok(())
+    }
+
+    fn parse_cloud_json(value: &str) -> ArcResult<serde_json::Value> {
+        serde_json::from_str::<serde_json::Value>(value)
+            .map_err(|_| ArcError::input("Invalid cloud save payload."))
+    }
+
+    fn normalize_cloud_array(value: &str, checksum: &str) -> ArcResult<String> {
+        if value.is_empty() {
+            return Ok(serde_json::json!({ "": [] }).to_string());
+        }
+
+        Self::verify_cloud_checksum(value, checksum)?;
+        let parsed = Self::parse_cloud_json(value)?;
+        let inner = parsed
+            .get("")
+            .cloned()
+            .ok_or_else(|| ArcError::input("Invalid cloud save payload."))?;
+
+        Ok(serde_json::json!({ "": inner }).to_string())
+    }
+
+    fn normalize_cloud_val(value: &str, checksum: &str) -> ArcResult<String> {
+        if value.is_empty() {
+            return Ok(serde_json::json!({ "val": "" }).to_string());
+        }
+
+        Self::verify_cloud_checksum(value, checksum)?;
+        let parsed = Self::parse_cloud_json(value)?;
+        let inner = parsed
+            .get("val")
+            .cloned()
+            .ok_or_else(|| ArcError::input("Invalid cloud save payload."))?;
+
+        Ok(serde_json::json!({ "val": inner }).to_string())
+    }
+
+    fn normalize_cloud_finalestate(
+        value: Option<&str>,
+        checksum: Option<&str>,
+    ) -> ArcResult<String> {
+        let Some(value) = value else {
+            return Ok(String::new());
+        };
+        if value.is_empty() {
+            return Ok(String::new());
+        }
+
+        let checksum = checksum.ok_or_else(|| ArcError::input("Missing finalestate checksum."))?;
+        Self::verify_cloud_checksum(value, checksum)?;
+        let parsed = Self::parse_cloud_json(value)?;
+        let inner = parsed
+            .get("val")
+            .cloned()
+            .ok_or_else(|| ArcError::input("Invalid cloud save payload."))?;
+
+        Ok(match inner {
+            Value::String(s) => s,
+            other => other.to_string(),
+        })
+    }
+
+    fn load_cloud_array_value(raw: Option<&str>) -> Value {
+        let Some(raw) = raw else {
+            return serde_json::json!([]);
+        };
+        if raw.is_empty() {
+            return serde_json::json!([]);
+        }
+
+        match serde_json::from_str::<Value>(raw) {
+            Ok(Value::Object(map)) => map.get("").cloned().unwrap_or(serde_json::json!([])),
+            Ok(value) => value,
+            Err(_) => serde_json::json!([]),
+        }
+    }
+
+    fn load_cloud_val_string(raw: Option<&str>) -> String {
+        let Some(raw) = raw else {
+            return String::new();
+        };
+        if raw.is_empty() {
+            return String::new();
+        }
+
+        match serde_json::from_str::<Value>(raw) {
+            Ok(Value::Object(map)) => map
+                .get("val")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            Ok(Value::String(s)) => s,
+            Ok(other) => other.to_string(),
+            Err(_) => String::new(),
+        }
     }
 
     /// Update user setting
