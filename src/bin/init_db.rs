@@ -71,7 +71,7 @@ async fn main() {
         Ok(()) => {
             log::info!("Database initialization completed successfully!");
             log::info!("The following have been initialized:");
-            log::info!("  - Characters (90 characters with stats and skills)");
+            log::info!("  - Characters (from arc_data.json)");
             log::info!("  - Character cores and items");
             log::info!("  - Game items (cores, world songs, unlocks, banners)");
             log::info!("  - Purchase packs and singles");

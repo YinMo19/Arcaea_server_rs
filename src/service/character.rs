@@ -4,6 +4,7 @@ use crate::model::{
     Character, CharacterValue, CoreItem, Level, Skill, UpdateCharacter, UserCharacter,
     UserCharacterInfo,
 };
+use crate::service::arc_data::load_arc_data_from_file;
 use serde_json::{json, Value};
 use sqlx::{MySqlPool, Row};
 
@@ -16,6 +17,136 @@ impl CharacterService {
     /// Create a new character service
     pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
+    }
+
+    /// Synchronize `character` and `char_item` data from arc_data JSON without clearing DB.
+    /// This is intended for startup-time "compare-and-add/update" workflows.
+    pub async fn sync_arc_data_from_file(&self, file_path: &str) -> ArcResult<(usize, usize)> {
+        let config = load_arc_data_from_file(file_path)?;
+
+        let mut tx = self.pool.begin().await?;
+
+        for character in &config.characters {
+            sqlx::query!(
+                r#"
+                INSERT INTO `character` (
+                    character_id, name, max_level, frag1, prog1, overdrive1,
+                    frag20, prog20, overdrive20, frag30, prog30, overdrive30,
+                    skill_id, skill_unlock_level, skill_requires_uncap,
+                    skill_id_uncap, char_type, is_uncapped
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    name = VALUES(name),
+                    max_level = VALUES(max_level),
+                    frag1 = VALUES(frag1),
+                    prog1 = VALUES(prog1),
+                    overdrive1 = VALUES(overdrive1),
+                    frag20 = VALUES(frag20),
+                    prog20 = VALUES(prog20),
+                    overdrive20 = VALUES(overdrive20),
+                    frag30 = VALUES(frag30),
+                    prog30 = VALUES(prog30),
+                    overdrive30 = VALUES(overdrive30),
+                    skill_id = VALUES(skill_id),
+                    skill_unlock_level = VALUES(skill_unlock_level),
+                    skill_requires_uncap = VALUES(skill_requires_uncap),
+                    skill_id_uncap = VALUES(skill_id_uncap),
+                    char_type = VALUES(char_type),
+                    is_uncapped = VALUES(is_uncapped)
+                "#,
+                character.character_id,
+                character.name,
+                character.max_level,
+                character.frag1,
+                character.prog1,
+                character.overdrive1,
+                character.frag20,
+                character.prog20,
+                character.overdrive20,
+                character.frag30,
+                character.prog30,
+                character.overdrive30,
+                character.skill_id,
+                character.skill_unlock_level,
+                character.skill_requires_uncap,
+                character.skill_id_uncap,
+                character.char_type,
+                character.is_uncapped
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        for core in &config.character_cores {
+            sqlx::query!(
+                r#"
+                INSERT INTO char_item (character_id, item_id, type, amount)
+                VALUES (?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE amount = VALUES(amount)
+                "#,
+                core.character_id,
+                core.item_id,
+                core.item_type,
+                core.amount
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        for item_id in &config.cores {
+            sqlx::query!(
+                r#"
+                INSERT INTO item (item_id, type, is_available)
+                VALUES (?, 'core', 1)
+                ON DUPLICATE KEY UPDATE is_available = VALUES(is_available)
+                "#,
+                item_id
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        for item_id in &config.world_songs {
+            sqlx::query!(
+                r#"
+                INSERT INTO item (item_id, type, is_available)
+                VALUES (?, 'world_song', 1)
+                ON DUPLICATE KEY UPDATE is_available = VALUES(is_available)
+                "#,
+                item_id
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        for item_id in &config.world_unlocks {
+            sqlx::query!(
+                r#"
+                INSERT INTO item (item_id, type, is_available)
+                VALUES (?, 'world_unlock', 1)
+                ON DUPLICATE KEY UPDATE is_available = VALUES(is_available)
+                "#,
+                item_id
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        for item_id in &config.course_banners {
+            sqlx::query!(
+                r#"
+                INSERT INTO item (item_id, type, is_available)
+                VALUES (?, 'course_banner', 1)
+                ON DUPLICATE KEY UPDATE is_available = VALUES(is_available)
+                "#,
+                item_id
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok((config.characters.len(), config.character_cores.len()))
     }
 
     /// Get the appropriate table name based on configuration
@@ -1013,9 +1144,10 @@ impl CharacterService {
         Ok(count)
     }
 
-    /// upgrade user char full from character table
+    /// Update `user_char_full` from `character` without clearing existing rows.
+    /// Missing rows are inserted; existing rows are upgraded only when target values are higher.
     pub async fn update_user_char_full(&self) -> ArcResult<()> {
-        let update_characters = sqlx::query_as!(
+        let characters = sqlx::query_as!(
             UpdateCharacter,
             "SELECT character_id, max_level, is_uncapped FROM `character`"
         )
@@ -1025,33 +1157,31 @@ impl CharacterService {
             .fetch_all(&self.pool)
             .await?;
 
-        sqlx::query!("DELETE FROM user_char_full")
-            .execute(&self.pool)
-            .await?;
-
         for user_id in user_ids {
-            let query = format!(
-                "INSERT INTO user_char_full VALUES {}",
-                (0..update_characters.len())
-                    .map(|_| "(?, ?, ?, ?, ?, 0, 0)".to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            );
-            let mut query_builder = sqlx::query(&query);
-            for update_character in &update_characters {
-                let exp = if update_character.max_level == Some(30) {
-                    25000
-                } else {
-                    10000
-                };
-                query_builder = query_builder
-                    .bind(user_id)
-                    .bind(update_character.character_id)
-                    .bind(update_character.max_level)
-                    .bind(exp)
-                    .bind(update_character.is_uncapped);
+            for character in &characters {
+                let level = character.max_level.unwrap_or(20);
+                let exp = if level == 30 { 25000.0 } else { 10000.0 };
+                let is_uncapped = character.is_uncapped.unwrap_or(0);
+
+                sqlx::query!(
+                    r#"
+                    INSERT INTO user_char_full (
+                        user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag
+                    ) VALUES (?, ?, ?, ?, ?, 0, 0)
+                    ON DUPLICATE KEY UPDATE
+                        level = GREATEST(level, VALUES(level)),
+                        exp = GREATEST(exp, VALUES(exp)),
+                        is_uncapped = GREATEST(is_uncapped, VALUES(is_uncapped))
+                    "#,
+                    user_id,
+                    character.character_id,
+                    level,
+                    exp,
+                    is_uncapped
+                )
+                .execute(&self.pool)
+                .await?;
             }
-            query_builder.execute(&self.pool).await?;
         }
         Ok(())
     }

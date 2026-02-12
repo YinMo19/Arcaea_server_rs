@@ -1,11 +1,11 @@
 use crate::config::Constants;
 use crate::error::ArcError;
+use crate::service::runtime_assets::asset_path;
 
 use crate::model::world::*;
 use serde_json;
 use sqlx::MySqlPool;
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -36,9 +36,9 @@ impl MapParser {
 
     /// Parse all map files from the assets directory
     pub fn parse(&mut self) {
-        let map_path = Path::new("src/assets/map");
+        let map_path = asset_path("map");
 
-        if let Ok(entries) = std::fs::read_dir(map_path) {
+        if let Ok(entries) = std::fs::read_dir(&map_path) {
             for entry in entries.flatten() {
                 if let Some(file_name) = entry.file_name().to_str() {
                     if file_name.ends_with(".json") {
@@ -66,6 +66,8 @@ impl MapParser {
                     }
                 }
             }
+        } else {
+            log::warn!("Failed to read world map directory: {}", map_path.display());
         }
     }
 
@@ -199,11 +201,11 @@ pub fn get_map_parser() -> &'static MapParser {
 pub struct UserMapImpl {
     pub map: WorldMap,
     pub curr_position: i32,
-    pub curr_capture: i32,
+    pub curr_capture: f64,
     pub is_locked: bool,
     pub user_id: i32,
     pub prev_position: Option<i32>,
-    pub prev_capture: Option<i32>,
+    pub prev_capture: Option<f64>,
 }
 
 impl UserMapImpl {
@@ -212,7 +214,7 @@ impl UserMapImpl {
         Self {
             map,
             curr_position: 0,
-            curr_capture: 0,
+            curr_capture: 0.0,
             is_locked: true,
             user_id,
             prev_position: None,
@@ -255,21 +257,21 @@ impl UserMapImpl {
 
         if self.map.is_beyond {
             // Beyond map logic
-            let beyond_health = self.map.beyond_health.unwrap_or(100);
+            let beyond_health = self.map.beyond_health.unwrap_or(100) as f64;
             let dt = beyond_health - self.curr_capture;
-            self.curr_capture = if dt >= step_value as i32 {
-                self.curr_capture + step_value as i32
+            self.curr_capture = if dt >= step_value {
+                self.curr_capture + step_value
             } else {
                 beyond_health
             };
 
             let mut i = 0;
-            let mut t = self.prev_capture.unwrap_or(0) + step_value as i32;
-            while i < self.map.step_count && t > 0 {
+            let mut t = self.prev_capture.unwrap_or(0.0) + step_value;
+            while i < self.map.step_count && t > 0.0 {
                 if let Some(step) = self.map.steps.get(i as usize) {
                     let dt = step.capture;
                     if dt > t {
-                        t = 0;
+                        t = 0.0;
                     } else {
                         t -= dt;
                         i += 1;
@@ -293,12 +295,12 @@ impl UserMapImpl {
             while step_value > 0.0 && curr_position < self.map.step_count {
                 if let Some(step) = self.map.steps.get(curr_position as usize) {
                     let dt = step.capture - curr_capture;
-                    if dt as f64 > step_value {
-                        curr_capture += step_value as i32;
+                    if dt > step_value {
+                        curr_capture += step_value;
                         step_value = 0.0;
                     } else {
-                        step_value -= dt as f64;
-                        curr_capture = 0;
+                        step_value -= dt;
+                        curr_capture = 0.0;
                         curr_position += 1;
                     }
                 } else {
@@ -308,7 +310,7 @@ impl UserMapImpl {
 
             if curr_position >= self.map.step_count {
                 self.curr_position = self.map.step_count - 1;
-                self.curr_capture = 0;
+                self.curr_capture = 0.0;
             } else {
                 self.curr_position = curr_position;
                 self.curr_capture = curr_capture;
@@ -321,7 +323,7 @@ impl UserMapImpl {
     /// Reclimb the map (reset to previous position and climb again)
     pub fn reclimb(&mut self, step_value: f64) -> Result<(), ArcError> {
         self.curr_position = self.prev_position.unwrap_or(0);
-        self.curr_capture = self.prev_capture.unwrap_or(0);
+        self.curr_capture = self.prev_capture.unwrap_or(0.0);
         self.climb(step_value)
     }
 }
@@ -474,7 +476,7 @@ impl WorldService {
         let (curr_position, curr_capture, is_locked) = if let Some(record) = user_world {
             (
                 record.curr_position.unwrap_or(0),
-                record.curr_capture.unwrap_or(0.0) as i32,
+                record.curr_capture.unwrap_or(0.0),
                 record.is_locked.unwrap_or(1) != 0,
             )
         } else {
@@ -490,7 +492,7 @@ impl WorldService {
                 message: format!("Failed to initialize user map: {e}"),
             })?;
 
-            (0, 0, true)
+            (0, 0.0, true)
         };
 
         Ok(UserMap {
@@ -572,7 +574,7 @@ impl WorldService {
             if can_unlock {
                 user_map.is_locked = false;
                 user_map.curr_position = 0;
-                user_map.curr_capture = 0;
+                user_map.curr_capture = 0.0;
 
                 sqlx::query!(
                     "UPDATE user_world SET is_locked = 0, curr_position = 0, curr_capture = 0 WHERE user_id = ? AND map_id = ?",

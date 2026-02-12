@@ -1,4 +1,5 @@
 pub mod aggregate;
+pub mod arc_data;
 pub mod asset_init;
 pub mod asset_manager;
 pub mod bundle;
@@ -12,6 +13,7 @@ pub mod notification;
 pub mod operations;
 pub mod present;
 pub mod purchase;
+pub mod runtime_assets;
 pub mod score;
 pub mod user;
 pub mod world;

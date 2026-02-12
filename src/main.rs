@@ -3,8 +3,8 @@
 //! Main application entry point that sets up the Rocket web server
 //! with database connections, services, and routes.
 
-use rocket::fairing::AdHoc;
 use rocket::data::{Limits, ToByteUnit};
+use rocket::fairing::AdHoc;
 use rocket::{launch, Build, Rocket};
 
 use std::collections::HashSet;
@@ -15,9 +15,9 @@ use Arcaea_server_rs::route::download::serve_download_file;
 use Arcaea_server_rs::route::others::bundle_download;
 use Arcaea_server_rs::route::CORS;
 use Arcaea_server_rs::service::{
-    AssetManager, BundleService, CharacterService, DownloadService, ItemService,
-    MultiplayerService, NotificationService, OperationManager, PresentService, PurchaseService,
-    ScoreService, UserService, WorldService,
+    arc_data::arc_data_file_path_from_env, AssetManager, BundleService, CharacterService,
+    DownloadService, ItemService, MultiplayerService, NotificationService, OperationManager,
+    PresentService, PurchaseService, ScoreService, UserService, WorldService,
 };
 use Arcaea_server_rs::{config, Database, DbPool};
 
@@ -101,6 +101,24 @@ async fn init_services(
     log::info!("Bundle service initialized successfully");
 
     let character_service = CharacterService::new(pool.clone());
+
+    if config::CONFIG.update_with_new_character_data {
+        let sync_path = arc_data_file_path_from_env();
+        log::info!("Syncing arc_data from `{sync_path}`...");
+        match character_service.sync_arc_data_from_file(&sync_path).await {
+            Ok((character_count, core_count)) => {
+                log::info!(
+                    "arc_data sync completed: {} characters, {} char core rows.",
+                    character_count,
+                    core_count
+                );
+            }
+            Err(e) => {
+                log::error!("Failed to sync arc_data: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
 
     // initialise all the character.
     if let Err(e) = character_service.update_user_char_full().await {
