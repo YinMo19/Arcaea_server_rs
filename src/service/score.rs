@@ -1036,7 +1036,11 @@ impl ScoreService {
         .await?;
 
         if use_skip_purchase {
-            // TODO: consume core_course_skip_purchase (matches Python ItemCore usage)
+            // Python parity: use one `core_course_skip_purchase` instead of spending stamina.
+            let item_service = ItemService::new(self.pool.clone());
+            item_service
+                .claim_core_item(user_id, "core_course_skip_purchase", -1, false)
+                .await?;
         } else {
             let stamina_row = sqlx::query!(
                 "SELECT max_stamina_ts, stamina FROM user WHERE user_id = ?",
