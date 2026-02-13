@@ -1,9 +1,21 @@
 # Arcaea Server Rust Edition
 
-> 实现中...
-> BUILDING...
+> 实现中... （目前大部分功能可用，欢迎测试反馈 bug）
+> BUILDING...  (most features are functional, welcome to test and report bugs)
 
-这是一个使用 rust 实现的 arcaea 服务器，用于模拟 Arcaea 的主要功能。逻辑基本上完全重写 lost 大佬的 [Arcaea Server](https://github.com/Lost-MSth/Arcaea-server/)。水平一般，测试也少，总之可以当成玩具项目。 不过从性能上说应该会比 flask 版本更强一些，虽然本项目大概率也用不上高并发什么的。
+这是一个使用 rust 实现的 arcaea 服务器，用于模拟 Arcaea 的主要功能。 逻辑基本上完全重写 lost 大佬的 [Arcaea Server](https://github.com/Lost-MSth/Arcaea-server/)。水平一般，测试也少，总之可以当成玩具项目。 不过从性能上说应该会比 flask 版本更强一些，虽然本项目大概率也用不上高并发什么的。
+
+已实现的功能
+- 用户系统（注册，登录
+- 歌曲下载（bundle， songs）
+- 成绩上传和排名（全球，好友，排名）
+- score-v2
+- linkplay
+- world mode
+- course
+-  角色系统
+- ....
+
 
 ## 开发环境
 - Rust 1.70+ ([Install Rust](https://rustup.rs/))
@@ -70,7 +82,7 @@ cargo build --release
 真的有人想要和我一起写这个东西吗..... 有的话联系 arcaea@yinmo19.top，感激不尽。
 目前代码问题不少，还在比较初期的阶段。不过登录功能以及最基础的一些功能已经完善了，框架也基本上搭好了，接下来就是按部就班的写(抄)一些 crud 就是了。
 
-现在已经加了一个独立的 `linkplayd` 进程（`src/bin/linkplayd.rs`），用于把 Link Play 从主服务拆出来。当前已经实现控制面（TCP）与核心 UDP 二进制 parser（房间状态机、命令队列、倒计时流转），后面继续做逐条行为对齐和回归验证。
+现在已经加了一个独立的 `linkplayd` 进程（`src/bin/linkplayd.rs`），用于把 Link Play 从主服务拆出来。当前已经实现控制面（TCP）与核心 UDP 二进制 parser（房间状态机、命令队列、倒计时流转），基本测试可用。
 
 关于客户端的事情不要问我，请上网查找，真的很多的相信我。憋不住了可以给我发邮件 arcaea@yinmo19.top，但是我也不一定能解决。
 
