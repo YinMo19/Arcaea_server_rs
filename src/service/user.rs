@@ -556,6 +556,7 @@ impl UserService {
         user_info.singles = self.get_user_singles(user_id).await?;
         user_info.world_songs = self.get_user_world_songs(user_id).await?;
         user_info.world_unlocks = self.get_user_world_unlocks(user_id).await?;
+        user_info.friends = self.get_user_friends(user_id).await?;
         user_info.course_banners = self.get_user_course_banners(user_id).await?;
         user_info.user_missions = self.get_user_missions(user_id).await?;
 
