@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT item_id FROM user_item WHERE user_id = ? AND type = 'course_banner' ORDER BY item_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0e58c3b3e398f74d11287199c7528e089e02fe12395505c334494e9361f75715"
+}
