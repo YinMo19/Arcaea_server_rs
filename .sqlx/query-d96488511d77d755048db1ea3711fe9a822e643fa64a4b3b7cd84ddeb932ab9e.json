@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM purchase\n         WHERE purchase_name = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "d96488511d77d755048db1ea3711fe9a822e643fa64a4b3b7cd84ddeb932ab9e"
+}

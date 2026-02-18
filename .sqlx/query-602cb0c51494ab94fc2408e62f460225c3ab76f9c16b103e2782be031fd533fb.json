@@ -1,11 +1,11 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT item_id, type, amount FROM purchase_item WHERE purchase_name = ?",
+  "query": "SELECT purchase_name, item_id, type, amount\n             FROM purchase_item\n             ORDER BY purchase_name ASC, item_id ASC, type ASC",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "item_id",
+        "name": "purchase_name",
         "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
@@ -15,7 +15,7 @@
       },
       {
         "ordinal": 1,
-        "name": "type",
+        "name": "item_id",
         "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
@@ -25,6 +25,16 @@
       },
       {
         "ordinal": 2,
+        "name": "type",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "amount",
         "type_info": {
           "type": "Long",
@@ -35,13 +45,14 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 0
     },
     "nullable": [
+      false,
       false,
       false,
       true
     ]
   },
-  "hash": "b406cd19e3ff14bc0297c9ca253c2dae31d5b957830d2533ed2ae9fa8f12239a"
+  "hash": "602cb0c51494ab94fc2408e62f460225c3ab76f9c16b103e2782be031fd533fb"
 }

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE purchase_item\n         SET amount = ?\n         WHERE purchase_name = ? AND item_id = ? AND type = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "9d29204342917c41b706cfa0e1a2c959c9449c8a8fb0dd0e63f4bebb5e5611c4"
+}

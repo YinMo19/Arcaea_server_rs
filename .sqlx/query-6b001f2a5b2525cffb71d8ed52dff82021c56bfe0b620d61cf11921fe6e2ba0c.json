@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO purchase_item (purchase_name, item_id, type, amount)\n         VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "6b001f2a5b2525cffb71d8ed52dff82021c56bfe0b620d61cf11921fe6e2ba0c"
+}

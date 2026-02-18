@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT purchase_name, price, orig_price, discount_reason\n         FROM purchase\n         ORDER BY purchase_name ASC",
+  "query": "SELECT purchase_name, price, orig_price, discount_from, discount_to, discount_reason\n             FROM purchase\n             ORDER BY purchase_name ASC",
   "describe": {
     "columns": [
       {
@@ -35,6 +35,26 @@
       },
       {
         "ordinal": 3,
+        "name": "discount_from",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "discount_to",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 5,
         "name": "discount_reason",
         "type_info": {
           "type": "Blob",
@@ -51,8 +71,10 @@
       false,
       true,
       true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "2846a371453663b80df69ad60a61c1700e40438ee3559371c048a7c7a91a5be3"
+  "hash": "d981c639c8551d89433f33211ad86c0a1bead1b93e2ff72214958f72d7ee007e"
 }

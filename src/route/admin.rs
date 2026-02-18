@@ -1,5 +1,5 @@
 use askama::Template;
-use chrono::{Local, TimeZone, Utc};
+use chrono::{Local, NaiveDateTime, TimeZone, Utc};
 use rocket::form::{Form, FromForm};
 use rocket::http::{Cookie, CookieJar, SameSite};
 use rocket::request::FlashMessage;
@@ -131,6 +131,25 @@ struct ItemRowView {
     is_available: i32,
 }
 
+#[derive(Debug, Clone, Default)]
+struct PurchaseRowView {
+    purchase_name: String,
+    price: String,
+    orig_price: String,
+    discount_from: String,
+    discount_to: String,
+    discount_reason: String,
+    item_summary: String,
+}
+
+#[derive(Debug, Clone, Default)]
+struct PurchaseItemRowView {
+    purchase_name: String,
+    item_id: String,
+    item_type: String,
+    amount: String,
+}
+
 #[derive(Template)]
 #[template(path = "admin/login.html")]
 struct AdminLoginTemplate {
@@ -197,6 +216,18 @@ struct AdminAllItemTemplate {
     flash_kind: String,
     flash_message: String,
     items: Vec<ItemRowView>,
+}
+
+#[derive(Template)]
+#[template(path = "admin/allpurchase.html")]
+struct AdminAllPurchaseTemplate {
+    active_nav: &'static str,
+    query_purchase: String,
+    query_purchase_item: String,
+    flash_kind: String,
+    flash_message: String,
+    purchases: Vec<PurchaseRowView>,
+    purchase_items: Vec<PurchaseItemRowView>,
 }
 
 #[derive(Template)]
@@ -301,6 +332,54 @@ pub struct ItemUpdateForm {
 
 #[derive(FromForm)]
 pub struct ItemDeleteForm {
+    pub item_id: String,
+    pub item_type: String,
+}
+
+#[derive(FromForm)]
+pub struct PurchaseAddForm {
+    pub purchase_name: String,
+    pub price: Option<String>,
+    pub orig_price: Option<String>,
+    pub discount_from: Option<String>,
+    pub discount_to: Option<String>,
+    pub discount_reason: Option<String>,
+}
+
+#[derive(FromForm)]
+pub struct PurchaseUpdateForm {
+    pub purchase_name: String,
+    pub price: Option<String>,
+    pub orig_price: Option<String>,
+    pub discount_from: Option<String>,
+    pub discount_to: Option<String>,
+    pub discount_reason: Option<String>,
+}
+
+#[derive(FromForm)]
+pub struct PurchaseDeleteForm {
+    pub purchase_name: String,
+}
+
+#[derive(FromForm)]
+pub struct PurchaseItemAddForm {
+    pub purchase_name: String,
+    pub item_id: String,
+    pub item_type: String,
+    pub amount: Option<String>,
+}
+
+#[derive(FromForm)]
+pub struct PurchaseItemUpdateForm {
+    pub purchase_name: String,
+    pub item_id: String,
+    pub item_type: String,
+    pub amount: Option<String>,
+}
+
+#[derive(FromForm)]
+pub struct PurchaseItemDeleteForm {
+    pub purchase_name: String,
     pub item_id: String,
     pub item_type: String,
 }
@@ -438,7 +517,17 @@ struct PurchaseDbRow {
     purchase_name: String,
     price: Option<i32>,
     orig_price: Option<i32>,
+    discount_from: Option<i64>,
+    discount_to: Option<i64>,
     discount_reason: Option<String>,
+}
+
+#[derive(FromRow)]
+struct PurchaseItemDbRow {
+    purchase_name: String,
+    item_id: String,
+    r#type: String,
+    amount: Option<i32>,
 }
 
 #[derive(FromRow)]
@@ -545,6 +634,66 @@ fn normalize_chart_text(raw: &str, field: &str) -> Result<String, String> {
     Ok(truncated)
 }
 
+fn normalize_optional_text(raw: Option<&str>, max_len: usize) -> String {
+    let text = raw.unwrap_or("").trim();
+    text.chars().take(max_len).collect()
+}
+
+fn parse_optional_i32_input(raw: Option<&str>, field: &str) -> Result<Option<i32>, String> {
+    let Some(value) = raw.map(str::trim) else {
+        return Ok(None);
+    };
+    if value.is_empty() {
+        return Ok(None);
+    }
+    value
+        .parse::<i32>()
+        .map(Some)
+        .map_err(|_| format!("{field} 必须是整数"))
+}
+
+fn parse_positive_i32_input(raw: Option<&str>, field: &str) -> Result<i32, String> {
+    let value = raw
+        .map(str::trim)
+        .filter(|x| !x.is_empty())
+        .ok_or_else(|| format!("{field} 不能为空"))?;
+    let parsed = value
+        .parse::<i32>()
+        .map_err(|_| format!("{field} 必须是整数"))?;
+    if parsed <= 0 {
+        return Err(format!("{field} 必须大于 0"));
+    }
+    Ok(parsed)
+}
+
+fn parse_discount_datetime_input(raw: Option<&str>, field: &str) -> Result<i64, String> {
+    let value = raw.map(str::trim).unwrap_or("");
+    if value.is_empty() {
+        return Ok(-1);
+    }
+    let naive = NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M")
+        .map_err(|_| format!("{field} 时间格式错误"))?;
+    let local_dt = Local
+        .from_local_datetime(&naive)
+        .single()
+        .ok_or_else(|| format!("{field} 时间非法"))?;
+    Ok(local_dt.timestamp_millis())
+}
+
+fn format_discount_datetime_input(value: Option<i64>) -> String {
+    let Some(ts) = value else {
+        return String::new();
+    };
+    if ts <= 0 {
+        return String::new();
+    }
+    Local
+        .timestamp_millis_opt(ts)
+        .single()
+        .map(|dt| dt.format("%Y-%m-%dT%H:%M").to_string())
+        .unwrap_or_default()
+}
+
 fn parse_rating_input_tenths(raw: &str, field: &str) -> Result<i32, String> {
     let value = raw.trim();
     if value.is_empty() {
@@ -590,6 +739,30 @@ fn item_db_row_to_item_view(row: ItemDbRow) -> ItemRowView {
         item_id: row.item_id,
         item_type: row.r#type,
         is_available: normalize_item_available(row.is_available.map(i32::from)),
+    }
+}
+
+fn purchase_db_row_to_purchase_view(row: PurchaseDbRow, item_summary: String) -> PurchaseRowView {
+    PurchaseRowView {
+        purchase_name: row.purchase_name,
+        price: row.price.map(|value| value.to_string()).unwrap_or_default(),
+        orig_price: row
+            .orig_price
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+        discount_from: format_discount_datetime_input(row.discount_from),
+        discount_to: format_discount_datetime_input(row.discount_to),
+        discount_reason: row.discount_reason.unwrap_or_default(),
+        item_summary,
+    }
+}
+
+fn purchase_item_db_row_to_view(row: PurchaseItemDbRow) -> PurchaseItemRowView {
+    PurchaseItemRowView {
+        purchase_name: row.purchase_name,
+        item_id: row.item_id,
+        item_type: row.r#type,
+        amount: row.amount.unwrap_or(1).to_string(),
     }
 }
 
@@ -2016,29 +2189,54 @@ pub async fn admin_changeitem_delete_post(
     }
 }
 
-#[get("/allpurchase")]
+#[get("/allpurchase?<pq>&<iq>")]
 pub async fn admin_allpurchase_get(
+    pq: Option<&str>,
+    iq: Option<&str>,
+    flash: Option<FlashMessage<'_>>,
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> Result<RawHtml<String>, Redirect> {
     require_admin(cookies)?;
 
-    let purchases = sqlx::query_as!(
-        PurchaseDbRow,
-        "SELECT purchase_name, price, orig_price, discount_reason
-         FROM purchase
-         ORDER BY purchase_name ASC",
-    )
-    .fetch_all(pool.inner())
-    .await
-    .unwrap_or_default();
+    let query_purchase = clean_query_value(pq).unwrap_or_default();
+    let query_purchase_item = clean_query_value(iq).unwrap_or_default();
 
-    let mut rows = Vec::new();
-    for p in purchases {
+    let purchase_rows = if query_purchase.is_empty() {
+        sqlx::query_as!(
+            PurchaseDbRow,
+            "SELECT purchase_name, price, orig_price, discount_from, discount_to, discount_reason
+             FROM purchase
+             ORDER BY purchase_name ASC",
+        )
+        .fetch_all(pool.inner())
+        .await
+        .unwrap_or_default()
+    } else {
+        let like = format!("%{query_purchase}%");
+        sqlx::query_as!(
+            PurchaseDbRow,
+            "SELECT purchase_name, price, orig_price, discount_from, discount_to, discount_reason
+             FROM purchase
+             WHERE purchase_name LIKE ? OR COALESCE(discount_reason, '') LIKE ?
+             ORDER BY purchase_name ASC",
+            like,
+            like
+        )
+        .fetch_all(pool.inner())
+        .await
+        .unwrap_or_default()
+    };
+
+    let mut purchases = Vec::with_capacity(purchase_rows.len());
+    for purchase in purchase_rows {
         let items = sqlx::query_as!(
             CollectionItemDbRow,
-            "SELECT item_id, type, amount FROM purchase_item WHERE purchase_name = ?",
-            &p.purchase_name
+            "SELECT item_id, type, amount
+             FROM purchase_item
+             WHERE purchase_name = ?
+             ORDER BY item_id ASC, type ASC",
+            &purchase.purchase_name
         )
         .fetch_all(pool.inner())
         .await
@@ -2054,31 +2252,483 @@ pub async fn admin_allpurchase_get(
                 .join(", ")
         };
 
-        rows.push(vec![
-            p.purchase_name,
-            p.price.unwrap_or(0).to_string(),
-            p.orig_price.unwrap_or(0).to_string(),
-            p.discount_reason.unwrap_or_default(),
-            item_summary,
-        ]);
+        purchases.push(purchase_db_row_to_purchase_view(purchase, item_summary));
     }
 
-    let template = AdminSimpleTableTemplate {
+    let purchase_item_rows = if query_purchase_item.is_empty() {
+        sqlx::query_as!(
+            PurchaseItemDbRow,
+            "SELECT purchase_name, item_id, type, amount
+             FROM purchase_item
+             ORDER BY purchase_name ASC, item_id ASC, type ASC",
+        )
+        .fetch_all(pool.inner())
+        .await
+        .unwrap_or_default()
+    } else {
+        let like = format!("%{query_purchase_item}%");
+        sqlx::query_as!(
+            PurchaseItemDbRow,
+            "SELECT purchase_name, item_id, type, amount
+             FROM purchase_item
+             WHERE purchase_name LIKE ? OR item_id LIKE ? OR type LIKE ?
+             ORDER BY purchase_name ASC, item_id ASC, type ASC",
+            like,
+            like,
+            like
+        )
+        .fetch_all(pool.inner())
+        .await
+        .unwrap_or_default()
+    };
+
+    let purchase_items = purchase_item_rows
+        .into_iter()
+        .map(purchase_item_db_row_to_view)
+        .collect();
+
+    let (flash_kind, flash_message) = flash
+        .map(|msg| (msg.kind().to_string(), msg.message().to_string()))
+        .unwrap_or_else(|| ("".to_string(), "".to_string()));
+
+    let template = AdminAllPurchaseTemplate {
         active_nav: "items",
-        page_title: "全部购买项".to_string(),
-        page_subtitle: "对应 Python: /web/allpurchase".to_string(),
-        headers: vec![
-            "purchase_name".to_string(),
-            "price".to_string(),
-            "orig_price".to_string(),
-            "discount_reason".to_string(),
-            "items".to_string(),
-        ],
-        rows,
-        empty_text: "没有购买数据".to_string(),
+        query_purchase,
+        query_purchase_item,
+        flash_kind,
+        flash_message,
+        purchases,
+        purchase_items,
     };
 
     Ok(render_template(&template))
+}
+
+#[get("/changepurchase")]
+pub async fn admin_changepurchase_get(cookies: &CookieJar<'_>) -> Result<Redirect, Redirect> {
+    require_admin(cookies)?;
+    Ok(Redirect::to("/web/allpurchase"))
+}
+
+#[post("/changepurchase/add", data = "<form>")]
+pub async fn admin_changepurchase_add_post(
+    form: Form<PurchaseAddForm>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> Flash<Redirect> {
+    if !is_admin_logged_in(cookies) {
+        return Flash::error(Redirect::to("/web/login"), "请先登录");
+    }
+
+    let purchase_name = match normalize_chart_text(&form.purchase_name, "purchase_name") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+    let price = match parse_optional_i32_input(form.price.as_deref(), "price") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+    let orig_price = match parse_optional_i32_input(form.orig_price.as_deref(), "orig_price") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+    let discount_from =
+        match parse_discount_datetime_input(form.discount_from.as_deref(), "discount_from") {
+            Ok(value) => value,
+            Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+        };
+    let discount_to =
+        match parse_discount_datetime_input(form.discount_to.as_deref(), "discount_to") {
+            Ok(value) => value,
+            Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+        };
+    let discount_reason = normalize_optional_text(form.discount_reason.as_deref(), 255);
+
+    let exists = match sqlx::query_scalar!(
+        "SELECT COUNT(*) as `count!: i64`
+         FROM purchase
+         WHERE purchase_name = ?",
+        &purchase_name
+    )
+    .fetch_one(pool.inner())
+    .await
+    {
+        Ok(value) => value,
+        Err(err) => {
+            return Flash::error(Redirect::to("/web/allpurchase"), format!("查询失败: {err}"));
+        }
+    };
+
+    if exists > 0 {
+        return Flash::error(Redirect::to("/web/allpurchase"), "购买项已存在");
+    }
+
+    let insert = sqlx::query!(
+        "INSERT INTO purchase (purchase_name, price, orig_price, discount_from, discount_to, discount_reason)
+         VALUES (?, ?, ?, ?, ?, ?)",
+        purchase_name,
+        price,
+        orig_price,
+        discount_from,
+        discount_to,
+        discount_reason
+    )
+    .execute(pool.inner())
+    .await;
+
+    match insert {
+        Ok(_) => Flash::success(Redirect::to("/web/allpurchase"), "购买项新增成功"),
+        Err(err) => Flash::error(Redirect::to("/web/allpurchase"), format!("新增失败: {err}")),
+    }
+}
+
+#[post("/changepurchase", data = "<form>")]
+pub async fn admin_changepurchase_post(
+    form: Form<PurchaseAddForm>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> Flash<Redirect> {
+    admin_changepurchase_add_post(form, pool, cookies).await
+}
+
+#[post("/changepurchase/update", data = "<form>")]
+pub async fn admin_changepurchase_update_post(
+    form: Form<PurchaseUpdateForm>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> Flash<Redirect> {
+    if !is_admin_logged_in(cookies) {
+        return Flash::error(Redirect::to("/web/login"), "请先登录");
+    }
+
+    let purchase_name = match normalize_chart_text(&form.purchase_name, "purchase_name") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+    let price = match parse_optional_i32_input(form.price.as_deref(), "price") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+    let orig_price = match parse_optional_i32_input(form.orig_price.as_deref(), "orig_price") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+    let discount_from =
+        match parse_discount_datetime_input(form.discount_from.as_deref(), "discount_from") {
+            Ok(value) => value,
+            Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+        };
+    let discount_to =
+        match parse_discount_datetime_input(form.discount_to.as_deref(), "discount_to") {
+            Ok(value) => value,
+            Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+        };
+    let discount_reason = normalize_optional_text(form.discount_reason.as_deref(), 255);
+
+    let update = sqlx::query!(
+        "UPDATE purchase
+         SET price = ?,
+             orig_price = ?,
+             discount_from = ?,
+             discount_to = ?,
+             discount_reason = ?
+         WHERE purchase_name = ?",
+        price,
+        orig_price,
+        discount_from,
+        discount_to,
+        discount_reason,
+        purchase_name
+    )
+    .execute(pool.inner())
+    .await;
+
+    match update {
+        Ok(done) if done.rows_affected() > 0 => {
+            Flash::success(Redirect::to("/web/allpurchase"), "购买项更新成功")
+        }
+        Ok(_) => Flash::error(Redirect::to("/web/allpurchase"), "购买项不存在"),
+        Err(err) => Flash::error(Redirect::to("/web/allpurchase"), format!("更新失败: {err}")),
+    }
+}
+
+#[post("/changepurchase/delete", data = "<form>")]
+pub async fn admin_changepurchase_delete_post(
+    form: Form<PurchaseDeleteForm>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> Flash<Redirect> {
+    if !is_admin_logged_in(cookies) {
+        return Flash::error(Redirect::to("/web/login"), "请先登录");
+    }
+
+    let purchase_name = match normalize_chart_text(&form.purchase_name, "purchase_name") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+
+    let exists = match sqlx::query_scalar!(
+        "SELECT COUNT(*) as `count!: i64`
+         FROM purchase
+         WHERE purchase_name = ?",
+        &purchase_name
+    )
+    .fetch_one(pool.inner())
+    .await
+    {
+        Ok(value) => value,
+        Err(err) => {
+            return Flash::error(Redirect::to("/web/allpurchase"), format!("查询失败: {err}"));
+        }
+    };
+    if exists <= 0 {
+        return Flash::error(Redirect::to("/web/allpurchase"), "购买项不存在");
+    }
+
+    let mut tx = match pool.begin().await {
+        Ok(tx) => tx,
+        Err(err) => {
+            return Flash::error(
+                Redirect::to("/web/allpurchase"),
+                format!("事务创建失败: {err}"),
+            )
+        }
+    };
+
+    if let Err(err) = sqlx::query!(
+        "DELETE FROM purchase_item
+         WHERE purchase_name = ?",
+        &purchase_name
+    )
+    .execute(&mut *tx)
+    .await
+    {
+        return Flash::error(Redirect::to("/web/allpurchase"), format!("删除失败: {err}"));
+    }
+
+    if let Err(err) = sqlx::query!(
+        "DELETE FROM purchase
+         WHERE purchase_name = ?",
+        &purchase_name
+    )
+    .execute(&mut *tx)
+    .await
+    {
+        return Flash::error(Redirect::to("/web/allpurchase"), format!("删除失败: {err}"));
+    }
+
+    if let Err(err) = tx.commit().await {
+        return Flash::error(Redirect::to("/web/allpurchase"), format!("删除失败: {err}"));
+    }
+
+    Flash::success(Redirect::to("/web/allpurchase"), "购买项删除成功")
+}
+
+#[get("/changepurchaseitem")]
+pub async fn admin_changepurchaseitem_get(cookies: &CookieJar<'_>) -> Result<Redirect, Redirect> {
+    require_admin(cookies)?;
+    Ok(Redirect::to("/web/allpurchase"))
+}
+
+#[post("/changepurchaseitem/add", data = "<form>")]
+pub async fn admin_changepurchaseitem_add_post(
+    form: Form<PurchaseItemAddForm>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> Flash<Redirect> {
+    if !is_admin_logged_in(cookies) {
+        return Flash::error(Redirect::to("/web/login"), "请先登录");
+    }
+
+    let purchase_name = match normalize_chart_text(&form.purchase_name, "purchase_name") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+    let item_id = match normalize_chart_text(&form.item_id, "item_id") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+    let item_type = match normalize_chart_text(&form.item_type, "type") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+    let amount = match parse_positive_i32_input(form.amount.as_deref(), "amount") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+
+    let purchase_exists = match sqlx::query_scalar!(
+        "SELECT COUNT(*) as `count!: i64`
+         FROM purchase
+         WHERE purchase_name = ?",
+        &purchase_name
+    )
+    .fetch_one(pool.inner())
+    .await
+    {
+        Ok(value) => value,
+        Err(err) => {
+            return Flash::error(Redirect::to("/web/allpurchase"), format!("查询失败: {err}"));
+        }
+    };
+    if purchase_exists <= 0 {
+        return Flash::error(Redirect::to("/web/allpurchase"), "购买项不存在");
+    }
+
+    let item_exists = match sqlx::query_scalar!(
+        "SELECT COUNT(*) as `count!: i64`
+         FROM item
+         WHERE item_id = ? AND type = ?",
+        &item_id,
+        &item_type
+    )
+    .fetch_one(pool.inner())
+    .await
+    {
+        Ok(value) => value,
+        Err(err) => {
+            return Flash::error(Redirect::to("/web/allpurchase"), format!("查询失败: {err}"));
+        }
+    };
+    if item_exists <= 0 {
+        return Flash::error(Redirect::to("/web/allpurchase"), "物品不存在");
+    }
+
+    let exists = match sqlx::query_scalar!(
+        "SELECT COUNT(*) as `count!: i64`
+         FROM purchase_item
+         WHERE purchase_name = ? AND item_id = ? AND type = ?",
+        &purchase_name,
+        &item_id,
+        &item_type
+    )
+    .fetch_one(pool.inner())
+    .await
+    {
+        Ok(value) => value,
+        Err(err) => {
+            return Flash::error(Redirect::to("/web/allpurchase"), format!("查询失败: {err}"));
+        }
+    };
+
+    if exists > 0 {
+        return Flash::error(Redirect::to("/web/allpurchase"), "购买项物品已存在");
+    }
+
+    let insert = sqlx::query!(
+        "INSERT INTO purchase_item (purchase_name, item_id, type, amount)
+         VALUES (?, ?, ?, ?)",
+        purchase_name,
+        item_id,
+        item_type,
+        amount
+    )
+    .execute(pool.inner())
+    .await;
+
+    match insert {
+        Ok(_) => Flash::success(Redirect::to("/web/allpurchase"), "购买项物品新增成功"),
+        Err(err) => Flash::error(Redirect::to("/web/allpurchase"), format!("新增失败: {err}")),
+    }
+}
+
+#[post("/changepurchaseitem", data = "<form>")]
+pub async fn admin_changepurchaseitem_post(
+    form: Form<PurchaseItemAddForm>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> Flash<Redirect> {
+    admin_changepurchaseitem_add_post(form, pool, cookies).await
+}
+
+#[post("/changepurchaseitem/update", data = "<form>")]
+pub async fn admin_changepurchaseitem_update_post(
+    form: Form<PurchaseItemUpdateForm>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> Flash<Redirect> {
+    if !is_admin_logged_in(cookies) {
+        return Flash::error(Redirect::to("/web/login"), "请先登录");
+    }
+
+    let purchase_name = match normalize_chart_text(&form.purchase_name, "purchase_name") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+    let item_id = match normalize_chart_text(&form.item_id, "item_id") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+    let item_type = match normalize_chart_text(&form.item_type, "type") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+    let amount = match parse_positive_i32_input(form.amount.as_deref(), "amount") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+
+    let update = sqlx::query!(
+        "UPDATE purchase_item
+         SET amount = ?
+         WHERE purchase_name = ? AND item_id = ? AND type = ?",
+        amount,
+        purchase_name,
+        item_id,
+        item_type
+    )
+    .execute(pool.inner())
+    .await;
+
+    match update {
+        Ok(done) if done.rows_affected() > 0 => {
+            Flash::success(Redirect::to("/web/allpurchase"), "购买项物品更新成功")
+        }
+        Ok(_) => Flash::error(Redirect::to("/web/allpurchase"), "购买项物品不存在"),
+        Err(err) => Flash::error(Redirect::to("/web/allpurchase"), format!("更新失败: {err}")),
+    }
+}
+
+#[post("/changepurchaseitem/delete", data = "<form>")]
+pub async fn admin_changepurchaseitem_delete_post(
+    form: Form<PurchaseItemDeleteForm>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> Flash<Redirect> {
+    if !is_admin_logged_in(cookies) {
+        return Flash::error(Redirect::to("/web/login"), "请先登录");
+    }
+
+    let purchase_name = match normalize_chart_text(&form.purchase_name, "purchase_name") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+    let item_id = match normalize_chart_text(&form.item_id, "item_id") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+    let item_type = match normalize_chart_text(&form.item_type, "type") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allpurchase"), msg),
+    };
+
+    let delete = sqlx::query!(
+        "DELETE FROM purchase_item
+         WHERE purchase_name = ? AND item_id = ? AND type = ?",
+        purchase_name,
+        item_id,
+        item_type
+    )
+    .execute(pool.inner())
+    .await;
+
+    match delete {
+        Ok(done) if done.rows_affected() > 0 => {
+            Flash::success(Redirect::to("/web/allpurchase"), "购买项物品删除成功")
+        }
+        Ok(_) => Flash::error(Redirect::to("/web/allpurchase"), "购买项物品不存在"),
+        Err(err) => Flash::error(Redirect::to("/web/allpurchase"), format!("删除失败: {err}")),
+    }
 }
 
 #[get("/allpresent")]
@@ -2394,6 +3044,16 @@ pub fn routes() -> Vec<Route> {
         admin_changeitem_update_post,
         admin_changeitem_delete_post,
         admin_allpurchase_get,
+        admin_changepurchase_get,
+        admin_changepurchase_post,
+        admin_changepurchase_add_post,
+        admin_changepurchase_update_post,
+        admin_changepurchase_delete_post,
+        admin_changepurchaseitem_get,
+        admin_changepurchaseitem_post,
+        admin_changepurchaseitem_add_post,
+        admin_changepurchaseitem_update_post,
+        admin_changepurchaseitem_delete_post,
         admin_allpresent_get,
         admin_allredeem_get,
         admin_user_detail_get,

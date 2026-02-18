@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE purchase\n         SET price = ?,\n             orig_price = ?,\n             discount_from = ?,\n             discount_to = ?,\n             discount_reason = ?\n         WHERE purchase_name = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "f15b8d47e5ff62edc195f1282152e41a157a615f437ac51f67d6c69e4bc12e4a"
+}

@@ -370,6 +370,13 @@ td {
   padding: 8px 10px;
 }
 
+.purchase-table th,
+.purchase-table td,
+.purchase-item-table th,
+.purchase-item-table td {
+  padding: 8px 10px;
+}
+
 .song-table .col-song-id {
   width: 24%;
   min-width: 210px;
@@ -428,6 +435,70 @@ td {
 .item-table th:nth-child(3),
 .item-table td:nth-child(3) {
   text-align: center;
+}
+
+.purchase-table .col-purchase-name {
+  width: 18%;
+  min-width: 180px;
+}
+
+.purchase-table .col-purchase-price {
+  width: 8%;
+  min-width: 86px;
+}
+
+.purchase-table .col-purchase-time {
+  width: 14%;
+  min-width: 168px;
+}
+
+.purchase-table .col-purchase-reason {
+  width: 17%;
+  min-width: 170px;
+}
+
+.purchase-table .col-purchase-items {
+  width: 23%;
+  min-width: 220px;
+}
+
+.purchase-table .col-purchase-actions {
+  width: 12%;
+  min-width: 126px;
+}
+
+.purchase-item-table .col-pi-purchase {
+  width: 28%;
+  min-width: 200px;
+}
+
+.purchase-item-table .col-pi-item-id {
+  width: 24%;
+  min-width: 180px;
+}
+
+.purchase-item-table .col-pi-type {
+  width: 20%;
+  min-width: 130px;
+}
+
+.purchase-item-table .col-pi-amount {
+  width: 10%;
+  min-width: 86px;
+}
+
+.purchase-item-table .col-pi-actions {
+  width: 18%;
+  min-width: 130px;
+}
+
+.purchase-table th:nth-child(2),
+.purchase-table th:nth-child(3),
+.purchase-table td:nth-child(2),
+.purchase-table td:nth-child(3),
+.purchase-item-table th:nth-child(4),
+.purchase-item-table td:nth-child(4) {
+  text-align: right;
 }
 
 th {
@@ -491,6 +562,21 @@ tr.row-editing td {
   margin-left: auto;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.row-number {
+  min-width: 72px;
+  width: 72px;
+  max-width: 72px;
+  margin-left: auto;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.row-datetime {
+  min-width: 164px;
+  width: 164px;
+  max-width: 164px;
 }
 
 .row-input[disabled] {

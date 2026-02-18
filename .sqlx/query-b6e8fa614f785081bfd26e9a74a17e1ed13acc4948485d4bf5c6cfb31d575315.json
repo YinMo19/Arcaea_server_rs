@@ -1,0 +1,58 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT purchase_name, item_id, type, amount\n             FROM purchase_item\n             WHERE purchase_name LIKE ? OR item_id LIKE ? OR type LIKE ?\n             ORDER BY purchase_name ASC, item_id ASC, type ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "purchase_name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "item_id",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "type",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "amount",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "b6e8fa614f785081bfd26e9a74a17e1ed13acc4948485d4bf5c6cfb31d575315"
+}

@@ -1,0 +1,343 @@
+{% extends "admin/base.html" %}
+
+{% block title %}All Purchase{% endblock %}
+{% block page_title %}购买项与购买物品管理{% endblock %}
+{% block page_subtitle %}同页完成查询、行内编辑、删除与新增（sheet）{% endblock %}
+
+{% block content %}
+{% if flash_message != "" %}
+<article class="card section">
+  {% if flash_kind == "error" %}
+  <span class="tag tag-danger">{{ flash_message }}</span>
+  {% else %}
+  <span class="tag tag-ok">{{ flash_message }}</span>
+  {% endif %}
+</article>
+{% endif %}
+
+<article class="card section">
+  <div class="section-head">
+    <h3>购买项列表</h3>
+    <button class="btn btn-primary" id="open-purchase-add-sheet" type="button">新增购买项</button>
+  </div>
+
+  <form class="toolbar" method="get" action="/web/allpurchase">
+    <input class="input" name="pq" placeholder="按 purchase_name / discount_reason 搜索" value="{{ query_purchase }}">
+    <input type="hidden" name="iq" value="{{ query_purchase_item }}">
+    <button class="btn" type="submit">查询</button>
+    <a class="btn" href="/web/allpurchase">重置</a>
+  </form>
+
+  <div class="table-wrap">
+    <table class="purchase-table">
+      <colgroup>
+        <col class="col-purchase-name">
+        <col class="col-purchase-price">
+        <col class="col-purchase-price">
+        <col class="col-purchase-time">
+        <col class="col-purchase-time">
+        <col class="col-purchase-reason">
+        <col class="col-purchase-items">
+        <col class="col-purchase-actions">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>purchase_name</th>
+          <th>price</th>
+          <th>orig_price</th>
+          <th>discount_from</th>
+          <th>discount_to</th>
+          <th>discount_reason</th>
+          <th>items</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if purchases.len() == 0 %}
+        <tr>
+          <td class="muted" colspan="8">暂无购买项数据</td>
+        </tr>
+        {% else %}
+        {% for purchase in purchases %}
+        <tr data-purchase-row>
+          <td>{{ purchase.purchase_name }}</td>
+          <td>
+            <input class="input row-input row-number" name="price" value="{{ purchase.price }}" data-editable disabled>
+          </td>
+          <td>
+            <input class="input row-input row-number" name="orig_price" value="{{ purchase.orig_price }}" data-editable disabled>
+          </td>
+          <td>
+            <input class="input row-input row-datetime" type="datetime-local" name="discount_from" value="{{ purchase.discount_from }}" data-editable disabled>
+          </td>
+          <td>
+            <input class="input row-input row-datetime" type="datetime-local" name="discount_to" value="{{ purchase.discount_to }}" data-editable disabled>
+          </td>
+          <td>
+            <input class="input row-input" name="discount_reason" value="{{ purchase.discount_reason }}" data-editable disabled>
+          </td>
+          <td class="muted">{{ purchase.item_summary }}</td>
+          <td>
+            <form id="purchase-update-{{ loop.index }}" method="post" action="/web/changepurchase/update">
+              <input type="hidden" name="purchase_name" value="{{ purchase.purchase_name }}">
+            </form>
+            <form id="purchase-delete-{{ loop.index }}" method="post" action="/web/changepurchase/delete">
+              <input type="hidden" name="purchase_name" value="{{ purchase.purchase_name }}">
+            </form>
+            <div class="table-actions">
+              <button class="btn btn-xs" type="button" data-edit-save data-update-form="purchase-update-{{ loop.index }}">编辑</button>
+              <button class="btn btn-danger btn-xs" type="button" data-delete-form="purchase-delete-{{ loop.index }}" data-purchase-name="{{ purchase.purchase_name }}">删除</button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</article>
+
+<article class="card section">
+  <div class="section-head">
+    <h3>购买项物品列表</h3>
+    <button class="btn btn-primary" id="open-purchase-item-add-sheet" type="button">新增购买项物品</button>
+  </div>
+
+  <form class="toolbar" method="get" action="/web/allpurchase">
+    <input class="input" name="iq" placeholder="按 purchase_name / item_id / type 搜索" value="{{ query_purchase_item }}">
+    <input type="hidden" name="pq" value="{{ query_purchase }}">
+    <button class="btn" type="submit">查询</button>
+    <a class="btn" href="/web/allpurchase">重置</a>
+  </form>
+
+  <div class="table-wrap">
+    <table class="purchase-item-table">
+      <colgroup>
+        <col class="col-pi-purchase">
+        <col class="col-pi-item-id">
+        <col class="col-pi-type">
+        <col class="col-pi-amount">
+        <col class="col-pi-actions">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>purchase_name</th>
+          <th>item_id</th>
+          <th>type</th>
+          <th>amount</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if purchase_items.len() == 0 %}
+        <tr>
+          <td class="muted" colspan="5">暂无购买项物品数据</td>
+        </tr>
+        {% else %}
+        {% for item in purchase_items %}
+        <tr data-purchase-item-row>
+          <td>{{ item.purchase_name }}</td>
+          <td>{{ item.item_id }}</td>
+          <td>{{ item.item_type }}</td>
+          <td>
+            <input class="input row-input row-number" name="amount" value="{{ item.amount }}" data-editable disabled required>
+          </td>
+          <td>
+            <form id="purchase-item-update-{{ loop.index }}" method="post" action="/web/changepurchaseitem/update">
+              <input type="hidden" name="purchase_name" value="{{ item.purchase_name }}">
+              <input type="hidden" name="item_id" value="{{ item.item_id }}">
+              <input type="hidden" name="item_type" value="{{ item.item_type }}">
+            </form>
+            <form id="purchase-item-delete-{{ loop.index }}" method="post" action="/web/changepurchaseitem/delete">
+              <input type="hidden" name="purchase_name" value="{{ item.purchase_name }}">
+              <input type="hidden" name="item_id" value="{{ item.item_id }}">
+              <input type="hidden" name="item_type" value="{{ item.item_type }}">
+            </form>
+            <div class="table-actions">
+              <button class="btn btn-xs" type="button" data-edit-save data-update-form="purchase-item-update-{{ loop.index }}">编辑</button>
+              <button class="btn btn-danger btn-xs" type="button" data-delete-form="purchase-item-delete-{{ loop.index }}" data-purchase-name="{{ item.purchase_name }}" data-item-id="{{ item.item_id }}" data-item-type="{{ item.item_type }}">删除</button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</article>
+
+<div class="sheet-backdrop" id="purchase-add-sheet">
+  <article class="sheet-panel">
+    <div class="sheet-head">
+      <h3>新增购买项</h3>
+      <button class="btn" type="button" data-sheet-close>关闭</button>
+    </div>
+    <form method="post" action="/web/changepurchase/add" class="form-grid">
+      <div class="field">
+        <label>Purchase Name</label>
+        <input class="input" name="purchase_name" placeholder="eg. vs_5th_pack" required>
+      </div>
+      <div class="field">
+        <label>Price</label>
+        <input class="input" name="price" type="number" placeholder="可留空">
+      </div>
+      <div class="field">
+        <label>Orig Price</label>
+        <input class="input" name="orig_price" type="number" placeholder="可留空">
+      </div>
+      <div class="field">
+        <label>Discount From</label>
+        <input class="input" name="discount_from" type="datetime-local">
+      </div>
+      <div class="field">
+        <label>Discount To</label>
+        <input class="input" name="discount_to" type="datetime-local">
+      </div>
+      <div class="field">
+        <label>Discount Reason</label>
+        <input class="input" name="discount_reason" placeholder="eg. anni5tix">
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" type="submit">提交新增</button>
+        <button class="btn" type="button" data-sheet-close>取消</button>
+      </div>
+    </form>
+  </article>
+</div>
+
+<div class="sheet-backdrop" id="purchase-item-add-sheet">
+  <article class="sheet-panel">
+    <div class="sheet-head">
+      <h3>新增购买项物品</h3>
+      <button class="btn" type="button" data-sheet-close>关闭</button>
+    </div>
+    <form method="post" action="/web/changepurchaseitem/add" class="form-grid">
+      <div class="field">
+        <label>Purchase Name</label>
+        <input class="input" name="purchase_name" placeholder="eg. vs_5th_pack" required>
+      </div>
+      <div class="field">
+        <label>Item ID</label>
+        <input class="input" name="item_id" placeholder="eg. songpack" required>
+      </div>
+      <div class="field">
+        <label>Type</label>
+        <input class="input" name="item_type" placeholder="eg. pack / single / core" required>
+      </div>
+      <div class="field">
+        <label>Amount</label>
+        <input class="input" name="amount" type="number" min="1" value="1" required>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" type="submit">提交新增</button>
+        <button class="btn" type="button" data-sheet-close>取消</button>
+      </div>
+    </form>
+  </article>
+</div>
+
+<script>
+(() => {
+  const bindSheet = (openButtonId, sheetId) => {
+    const sheet = document.getElementById(sheetId);
+    const openButton = document.getElementById(openButtonId);
+    const closeButtons = sheet?.querySelectorAll("[data-sheet-close]") || [];
+    openButton?.addEventListener("click", () => {
+      sheet?.classList.add("open");
+    });
+    closeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        sheet?.classList.remove("open");
+      });
+    });
+    sheet?.addEventListener("click", (event) => {
+      if (event.target === sheet) {
+        sheet.classList.remove("open");
+      }
+    });
+  };
+
+  const bindEditableRows = (rowSelector, deleteTextBuilder) => {
+    document.querySelectorAll(rowSelector).forEach((row) => {
+      const editButton = row.querySelector("[data-edit-save]");
+      const fields = row.querySelectorAll("[data-editable]");
+      const updateFormId = editButton?.getAttribute("data-update-form");
+      const updateForm = updateFormId ? document.getElementById(updateFormId) : null;
+      const syncRowValues = () => {
+        if (!updateForm) {
+          return;
+        }
+        fields.forEach((field) => {
+          const key = field.getAttribute("name");
+          if (!key) {
+            return;
+          }
+          let hidden = updateForm.querySelector(`input[type="hidden"][name="${key}"]`);
+          if (!hidden) {
+            hidden = document.createElement("input");
+            hidden.type = "hidden";
+            hidden.name = key;
+            updateForm.appendChild(hidden);
+          }
+          hidden.value = field.value;
+        });
+      };
+
+      editButton?.addEventListener("click", () => {
+        const isEditing = row.classList.contains("row-editing");
+        if (!isEditing) {
+          row.classList.add("row-editing");
+          fields.forEach((field) => {
+            field.removeAttribute("disabled");
+          });
+          editButton.textContent = "保存";
+          editButton.classList.add("btn-primary");
+          fields[0]?.focus();
+          return;
+        }
+
+        if (updateForm) {
+          syncRowValues();
+          if (typeof updateForm.requestSubmit === "function") {
+            updateForm.requestSubmit();
+          } else {
+            updateForm.submit();
+          }
+        }
+      });
+
+      const deleteButton = row.querySelector("[data-delete-form]");
+      deleteButton?.addEventListener("click", () => {
+        const deleteFormId = deleteButton.getAttribute("data-delete-form");
+        const deleteForm = deleteFormId ? document.getElementById(deleteFormId) : null;
+        if (!deleteForm) {
+          return;
+        }
+        const confirmText = deleteTextBuilder(deleteButton);
+        if (window.confirm(confirmText)) {
+          if (typeof deleteForm.requestSubmit === "function") {
+            deleteForm.requestSubmit();
+          } else {
+            deleteForm.submit();
+          }
+        }
+      });
+    });
+  };
+
+  bindSheet("open-purchase-add-sheet", "purchase-add-sheet");
+  bindSheet("open-purchase-item-add-sheet", "purchase-item-add-sheet");
+
+  bindEditableRows("tr[data-purchase-row]", (button) => {
+    const purchaseName = button.getAttribute("data-purchase-name") || "";
+    return `确认删除购买项 ${purchaseName} ?`;
+  });
+  bindEditableRows("tr[data-purchase-item-row]", (button) => {
+    const purchaseName = button.getAttribute("data-purchase-name") || "";
+    const itemId = button.getAttribute("data-item-id") || "";
+    const itemType = button.getAttribute("data-item-type") || "";
+    return `确认删除 ${purchaseName} -> ${itemId}:${itemType} ?`;
+  });
+})();
+</script>
+{% endblock %}
