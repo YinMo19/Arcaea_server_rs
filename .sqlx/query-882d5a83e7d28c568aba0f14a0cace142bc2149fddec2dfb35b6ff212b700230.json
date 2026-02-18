@@ -1,0 +1,58 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT song_id, difficulty, rating, time_played\n         FROM recent30\n         WHERE user_id = ? AND song_id != ''\n         ORDER BY time_played DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "song_id",
+        "type_info": {
+          "type": "VarString",
+          "flags": "",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "difficulty",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "rating",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "time_played",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 20
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "882d5a83e7d28c568aba0f14a0cace142bc2149fddec2dfb35b6ff212b700230"
+}

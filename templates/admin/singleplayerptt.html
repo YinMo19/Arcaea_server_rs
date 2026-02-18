@@ -1,0 +1,212 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Single Player PTT{% endblock %}
+{% block page_title %}单玩家 PTT 详情{% endblock %}
+{% block page_subtitle %}对应 Python: /web/singleplayerptt{% endblock %}
+
+{% block content %}
+<article class="card section">
+  <div class="section-head">
+    <h3>查询</h3>
+    <span class="muted">按 name 或 user_code 精确匹配</span>
+  </div>
+
+  <form class="toolbar" method="post" action="/web/singleplayerptt">
+    <input class="input" name="name" placeholder="Arcaea Username" value="{{ query_name }}">
+    <input class="input" name="user_code" placeholder="User Code" value="{{ query_user_code }}">
+    <button class="btn btn-primary" type="submit">查询</button>
+  </form>
+
+  {% if message != "" %}
+  <div class="actions">
+    {% if message_kind == "error" %}
+    <span class="tag tag-danger">{{ message }}</span>
+    {% else %}
+    <span class="tag tag-ok">{{ message }}</span>
+    {% endif %}
+  </div>
+  {% endif %}
+</article>
+
+{% if show_user %}
+<article class="card section">
+  <div class="section-head">
+    <h3>玩家信息</h3>
+    <div class="top-actions">
+      <a class="btn" href="/web/users/{{ user.user_id }}">打开详情</a>
+      <a class="btn" href="/web/singleplayer">查成绩</a>
+    </div>
+  </div>
+
+  <div class="data-list">
+    <div class="data-item">
+      <div>
+        <strong>{{ user.name }}</strong>
+        <div class="muted">UID: {{ user.user_id }} · Code: {{ user.user_code }}</div>
+      </div>
+      {% if user.banned %}
+      <span class="tag tag-danger">封禁</span>
+      {% else %}
+      <span class="tag tag-ok">正常</span>
+      {% endif %}
+    </div>
+    <div class="data-item">
+      <div><strong>注册时间</strong></div>
+      <span class="tag">{{ user.join_date }}</span>
+    </div>
+    <div class="data-item">
+      <div><strong>最近游玩</strong></div>
+      <span class="tag">{{ user.last_play_at }}</span>
+    </div>
+    <div class="data-item">
+      <div><strong>Ticket</strong></div>
+      <span class="tag">{{ user.ticket }}</span>
+    </div>
+    <div class="data-item">
+      <div>
+        <strong>PTT</strong>
+        <div class="muted">rating_ptt / 100</div>
+      </div>
+      <span class="tag">{{ user.ptt }}</span>
+    </div>
+    <div class="data-item">
+      <div>
+        <strong>Best 30 平均</strong>
+        <div class="muted">sum(best30_rating) / 30</div>
+      </div>
+      <span class="tag">{{ best30_avg }}</span>
+    </div>
+    <div class="data-item">
+      <div>
+        <strong>Recent 10 平均</strong>
+        <div class="muted">sum(top10_unique_recent_rating) / 10</div>
+      </div>
+      <span class="tag">{{ recent10_avg }}</span>
+    </div>
+  </div>
+</article>
+
+{% if user_has_last_play %}
+<article class="card section">
+  <div class="section-head">
+    <h3>最近一次成绩</h3>
+    <span class="muted">{{ user.last_song_id }} · {{ user.last_difficulty }}</span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Score</th>
+          <th>PURE</th>
+          <th>FAR</th>
+          <th>LOST</th>
+          <th>Clear</th>
+          <th>Rating</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>{{ user.last_score }}</td>
+          <td>{{ user.last_pure }}</td>
+          <td>{{ user.last_far }}</td>
+          <td>{{ user.last_lost }}</td>
+          <td>{{ user.last_clear_type }}</td>
+          <td>{{ user.last_rating }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</article>
+{% endif %}
+
+<article class="card section">
+  <div class="section-head">
+    <h3>Best 30</h3>
+    <span class="muted">共 {{ best30.len() }} 条</span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Song</th>
+          <th>Diff</th>
+          <th>Score</th>
+          <th>PURE</th>
+          <th>FAR</th>
+          <th>LOST</th>
+          <th>Clear</th>
+          <th>Best</th>
+          <th>Rating</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if best30.len() == 0 %}
+        <tr>
+          <td class="muted" colspan="11">无成绩</td>
+        </tr>
+        {% else %}
+        {% for s in best30 %}
+        <tr>
+          <td>{{ s.rank }}</td>
+          <td>{{ s.song_id }}</td>
+          <td>{{ s.difficulty }}</td>
+          <td>{{ s.score }}</td>
+          <td>{{ s.pure }}</td>
+          <td>{{ s.far }}</td>
+          <td>{{ s.lost }}</td>
+          <td>{{ s.clear_type }}</td>
+          <td>{{ s.best_clear_type }}</td>
+          <td>{{ s.rating }}</td>
+          <td>{{ s.time_played }}</td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</article>
+
+<article class="card section">
+  <div class="section-head">
+    <h3>Recent 30</h3>
+    <span class="muted">共 {{ recent30.len() }} 条</span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Song</th>
+          <th>Diff</th>
+          <th>Rating</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if recent30.len() == 0 %}
+        <tr>
+          <td class="muted" colspan="5">无 Recent30 数据</td>
+        </tr>
+        {% else %}
+        {% for r in recent30 %}
+        <tr>
+          <td>{{ r.index }}</td>
+          <td>{{ r.song_id }}</td>
+          <td>{{ r.difficulty }}</td>
+          <td>{{ r.rating }}</td>
+          <td>{{ r.time_played }}</td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</article>
+{% endif %}
+{% endblock %}
+

@@ -86,14 +86,7 @@ impl Operation for RefreshBundleCache {
 
     async fn execute(&self) -> ArcResult<()> {
         log::info!("Executing operation: {}", self.name());
-        let service_ref_count = Arc::strong_count(&self.bundle_service);
-        log::debug!("Refresh bundle cache requested, service refs: {service_ref_count}");
-
-        // TODO: Implement bundle cache refresh
-        // Note: BundleService::initialize() requires mutable access
-        // This needs to be implemented differently or BundleService needs
-        // to provide a method that works with shared references
-        log::warn!("Bundle cache refresh not yet implemented due to Arc<T> constraints");
+        self.bundle_service.initialize().await?;
 
         log::info!("Bundle cache refresh completed");
         Ok(())

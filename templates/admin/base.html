@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Admin{% endblock %}</title>
+  <link rel="stylesheet" href="/web/static/admin.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div>
+          <h1>Arcaea Admin</h1>
+          <p>Rust + Askama Admin</p>
+        </div>
+      </div>
+
+      <div class="group-title">Game</div>
+      <ul class="nav-list">
+        <li><a class="nav-link {% if active_nav == "dashboard" %}active{% endif %}" href="/web"><span>总览</span><span class="badge">Home</span></a></li>
+        <li><a class="nav-link {% if active_nav == "users" %}active{% endif %}" href="/web/users"><span>玩家管理</span><span class="badge">Users</span></a></li>
+        <li><a class="nav-link {% if active_nav == "scores" %}active{% endif %}" href="/web/allsong"><span>歌曲/分数查询</span><span class="badge">Song</span></a></li>
+        <li><a class="nav-link {% if active_nav == "items" %}active{% endif %}" href="/web/allitem"><span>物品/购买/奖励</span><span class="badge">Item</span></a></li>
+      </ul>
+
+      <div class="group-title">System</div>
+      <ul class="nav-list">
+        <li><a class="nav-link {% if active_nav == "ops" %}active{% endif %}" href="#"><span>运维操作</span><span class="badge">TODO</span></a></li>
+        <li><a class="nav-link {% if active_nav == "audit" %}active{% endif %}" href="#"><span>审计日志</span><span class="badge">TODO</span></a></li>
+        <li><a class="nav-link" href="/web/logout"><span>登出</span><span class="badge">Exit</span></a></li>
+      </ul>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h2>{% block page_title %}后台管理{% endblock %}</h2>
+          <p>{% block page_subtitle %}可在 Askama 模板中实现现代管理 UI{% endblock %}</p>
+        </div>
+        <div class="top-actions">
+          <a class="btn" href="/web">刷新</a>
+        </div>
+      </header>
+
+      <section class="content">
+        {% block content %}{% endblock %}
+      </section>
+    </main>
+  </div>
+</body>
+</html>

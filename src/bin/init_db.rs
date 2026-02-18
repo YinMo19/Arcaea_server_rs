@@ -33,16 +33,17 @@ async fn main() {
 
     // Check if database is already initialized
     log::info!("Checking if database is already initialized...");
-    let character_count: i64 = match sqlx::query_scalar("SELECT COUNT(*) FROM `character`")
-        .fetch_one(&pool)
-        .await
-    {
-        Ok(count) => count,
-        Err(e) => {
-            log::error!("Failed to check character table: {e}");
-            process::exit(1);
-        }
-    };
+    let character_count: i64 =
+        match sqlx::query_scalar!("SELECT COUNT(*) as `count!: i64` FROM `character`")
+            .fetch_one(&pool)
+            .await
+        {
+            Ok(count) => count,
+            Err(e) => {
+                log::error!("Failed to check character table: {e}");
+                process::exit(1);
+            }
+        };
 
     if character_count > 0 {
         log::warn!("Database appears to already contain data ({character_count} characters found)");

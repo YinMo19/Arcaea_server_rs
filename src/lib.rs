@@ -69,6 +69,7 @@ impl AppState {
 /// Utility functions for the application
 pub mod utils {
     use std::time::{SystemTime, UNIX_EPOCH};
+    use validator::ValidateEmail;
 
     /// Get current timestamp in milliseconds
     pub fn current_timestamp_ms() -> i64 {
@@ -86,9 +87,9 @@ pub mod utils {
             .as_secs() as i64
     }
 
-    /// Validate email format (basic validation)
+    /// Validate email format
     pub fn is_valid_email(email: &str) -> bool {
-        email.len() >= 4 && email.len() <= 64 && email.contains('@') && email.contains('.')
+        (4..=64).contains(&email.len()) && email.validate_email()
     }
 
     /// Validate user code format (9 digits)

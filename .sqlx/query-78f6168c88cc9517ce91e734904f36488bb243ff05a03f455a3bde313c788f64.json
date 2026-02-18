@@ -1,0 +1,36 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT u.name as name, l.login_time as login_time\n         FROM login l\n         JOIN user u ON u.user_id = l.user_id\n         ORDER BY l.login_time DESC\n         LIMIT 8",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "UNIQUE_KEY",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "login_time",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 20
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "78f6168c88cc9517ce91e734904f36488bb243ff05a03f455a3bde313c788f64"
+}

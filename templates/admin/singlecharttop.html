@@ -1,0 +1,102 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Single Chart Top{% endblock %}
+{% block page_title %}单曲排行榜{% endblock %}
+{% block page_subtitle %}对应 Python: /web/singlecharttop（模糊查 sid，只取第一个）{% endblock %}
+
+{% block content %}
+<article class="card section">
+  <div class="section-head">
+    <h3>查询</h3>
+    <span class="muted">默认仅展示前 {{ limit }} 条</span>
+  </div>
+
+  <form class="toolbar" method="post" action="/web/singlecharttop">
+    <input class="input" name="sid" placeholder="SID (supports fuzzy)" value="{{ query_sid }}">
+    <select class="select" name="difficulty">
+      <option value="0" {% if difficulty == 0 %}selected{% endif %}>Past</option>
+      <option value="1" {% if difficulty == 1 %}selected{% endif %}>Present</option>
+      <option value="2" {% if difficulty == 2 %}selected{% endif %}>Future</option>
+      <option value="3" {% if difficulty == 3 %}selected{% endif %}>Beyond</option>
+      <option value="4" {% if difficulty == 4 %}selected{% endif %}>Eternal</option>
+    </select>
+    <input class="input" type="number" name="limit" min="1" max="5000" value="{{ limit }}">
+    <button class="btn btn-primary" type="submit">查询</button>
+  </form>
+
+  {% if message != "" %}
+  <div class="actions">
+    {% if message_kind == "error" %}
+    <span class="tag tag-danger">{{ message }}</span>
+    {% else %}
+    <span class="tag tag-ok">{{ message }}</span>
+    {% endif %}
+  </div>
+  {% endif %}
+</article>
+
+{% if show_song %}
+<article class="card section">
+  <div class="section-head">
+    <h3>谱面</h3>
+    <span class="muted">{{ song_id }} · {{ difficulty_label }}</span>
+  </div>
+  <div class="data-list">
+    <div class="data-item">
+      <div>
+        <strong>{{ song_id }}</strong>
+        <div class="muted">{{ song_name }}</div>
+      </div>
+      <span class="tag">{{ difficulty_label }}</span>
+    </div>
+  </div>
+</article>
+
+<article class="card section">
+  <div class="section-head">
+    <h3>Top</h3>
+    <span class="muted">共 {{ entries.len() }} 条</span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>User</th>
+          <th>Score</th>
+          <th>PURE</th>
+          <th>FAR</th>
+          <th>LOST</th>
+          <th>Clear</th>
+          <th>Best</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if entries.len() == 0 %}
+        <tr>
+          <td class="muted" colspan="9">无排名数据</td>
+        </tr>
+        {% else %}
+        {% for e in entries %}
+        <tr>
+          <td>{{ e.rank }}</td>
+          <td>{{ e.name }} ({{ e.user_id }})</td>
+          <td>{{ e.score }}</td>
+          <td>{{ e.pure }}</td>
+          <td>{{ e.far }}</td>
+          <td>{{ e.lost }}</td>
+          <td>{{ e.clear_type }}</td>
+          <td>{{ e.best_clear_type }}</td>
+          <td>{{ e.time_played }}</td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</article>
+{% endif %}
+{% endblock %}
+

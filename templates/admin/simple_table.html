@@ -1,0 +1,41 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+{% block page_title %}{{ page_title }}{% endblock %}
+{% block page_subtitle %}{{ page_subtitle }}{% endblock %}
+
+{% block content %}
+<article class="card section">
+  <div class="section-head">
+    <h3>{{ page_title }}</h3>
+    <span class="muted">共 {{ rows.len() }} 条</span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          {% for h in headers %}
+          <th>{{ h }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% if rows.len() == 0 %}
+        <tr>
+          <td class="muted">{{ empty_text }}</td>
+        </tr>
+        {% else %}
+        {% for row in rows %}
+        <tr>
+          {% for cell in row %}
+          <td>{{ cell }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</article>
+{% endblock %}

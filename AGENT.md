@@ -66,15 +66,18 @@
 
 ## 4. SQL / sqlx 规范（严格执行）
 
-1. 静态 SQL 一律优先使用宏：
+结论：**只要 SQL 不是运行时动态拼接出来的字符串，就必须使用 query 宏，不要用 query function。**
+
+1. 静态 SQL 一律使用宏（编译期校验）：
    - `sqlx::query!`
    - `sqlx::query_as!`
    - `sqlx::query_scalar!`
-2. 仅在以下情况可保留动态 SQL：
+2. 禁止在静态 SQL 中使用 function 版本（例如 `sqlx::query(...)` / `sqlx::query_as(...)` / `sqlx::query_scalar(...)`）。
+3. 仅在以下情况可保留动态 SQL（宏无法使用，SQL 文本必须运行时生成）：
    - 动态 IN 占位符个数
    - 动态表名/列名（且无法轻易枚举分支）
-3. 能改成分支宏就不要保留动态 SQL。
-4. 任何 SQL 改动后必须：
+4. 能改成分支宏就不要保留动态 SQL。
+5. 任何 SQL 改动后必须：
    - `cargo check`
    - `cargo sqlx prepare`
    - 提交 `.sqlx/` 变更
@@ -125,4 +128,3 @@
 - 不使用“临时值/占位值”兜底核心业务字段。
 - 客户端对 JSON 类型敏感：字段类型必须稳定，避免 int/float 混淆。
 - World/Score/Mission 是高风险区域，改动后必须做端到端回归。
-

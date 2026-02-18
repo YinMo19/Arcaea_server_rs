@@ -16,9 +16,8 @@ use Arcaea_server_rs::route::others::bundle_download;
 use Arcaea_server_rs::route::CORS;
 use Arcaea_server_rs::service::{
     arc_data::arc_data_file_path_from_env, AssetInitService, AssetManager, BundleService,
-    CharacterService,
-    DownloadService, ItemService, MultiplayerService, NotificationService, OperationManager,
-    PresentService, PurchaseService, ScoreService, UserService, WorldService,
+    CharacterService, DownloadService, ItemService, MultiplayerService, NotificationService,
+    OperationManager, PresentService, PurchaseService, ScoreService, UserService, WorldService,
 };
 use Arcaea_server_rs::{config, Database, DbPool};
 
@@ -87,7 +86,7 @@ async fn init_services(
     let score_service = ScoreService::new(pool.clone());
     let notification_service = NotificationService::new(pool.clone());
     let item_service = ItemService::new(pool.clone());
-    let mut bundle_service = BundleService::new(
+    let bundle_service = BundleService::new(
         pool.clone(),
         std::path::PathBuf::from("bundles"),
         bundle_download_link_prefix,
@@ -255,6 +254,7 @@ async fn configure_rocket() -> Rocket<Build> {
                 Arcaea_server_rs::route::user::email_verify
             ],
         )
+        .mount("/web", Arcaea_server_rs::route::admin::routes())
         .mount("/auth", Arcaea_server_rs::route::auth::routes())
         .mount("/", rocket::routes![bundle_download, serve_download_file])
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::others::routes())

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Login</title>
+  <link rel="stylesheet" href="/web/static/admin.css">
+</head>
+<body>
+  <main class="login-page">
+    <section class="login-card">
+      <h1>管理员登录</h1>
+      <p>这是 Askama 模板可实现的现代登录页风格（可接入 session + CSRF）。</p>
+
+      {% if flash_error != "" %}
+      <div class="data-item" style="margin-bottom:10px;">
+        <strong style="color:#be123c;">{{ flash_error }}</strong>
+      </div>
+      {% endif %}
+
+      <form method="post" action="/web/login">
+        <div class="field">
+          <label>Username</label>
+          <input class="input" name="username" required>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input class="input" type="password" name="password" required>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" type="submit">登录</button>
+        </div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user\n         SET rating_ptt = 0,\n             song_id = '',\n             difficulty = 0,\n             score = 0,\n             shiny_perfect_count = 0,\n             perfect_count = 0,\n             near_count = 0,\n             miss_count = 0,\n             health = 0,\n             modifier = 0,\n             time_played = 0,\n             clear_type = 0,\n             rating = 0,\n             world_rank_score = 0\n         WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "b071ab5dbcb0e8b610467eb97e1c8d76ce776621da1665d2cdee48094e29abf9"
+}

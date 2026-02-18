@@ -577,6 +577,7 @@ impl AssetInitService {
 
         Ok(())
     }
+
     /// Get roles data
     fn get_roles() -> Vec<(&'static str, &'static str)> {
         vec![

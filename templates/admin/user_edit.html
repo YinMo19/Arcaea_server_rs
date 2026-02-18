@@ -1,0 +1,75 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Edit User{% endblock %}
+{% block page_title %}编辑玩家{% endblock %}
+{% block page_subtitle %}支持改票、改密码、封禁、删除成绩等高风险动作{% endblock %}
+
+{% block content %}
+{% if flash_message != "" %}
+<article class="card section">
+  {% if flash_kind == "error" %}
+  <span class="tag tag-danger">{{ flash_message }}</span>
+  {% else %}
+  <span class="tag tag-ok">{{ flash_message }}</span>
+  {% endif %}
+</article>
+{% endif %}
+
+<article class="card section">
+  <div class="section-head">
+    <h3>基础信息</h3>
+    <span class="muted">User ID: {{ user.user_id }}</span>
+  </div>
+
+  <div class="form-grid">
+    <div class="field">
+      <label>玩家名称</label>
+      <input class="input" value="{{ user.name }}" readonly>
+    </div>
+    <div class="field">
+      <label>User Code</label>
+      <input class="input" value="{{ user.user_code }}" readonly>
+    </div>
+    <div class="field">
+      <label>Ticket</label>
+      <form method="post" action="/web/users/{{ user.user_id }}/ticket">
+        <input class="input" type="number" name="ticket" value="{{ user.ticket }}" required>
+        <div class="actions">
+          <button class="btn btn-primary" type="submit">更新 Ticket</button>
+        </div>
+      </form>
+    </div>
+    <div class="field">
+      <label>当前 PTT</label>
+      <input class="input" type="number" value="{{ user.rating_ptt }}" readonly>
+    </div>
+  </div>
+</article>
+
+<article class="card section">
+  <div class="section-head">
+    <h3>危险操作区</h3>
+    <span class="tag tag-danger">需要二次确认</span>
+  </div>
+  <div class="data-list">
+    <div class="data-item">
+      <div>
+        <strong>封禁账号（清空密码 + 踢下线）</strong>
+        <div class="muted">对应 Python: /web/banuser</div>
+      </div>
+      <form method="post" action="/web/users/{{ user.user_id }}/ban">
+        <button class="btn btn-danger" type="submit">执行</button>
+      </form>
+    </div>
+    <div class="data-item">
+      <div>
+        <strong>删除该用户全部 Best Score</strong>
+        <div class="muted">对应 Python: /web/banuser/deleteuserscore</div>
+      </div>
+      <form method="post" action="/web/users/{{ user.user_id }}/scores/delete">
+        <button class="btn btn-danger" type="submit">执行</button>
+      </form>
+    </div>
+  </div>
+</article>
+{% endblock %}

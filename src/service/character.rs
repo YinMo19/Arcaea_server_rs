@@ -6,11 +6,37 @@ use crate::model::{
 };
 use crate::service::arc_data::load_arc_data_from_file;
 use serde_json::{json, Value};
-use sqlx::{MySqlPool, Row};
+use sqlx::MySqlPool;
 
 /// Character service for managing character items and user character data
 pub struct CharacterService {
     pool: MySqlPool,
+}
+
+#[derive(Debug)]
+struct UserCharacterStatsDbRow {
+    character_id: i32,
+    level: Option<i32>,
+    exp: Option<f64>,
+    is_uncapped: Option<i8>,
+    is_uncapped_override: Option<i8>,
+    skill_flag: Option<i32>,
+    name: Option<String>,
+    max_level: Option<i32>,
+    char_type: Option<i32>,
+    skill_id: Option<String>,
+    skill_id_uncap: Option<String>,
+    skill_unlock_level: Option<i32>,
+    skill_requires_uncap: Option<i8>,
+    frag1: Option<f64>,
+    frag20: Option<f64>,
+    frag30: Option<f64>,
+    prog1: Option<f64>,
+    prog20: Option<f64>,
+    prog30: Option<f64>,
+    overdrive1: Option<f64>,
+    overdrive20: Option<f64>,
+    overdrive30: Option<f64>,
 }
 
 impl CharacterService {
@@ -232,73 +258,78 @@ impl CharacterService {
         &self,
         user_id: i32,
     ) -> ArcResult<Vec<serde_json::Value>> {
-        let table_name = self.get_user_char_table();
-
-        let query = format!(
-            r#"
-            SELECT uc.character_id, uc.level, uc.exp, uc.is_uncapped, uc.is_uncapped_override, uc.skill_flag,
-                   c.name, c.max_level, c.char_type, c.skill_id, c.skill_id_uncap, c.skill_unlock_level,
-                   c.skill_requires_uncap, c.frag1, c.frag20, c.frag30, c.prog1, c.prog20, c.prog30,
-                   c.overdrive1, c.overdrive20, c.overdrive30
-            FROM {table_name} uc
-            JOIN `character` c ON uc.character_id = c.character_id
-            WHERE uc.user_id = ?
-            ORDER BY uc.character_id
-            "#
-        );
-
-        let characters = sqlx::query(&query)
-            .bind(user_id)
+        let characters = if CONFIG.character_full_unlock {
+            sqlx::query_as!(
+                UserCharacterStatsDbRow,
+                r#"
+                SELECT uc.character_id, uc.level, uc.exp, uc.is_uncapped, uc.is_uncapped_override, uc.skill_flag,
+                       c.name, c.max_level, c.char_type, c.skill_id, c.skill_id_uncap, c.skill_unlock_level,
+                       c.skill_requires_uncap, c.frag1, c.frag20, c.frag30, c.prog1, c.prog20, c.prog30,
+                       c.overdrive1, c.overdrive20, c.overdrive30
+                FROM user_char_full uc
+                JOIN `character` c ON uc.character_id = c.character_id
+                WHERE uc.user_id = ?
+                ORDER BY uc.character_id
+                "#,
+                user_id
+            )
             .fetch_all(&self.pool)
-            .await?;
+            .await?
+        } else {
+            sqlx::query_as!(
+                UserCharacterStatsDbRow,
+                r#"
+                SELECT uc.character_id, uc.level, uc.exp, uc.is_uncapped, uc.is_uncapped_override, uc.skill_flag,
+                       c.name, c.max_level, c.char_type, c.skill_id, c.skill_id_uncap, c.skill_unlock_level,
+                       c.skill_requires_uncap, c.frag1, c.frag20, c.frag30, c.prog1, c.prog20, c.prog30,
+                       c.overdrive1, c.overdrive20, c.overdrive30
+                FROM user_char uc
+                JOIN `character` c ON uc.character_id = c.character_id
+                WHERE uc.user_id = ?
+                ORDER BY uc.character_id
+                "#,
+                user_id
+            )
+            .fetch_all(&self.pool)
+            .await?
+        };
 
         let mut character_stats = Vec::new();
 
         for char_record in characters {
-            let character_id: i32 = char_record.get("character_id");
-            let level: i32 = char_record.get::<Option<i32>, _>("level").unwrap_or(1);
-            let exp: f64 = char_record.get::<Option<f64>, _>("exp").unwrap_or(0.0);
-            let is_uncapped: bool =
-                char_record.get::<Option<i8>, _>("is_uncapped").unwrap_or(0) != 0;
-            let is_uncapped_override: bool = char_record
-                .get::<Option<i8>, _>("is_uncapped_override")
-                .unwrap_or(0)
-                != 0;
-            let skill_flag: bool =
-                char_record.get::<Option<i32>, _>("skill_flag").unwrap_or(0) != 0;
+            let character_id = char_record.character_id;
+            let level = char_record.level.unwrap_or(1);
+            let exp = char_record.exp.unwrap_or(0.0);
+            let is_uncapped = char_record.is_uncapped.unwrap_or(0) != 0;
+            let is_uncapped_override = char_record.is_uncapped_override.unwrap_or(0) != 0;
+            let skill_flag = char_record.skill_flag.unwrap_or(0) != 0;
 
             // Create level info
             let mut level_info = Level::new();
             level_info.level = level;
             level_info.exp = exp;
-            level_info.max_level = char_record.get::<Option<i32>, _>("max_level").unwrap_or(20);
+            level_info.max_level = char_record.max_level.unwrap_or(20);
 
             // Create character values
             let mut frag = CharacterValue::new();
             frag.set_parameter(
-                char_record.get::<Option<f64>, _>("frag1").unwrap_or(0.0),
-                char_record.get::<Option<f64>, _>("frag20").unwrap_or(0.0),
-                char_record.get::<Option<f64>, _>("frag30").unwrap_or(0.0),
+                char_record.frag1.unwrap_or(0.0),
+                char_record.frag20.unwrap_or(0.0),
+                char_record.frag30.unwrap_or(0.0),
             );
 
             let mut prog = CharacterValue::new();
             prog.set_parameter(
-                char_record.get::<Option<f64>, _>("prog1").unwrap_or(0.0),
-                char_record.get::<Option<f64>, _>("prog20").unwrap_or(0.0),
-                char_record.get::<Option<f64>, _>("prog30").unwrap_or(0.0),
+                char_record.prog1.unwrap_or(0.0),
+                char_record.prog20.unwrap_or(0.0),
+                char_record.prog30.unwrap_or(0.0),
             );
 
             let mut overdrive = CharacterValue::new();
             overdrive.set_parameter(
-                char_record
-                    .get::<Option<f64>, _>("overdrive1")
-                    .unwrap_or(0.0),
-                char_record
-                    .get::<Option<f64>, _>("overdrive20")
-                    .unwrap_or(0.0),
-                char_record
-                    .get::<Option<f64>, _>("overdrive30")
-                    .unwrap_or(0.0),
+                char_record.overdrive1.unwrap_or(0.0),
+                char_record.overdrive20.unwrap_or(0.0),
+                char_record.overdrive30.unwrap_or(0.0),
             );
 
             // Handle Fatalis special calculations (character 55)
@@ -334,15 +365,10 @@ impl CharacterService {
             let uncap_cores = self.get_character_uncap_cores(character_id).await?;
 
             // Create skill info
-            let skill_id = char_record.get::<Option<String>, _>("skill_id");
-            let skill_id_uncap = char_record.get::<Option<String>, _>("skill_id_uncap");
-            let skill_unlock_level: i32 = char_record
-                .get::<Option<i32>, _>("skill_unlock_level")
-                .unwrap_or(1);
-            let skill_requires_uncap: bool = char_record
-                .get::<Option<i8>, _>("skill_requires_uncap")
-                .unwrap_or(0)
-                != 0;
+            let skill_id = char_record.skill_id;
+            let skill_id_uncap = char_record.skill_id_uncap;
+            let skill_unlock_level = char_record.skill_unlock_level.unwrap_or(1);
+            let skill_requires_uncap = char_record.skill_requires_uncap.unwrap_or(0) != 0;
 
             // Calculate skill_id_displayed - matches Python logic exactly
             let is_uncapped_displayed = if is_uncapped_override {
@@ -381,7 +407,7 @@ impl CharacterService {
                 "is_uncapped_override": is_uncapped_override,
                 "is_uncapped": is_uncapped,
                 "uncap_cores": uncap_cores,
-                "char_type": char_record.get::<Option<i32>, _>("char_type").unwrap_or(0),
+                "char_type": char_record.char_type.unwrap_or(0),
                 "skill_id_uncap": skill_id_uncap.unwrap_or_default(),
                 "skill_requires_uncap": skill_requires_uncap,
                 "skill_unlock_level": skill_unlock_level,
@@ -392,7 +418,7 @@ impl CharacterService {
                 "level_exp": level_info.level_exp(),
                 "exp": exp,
                 "level": level,
-                "name": char_record.get::<Option<String>, _>("name").unwrap_or_default(),
+                "name": char_record.name.unwrap_or_default(),
                 "character_id": character_id
             });
 

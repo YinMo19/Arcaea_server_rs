@@ -1908,8 +1908,8 @@ impl ScoreService {
                         world_mode_locked_end_ts,
                         user_id
                     )
-                        .execute(&self.pool)
-                        .await?;
+                    .execute(&self.pool)
+                    .await?;
                 } else if skill_id == "skill_maya" {
                     character_service
                         .change_character_skill_state(user_id, character.character_id)
@@ -1932,8 +1932,8 @@ impl ScoreService {
                     beyond_boost_gauge,
                     user_id
                 )
-                    .execute(&self.pool)
-                    .await?;
+                .execute(&self.pool)
+                .await?;
             }
         } else {
             beyond_boost_gauge += 2.45 * rating.sqrt() + 27.0;
@@ -1945,8 +1945,8 @@ impl ScoreService {
                 beyond_boost_gauge,
                 user_id
             )
-                .execute(&self.pool)
-                .await?;
+            .execute(&self.pool)
+            .await?;
         }
 
         if curr_position == map.step_count - 1 && map.is_repeatable {

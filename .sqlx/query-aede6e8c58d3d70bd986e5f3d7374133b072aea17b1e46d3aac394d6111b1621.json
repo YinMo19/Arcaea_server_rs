@@ -1,0 +1,256 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                SELECT uc.character_id, uc.level, uc.exp, uc.is_uncapped, uc.is_uncapped_override, uc.skill_flag,\n                       c.name, c.max_level, c.char_type, c.skill_id, c.skill_id_uncap, c.skill_unlock_level,\n                       c.skill_requires_uncap, c.frag1, c.frag20, c.frag30, c.prog1, c.prog20, c.prog30,\n                       c.overdrive1, c.overdrive20, c.overdrive30\n                FROM user_char_full uc\n                JOIN `character` c ON uc.character_id = c.character_id\n                WHERE uc.user_id = ?\n                ORDER BY uc.character_id\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "character_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "level",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "exp",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "is_uncapped",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 4
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "is_uncapped_override",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 4
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "skill_flag",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "name",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "char_set": 224,
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "max_level",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "char_type",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "skill_id",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "char_set": 224,
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "skill_id_uncap",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "char_set": 224,
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "skill_unlock_level",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "skill_requires_uncap",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 4
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "frag1",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "frag20",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "frag30",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "prog1",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "prog20",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "prog30",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "overdrive1",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "overdrive20",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "overdrive30",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 22
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "aede6e8c58d3d70bd986e5f3d7374133b072aea17b1e46d3aac394d6111b1621"
+}

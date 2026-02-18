@@ -1,0 +1,86 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+{% block page_title %}控制台总览{% endblock %}
+{% block page_subtitle %}今天的核心状态、异常提醒和快捷入口{% endblock %}
+
+{% block content %}
+<section class="kpis">
+  <article class="card kpi">
+    <div class="kpi-label">在线玩家（24h）</div>
+    <div class="kpi-value">{{ online_users }}</div>
+    <div class="kpi-sub">+{{ online_growth }}% vs 昨日</div>
+  </article>
+  <article class="card kpi">
+    <div class="kpi-label">今日提交成绩</div>
+    <div class="kpi-value">{{ score_submits }}</div>
+    <div class="kpi-sub">失败率 {{ score_error_rate }}%</div>
+  </article>
+  <article class="card kpi">
+    <div class="kpi-label">发放奖励数</div>
+    <div class="kpi-value">{{ present_count }}</div>
+    <div class="kpi-sub">自动 + 手动合计</div>
+  </article>
+  <article class="card kpi">
+    <div class="kpi-label">待处理告警</div>
+    <div class="kpi-value">{{ alert_count }}</div>
+    <div class="kpi-sub">含下载/登录/DB任务</div>
+  </article>
+</section>
+
+<section class="layout-2">
+  <article class="card section">
+    <div class="section-head">
+      <h3>最近运维动作</h3>
+      <span class="muted">近 10 条</span>
+    </div>
+    <ul class="data-list">
+      {% for op in recent_ops %}
+      <li class="data-item">
+        <div>
+          <strong>{{ op.name }}</strong>
+          <div class="muted">{{ op.operator }} · {{ op.time }}</div>
+        </div>
+        {% if op.status == "ok" %}
+        <span class="tag tag-ok">成功</span>
+        {% else if op.status == "warn" %}
+        <span class="tag tag-warning">警告</span>
+        {% else %}
+        <span class="tag tag-danger">失败</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </article>
+
+  <article class="card section">
+    <div class="section-head">
+      <h3>快捷操作</h3>
+      <span class="muted">高频任务</span>
+    </div>
+    <div class="data-list">
+      <div class="data-item">
+        <div>
+          <strong>刷新 Song Hash</strong>
+          <div class="muted">对应 Python: refreshsonghash</div>
+        </div>
+        <button class="btn">执行</button>
+      </div>
+      <div class="data-item">
+        <div>
+          <strong>刷新 Bundle</strong>
+          <div class="muted">对应 Python: refreshsbundle</div>
+        </div>
+        <button class="btn">执行</button>
+      </div>
+      <div class="data-item">
+        <div>
+          <strong>全量重算 Rating</strong>
+          <div class="muted">对应 Python: refreshsongrating</div>
+        </div>
+        <button class="btn btn-danger">执行</button>
+      </div>
+    </div>
+  </article>
+</section>
+{% endblock %}

@@ -37,6 +37,8 @@ tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 rocket_prometheus = "0.10.1"
 aes-gcm = "0.10"
+askama = "0.12"
+validator = "0.18"
 
 [dependencies.rocket_db_pools]
 version = "0.2.0"

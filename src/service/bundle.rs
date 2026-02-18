@@ -4,6 +4,7 @@ use sqlx::MySqlPool;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
+use tokio::sync::RwLock;
 
 /// Content bundle information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -130,12 +131,17 @@ pub struct BundleDownloadResponse {
 pub struct BundleService {
     pool: MySqlPool,
     bundle_folder: PathBuf,
+    cache: std::sync::Arc<RwLock<BundleCache>>,
+    strict_mode: bool,
+    download_prefix: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct BundleCache {
     bundles: HashMap<String, Vec<ContentBundle>>, // app_version -> bundles
     max_bundle_version: HashMap<String, String>,  // app_version -> max_version
     next_versions: HashMap<String, Vec<String>>,  // version -> next_versions
     version_tuple_bundles: HashMap<(String, String), ContentBundle>, // (version, prev_version) -> bundle
-    strict_mode: bool,
-    download_prefix: Option<String>,
 }
 
 impl BundleService {
@@ -144,10 +150,7 @@ impl BundleService {
         Self {
             pool,
             bundle_folder,
-            bundles: HashMap::new(),
-            max_bundle_version: HashMap::new(),
-            next_versions: HashMap::new(),
-            version_tuple_bundles: HashMap::new(),
+            cache: std::sync::Arc::new(RwLock::new(BundleCache::default())),
             strict_mode: false,
             download_prefix,
         }
@@ -164,70 +167,61 @@ impl BundleService {
     }
 
     /// Initialize bundle parser by scanning bundle directory
-    pub async fn initialize(&mut self) -> ArcResult<()> {
-        self.parse_bundles().await?;
+    pub async fn initialize(&self) -> ArcResult<()> {
+        let new_cache = self.parse_bundles()?;
+        let mut cache = self.cache.write().await;
+        *cache = new_cache;
         Ok(())
     }
 
     /// Parse all bundles from the bundle directory
-    async fn parse_bundles(&mut self) -> ArcResult<()> {
+    fn parse_bundles(&self) -> ArcResult<BundleCache> {
+        let mut cache = BundleCache::default();
         if !self.bundle_folder.exists() {
-            return Ok(());
+            return Ok(cache);
         }
-
-        // Clear existing data
-        self.bundles.clear();
-        self.max_bundle_version.clear();
-        self.next_versions.clear();
-        self.version_tuple_bundles.clear();
 
         // Walk through bundle directory
         let bundle_folder = self.bundle_folder.clone();
-        self.scan_directory(&bundle_folder).await?;
+        self.scan_directory(&bundle_folder, &mut cache)?;
 
         // Sort bundles by version and set max versions
-        for (app_version, bundles) in self.bundles.iter_mut() {
+        for (app_version, bundles) in cache.bundles.iter_mut() {
             bundles.sort_by_key(|a| a.version_tuple());
             if let Some(last_bundle) = bundles.last() {
-                self.max_bundle_version
+                cache
+                    .max_bundle_version
                     .insert(app_version.clone(), last_bundle.version.clone());
+            }
+        }
+
+        Ok(cache)
+    }
+
+    /// Recursively scan directory for bundle files
+    fn scan_directory(&self, dir: &Path, cache: &mut BundleCache) -> ArcResult<()> {
+        let entries = fs::read_dir(dir).map_err(|e| ArcError::Io {
+            message: format!("Failed to read directory: {e}"),
+        })?;
+
+        for entry in entries {
+            let entry = entry.map_err(|e| ArcError::Io {
+                message: format!("Failed to read directory entry: {e}"),
+            })?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                self.scan_directory(&path, cache)?;
+            } else if path.extension().is_some_and(|ext| ext == "json") {
+                self.process_bundle_json(&path, cache)?;
             }
         }
 
         Ok(())
     }
 
-    /// Recursively scan directory for bundle files
-    fn scan_directory<'a>(
-        &'a mut self,
-        dir: &'a Path,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ArcResult<()>> + Send + 'a>> {
-        Box::pin(async move {
-            let entries = fs::read_dir(dir).map_err(|e| ArcError::Io {
-                message: format!("Failed to read directory: {e}"),
-            })?;
-
-            for entry in entries {
-                let entry = entry.map_err(|e| ArcError::Io {
-                    message: format!("Failed to read directory entry: {e}"),
-                })?;
-                let path = entry.path();
-
-                if path.is_dir() {
-                    self.scan_directory(&path).await?;
-                } else if let Some(extension) = path.extension() {
-                    if extension == "json" {
-                        self.process_bundle_json(&path).await?;
-                    }
-                }
-            }
-
-            Ok(())
-        })
-    }
-
     /// Process a bundle JSON file
-    async fn process_bundle_json(&mut self, json_path: &Path) -> ArcResult<()> {
+    fn process_bundle_json(&self, json_path: &Path, cache: &mut BundleCache) -> ArcResult<()> {
         let json_content = fs::read_to_string(json_path).map_err(|e| ArcError::Io {
             message: format!("Failed to read JSON file: {e}"),
         })?;
@@ -268,7 +262,8 @@ impl BundleService {
         bundle_with_rel_paths.bundle_path = bundle_rel_path;
 
         // Add to collections
-        self.bundles
+        cache
+            .bundles
             .entry(bundle.app_version.clone())
             .or_default()
             .push(bundle_with_rel_paths.clone());
@@ -277,12 +272,13 @@ impl BundleService {
             .prev_version
             .clone()
             .unwrap_or_else(|| "0.0.0".to_string());
-        self.version_tuple_bundles.insert(
+        cache.version_tuple_bundles.insert(
             (bundle.version.clone(), prev_version.clone()),
             bundle_with_rel_paths,
         );
 
-        self.next_versions
+        cache
+            .next_versions
             .entry(prev_version.clone())
             .or_default()
             .push(bundle.version);
@@ -297,40 +293,44 @@ impl BundleService {
         bundle_version: Option<&str>,
         device_id: Option<&str>,
     ) -> ArcResult<Vec<BundleResponse>> {
+        let cache = self.cache.read().await;
+
         if self.strict_mode {
             let empty_vec = Vec::new();
-            let bundles = self.bundles.get(app_version).unwrap_or(&empty_vec);
+            let bundles = cache.bundles.get(app_version).unwrap_or(&empty_vec);
             return Ok(bundles.iter().map(|b| b.to_response()).collect());
         }
 
         let current_version = bundle_version.unwrap_or("0.0.0");
 
-        let target_version = self.max_bundle_version.get(app_version).ok_or_else(|| {
-            ArcError::no_data(
-                format!("No bundles found for app version: {app_version}"),
-                404,
-            )
-        })?;
+        let target_version = cache
+            .max_bundle_version
+            .get(app_version)
+            .ok_or_else(|| {
+                ArcError::no_data(
+                    format!("No bundles found for app version: {app_version}"),
+                    404,
+                )
+            })?
+            .clone();
 
-        if current_version == target_version {
+        if current_version == target_version.as_str() {
             return Ok(Vec::new());
         }
 
         // Find update path using BFS
-        let update_path = self.find_update_path(current_version, target_version)?;
+        let update_path =
+            Self::find_update_path(&cache.next_versions, current_version, &target_version)?;
         if update_path.is_empty() {
             return Ok(Vec::new());
         }
 
-        // Generate download tokens and URLs
-        let mut results = Vec::new();
-        let current_time = chrono::Utc::now().timestamp();
-
+        let mut matched_bundles = Vec::new();
         for i in 1..update_path.len() {
             let version = &update_path[i];
             let prev_version = &update_path[i - 1];
 
-            if let Some(bundle) = self
+            if let Some(bundle) = cache
                 .version_tuple_bundles
                 .get(&(version.clone(), prev_version.clone()))
             {
@@ -339,31 +339,34 @@ impl BundleService {
                 {
                     continue;
                 }
+                matched_bundles.push(bundle.clone());
+            }
+        }
+        drop(cache);
 
-                let mut bundle_with_urls = bundle.clone();
+        // Generate download tokens and URLs
+        let mut results = Vec::new();
+        let current_time = chrono::Utc::now().timestamp();
 
-                // Generate download tokens
-                let json_token = self.generate_token();
-                let bundle_token = self.generate_token();
+        for bundle in matched_bundles {
+            let mut bundle_with_urls = bundle.clone();
 
-                // Store tokens in database
-                self.store_download_token(&json_token, &bundle.json_path, current_time, device_id)
-                    .await?;
-                self.store_download_token(
-                    &bundle_token,
-                    &bundle.bundle_path,
-                    current_time,
-                    device_id,
-                )
+            // Generate download tokens
+            let json_token = self.generate_token();
+            let bundle_token = self.generate_token();
+
+            // Store tokens in database
+            self.store_download_token(&json_token, &bundle.json_path, current_time, device_id)
+                .await?;
+            self.store_download_token(&bundle_token, &bundle.bundle_path, current_time, device_id)
                 .await?;
 
-                // Generate URLs
-                bundle_with_urls.json_url = Some(self.generate_download_url(&json_token));
-                bundle_with_urls.bundle_url = Some(self.generate_download_url(&bundle_token));
+            // Generate URLs
+            bundle_with_urls.json_url = Some(self.generate_download_url(&json_token));
+            bundle_with_urls.bundle_url = Some(self.generate_download_url(&bundle_token));
 
-                let response = bundle_with_urls.to_response();
-                results.push(response);
-            }
+            let response = bundle_with_urls.to_response();
+            results.push(response);
         }
 
         Ok(results)
@@ -371,7 +374,7 @@ impl BundleService {
 
     /// Find update path from current version to target version using BFS
     fn find_update_path(
-        &self,
+        next_versions: &HashMap<String, Vec<String>>,
         current_version: &str,
         target_version: &str,
     ) -> ArcResult<Vec<String>> {
@@ -391,8 +394,8 @@ impl BundleService {
                 return Ok(paths.get(&version).unwrap().clone());
             }
 
-            if let Some(next_versions) = self.next_versions.get(&version) {
-                for next_version in next_versions {
+            if let Some(next_list) = next_versions.get(&version) {
+                for next_version in next_list {
                     if !visited.contains(next_version) {
                         visited.insert(next_version.clone());
                         let mut new_path = paths.get(&version).unwrap().clone();
