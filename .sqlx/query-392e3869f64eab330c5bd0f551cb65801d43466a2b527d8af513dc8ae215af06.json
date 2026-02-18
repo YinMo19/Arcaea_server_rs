@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT COUNT(*) as `count!: i64` FROM chart WHERE song_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!: i64",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "char_set": 63,
+          "max_size": 21
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "392e3869f64eab330c5bd0f551cb65801d43466a2b527d8af513dc8ae215af06"
+}

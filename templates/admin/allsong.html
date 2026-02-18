@@ -1,0 +1,232 @@
+{% extends "admin/base.html" %}
+
+{% block title %}All Song{% endblock %}
+{% block page_title %}歌曲/分数查询与谱面编辑{% endblock %}
+{% block page_subtitle %}同页完成查询、行内编辑、删除与新增（sheet）{% endblock %}
+
+{% block content %}
+{% if flash_message != "" %}
+<article class="card section">
+  {% if flash_kind == "error" %}
+  <span class="tag tag-danger">{{ flash_message }}</span>
+  {% else %}
+  <span class="tag tag-ok">{{ flash_message }}</span>
+  {% endif %}
+</article>
+{% endif %}
+
+<article class="card section">
+  <div class="section-head">
+    <h3>谱面列表</h3>
+    <button class="btn btn-primary" id="open-song-add-sheet" type="button">新增歌曲</button>
+  </div>
+
+  <form class="toolbar" method="get" action="/web/allsong">
+    <input class="input" name="q" placeholder="按 song_id / name 模糊搜索" value="{{ query }}">
+    <button class="btn" type="submit">查询</button>
+    <a class="btn" href="/web/allsong">重置</a>
+  </form>
+
+  <div class="table-wrap">
+    <table class="song-table">
+      <colgroup>
+        <col class="col-song-id">
+        <col class="col-song-name">
+        <col class="col-song-rating">
+        <col class="col-song-rating">
+        <col class="col-song-rating">
+        <col class="col-song-rating">
+        <col class="col-song-rating">
+        <col class="col-song-actions">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>song_id</th>
+          <th>name</th>
+          <th>PST</th>
+          <th>PRS</th>
+          <th>FTR</th>
+          <th>BYD</th>
+          <th>ETR</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if songs.len() == 0 %}
+        <tr>
+          <td class="muted" colspan="8">暂无谱面数据</td>
+        </tr>
+        {% else %}
+        {% for s in songs %}
+        <tr data-song-row>
+          <td>{{ s.song_id }}</td>
+          <td>
+            <input class="input row-input" name="name_en" value="{{ s.name_en }}" data-editable disabled required>
+          </td>
+          <td>
+            <input class="input row-input row-rating" name="rating_pst" value="{{ s.rating_pst }}" data-editable disabled required>
+          </td>
+          <td>
+            <input class="input row-input row-rating" name="rating_prs" value="{{ s.rating_prs }}" data-editable disabled required>
+          </td>
+          <td>
+            <input class="input row-input row-rating" name="rating_ftr" value="{{ s.rating_ftr }}" data-editable disabled required>
+          </td>
+          <td>
+            <input class="input row-input row-rating" name="rating_byd" value="{{ s.rating_byd }}" data-editable disabled required>
+          </td>
+          <td>
+            <input class="input row-input row-rating" name="rating_etr" value="{{ s.rating_etr }}" data-editable disabled required>
+          </td>
+          <td>
+            <form id="song-update-{{ loop.index }}" method="post" action="/web/changesong/updatesong">
+              <input type="hidden" name="sid" value="{{ s.song_id }}">
+            </form>
+            <form id="song-delete-{{ loop.index }}" method="post" action="/web/changesong/deletesong">
+              <input type="hidden" name="sid" value="{{ s.song_id }}">
+            </form>
+            <div class="table-actions">
+              <button class="btn btn-xs" type="button" data-edit-save data-update-form="song-update-{{ loop.index }}">编辑</button>
+              <button class="btn btn-danger btn-xs" type="button" data-delete-form="song-delete-{{ loop.index }}" data-song-id="{{ s.song_id }}">删除</button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</article>
+
+<div class="sheet-backdrop" id="song-add-sheet">
+  <article class="sheet-panel">
+    <div class="sheet-head">
+      <h3>新增歌曲</h3>
+      <button class="btn" type="button" data-sheet-close>关闭</button>
+    </div>
+    <form method="post" action="/web/changesong/addsong" class="form-grid">
+      <div class="field">
+        <label>Song ID</label>
+        <input class="input" name="sid" placeholder="eg. world.execute(me);" required>
+      </div>
+      <div class="field">
+        <label>Name</label>
+        <input class="input" name="name_en" placeholder="Chart name" required>
+      </div>
+      <div class="field">
+        <label>PST (e.g. 7.8, -1)</label>
+        <input class="input" name="rating_pst" value="-1" required>
+      </div>
+      <div class="field">
+        <label>PRS (e.g. 9.4, -1)</label>
+        <input class="input" name="rating_prs" value="-1" required>
+      </div>
+      <div class="field">
+        <label>FTR (e.g. 10.7, -1)</label>
+        <input class="input" name="rating_ftr" value="-1" required>
+      </div>
+      <div class="field">
+        <label>BYD (e.g. 11.1, -1)</label>
+        <input class="input" name="rating_byd" value="-1" required>
+      </div>
+      <div class="field">
+        <label>ETR (e.g. 10.5, -1)</label>
+        <input class="input" name="rating_etr" value="-1" required>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" type="submit">提交新增</button>
+        <button class="btn" type="button" data-sheet-close>取消</button>
+      </div>
+    </form>
+  </article>
+</div>
+
+<script>
+(() => {
+  const sheet = document.getElementById("song-add-sheet");
+  const openButton = document.getElementById("open-song-add-sheet");
+  const closeButtons = document.querySelectorAll("[data-sheet-close]");
+
+  openButton?.addEventListener("click", () => {
+    sheet?.classList.add("open");
+  });
+  closeButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      sheet?.classList.remove("open");
+    });
+  });
+  sheet?.addEventListener("click", (event) => {
+    if (event.target === sheet) {
+      sheet.classList.remove("open");
+    }
+  });
+
+  document.querySelectorAll("tr[data-song-row]").forEach((row) => {
+    const editButton = row.querySelector("[data-edit-save]");
+    const fields = row.querySelectorAll("[data-editable]");
+    const updateFormId = editButton?.getAttribute("data-update-form");
+    const updateForm = updateFormId ? document.getElementById(updateFormId) : null;
+    const syncRowValues = () => {
+      if (!updateForm) {
+        return;
+      }
+      fields.forEach((field) => {
+        const key = field.getAttribute("name");
+        if (!key) {
+          return;
+        }
+        let hidden = updateForm.querySelector(`input[type="hidden"][name="${key}"]`);
+        if (!hidden) {
+          hidden = document.createElement("input");
+          hidden.type = "hidden";
+          hidden.name = key;
+          updateForm.appendChild(hidden);
+        }
+        hidden.value = field.value;
+      });
+    };
+
+    editButton?.addEventListener("click", () => {
+      const isEditing = row.classList.contains("row-editing");
+      if (!isEditing) {
+        row.classList.add("row-editing");
+        fields.forEach((field) => {
+          field.removeAttribute("disabled");
+        });
+        editButton.textContent = "保存";
+        editButton.classList.add("btn-primary");
+        const firstField = row.querySelector("[data-editable]");
+        firstField?.focus();
+        return;
+      }
+
+      if (updateForm) {
+        syncRowValues();
+        if (typeof updateForm.requestSubmit === "function") {
+          updateForm.requestSubmit();
+        } else {
+          updateForm.submit();
+        }
+      }
+    });
+
+    const deleteButton = row.querySelector("[data-delete-form]");
+    deleteButton?.addEventListener("click", () => {
+      const deleteFormId = deleteButton.getAttribute("data-delete-form");
+      const songId = deleteButton.getAttribute("data-song-id") || "";
+      const deleteForm = deleteFormId ? document.getElementById(deleteFormId) : null;
+      if (!deleteForm) {
+        return;
+      }
+      if (window.confirm(`确认删除 ${songId} ?`)) {
+        if (typeof deleteForm.requestSubmit === "function") {
+          deleteForm.requestSubmit();
+        } else {
+          deleteForm.submit();
+        }
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

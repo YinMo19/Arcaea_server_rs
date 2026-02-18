@@ -11,6 +11,7 @@ use sqlx::FromRow;
 use std::collections::HashMap;
 
 use crate::config::CONFIG;
+use crate::service::OperationManager;
 use crate::DbPool;
 
 const ADMIN_COOKIE: &str = "arcaea_admin_session";
@@ -112,6 +113,24 @@ struct UserPttView {
     last_rating: String,
 }
 
+#[derive(Debug, Clone, Default)]
+struct SongRowView {
+    song_id: String,
+    name_en: String,
+    rating_pst: String,
+    rating_prs: String,
+    rating_ftr: String,
+    rating_byd: String,
+    rating_etr: String,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ItemRowView {
+    item_id: String,
+    item_type: String,
+    is_available: i32,
+}
+
 #[derive(Template)]
 #[template(path = "admin/login.html")]
 struct AdminLoginTemplate {
@@ -122,6 +141,8 @@ struct AdminLoginTemplate {
 #[template(path = "admin/dashboard.html")]
 struct AdminDashboardTemplate {
     active_nav: &'static str,
+    flash_kind: String,
+    flash_message: String,
     online_users: i64,
     online_growth: f64,
     score_submits: i64,
@@ -156,6 +177,26 @@ struct AdminSimpleTableTemplate {
     headers: Vec<String>,
     rows: Vec<Vec<String>>,
     empty_text: String,
+}
+
+#[derive(Template)]
+#[template(path = "admin/allsong.html")]
+struct AdminAllSongTemplate {
+    active_nav: &'static str,
+    query: String,
+    flash_kind: String,
+    flash_message: String,
+    songs: Vec<SongRowView>,
+}
+
+#[derive(Template)]
+#[template(path = "admin/allitem.html")]
+struct AdminAllItemTemplate {
+    active_nav: &'static str,
+    query: String,
+    flash_kind: String,
+    flash_message: String,
+    items: Vec<ItemRowView>,
 }
 
 #[derive(Template)]
@@ -226,6 +267,42 @@ pub struct ChartTopForm {
     pub sid: Option<String>,
     pub difficulty: Option<i32>,
     pub limit: Option<i32>,
+}
+
+#[derive(FromForm)]
+pub struct SongCrudForm {
+    pub sid: String,
+    pub name_en: String,
+    pub rating_pst: String,
+    pub rating_prs: String,
+    pub rating_ftr: String,
+    pub rating_byd: String,
+    pub rating_etr: String,
+}
+
+#[derive(FromForm)]
+pub struct SongDeleteForm {
+    pub sid: String,
+}
+
+#[derive(FromForm)]
+pub struct ItemAddForm {
+    pub item_id: String,
+    pub item_type: String,
+    pub is_available: Option<i32>,
+}
+
+#[derive(FromForm)]
+pub struct ItemUpdateForm {
+    pub item_id: String,
+    pub item_type: String,
+    pub is_available: Option<i32>,
+}
+
+#[derive(FromForm)]
+pub struct ItemDeleteForm {
+    pub item_id: String,
+    pub item_type: String,
 }
 
 #[derive(FromRow)]
@@ -437,13 +514,6 @@ fn format_timestamp(ts: Option<i64>) -> String {
         .unwrap_or_else(|| "-".to_string())
 }
 
-fn format_rating_tenths(value: Option<i32>) -> String {
-    match value {
-        Some(v) if v >= 0 => format!("{:.1}", v as f64 / 10.0),
-        _ => "-".to_string(),
-    }
-}
-
 fn format_ptt_hundredths(value: Option<i32>) -> String {
     match value {
         Some(v) if v >= 0 => format!("{:.2}", v as f64 / 100.0),
@@ -455,6 +525,71 @@ fn format_rating(value: Option<f64>) -> String {
     match value {
         Some(v) => format!("{v:.4}"),
         None => "-".to_string(),
+    }
+}
+
+fn format_rating_input_tenths(value: Option<i32>) -> String {
+    match value {
+        Some(v) if v >= 0 => format!("{:.1}", v as f64 / 10.0),
+        _ => "-1".to_string(),
+    }
+}
+
+fn normalize_chart_text(raw: &str, field: &str) -> Result<String, String> {
+    let value = raw.trim();
+    if value.is_empty() {
+        return Err(format!("{field} 不能为空"));
+    }
+
+    let truncated: String = value.chars().take(200).collect();
+    Ok(truncated)
+}
+
+fn parse_rating_input_tenths(raw: &str, field: &str) -> Result<i32, String> {
+    let value = raw.trim();
+    if value.is_empty() {
+        return Err(format!("{field} 不能为空"));
+    }
+
+    let parsed = value
+        .parse::<f64>()
+        .map_err(|_| format!("{field} 必须是数字"))?;
+    if !parsed.is_finite() {
+        return Err(format!("{field} 非法"));
+    }
+    if parsed < 0.0 {
+        return Ok(-1);
+    }
+
+    let tenths = (parsed * 10.0) as i32;
+    Ok(tenths)
+}
+
+fn chart_db_row_to_song_view(row: ChartDbRow) -> SongRowView {
+    SongRowView {
+        song_id: row.song_id,
+        name_en: row.name.unwrap_or_default(),
+        rating_pst: format_rating_input_tenths(row.rating_pst),
+        rating_prs: format_rating_input_tenths(row.rating_prs),
+        rating_ftr: format_rating_input_tenths(row.rating_ftr),
+        rating_byd: format_rating_input_tenths(row.rating_byn),
+        rating_etr: format_rating_input_tenths(row.rating_etr),
+    }
+}
+
+fn normalize_item_available(value: Option<i32>) -> i32 {
+    if value.unwrap_or(0) != 0 {
+        1
+    } else {
+        0
+    }
+}
+
+fn item_db_row_to_item_view(row: ItemDbRow) -> ItemRowView {
+    ItemRowView {
+        item_id: row.item_id,
+        item_type: row.r#type,
+        is_available: normalize_item_available(row.is_available.map(i32::from)),
     }
 }
 
@@ -497,7 +632,7 @@ fn require_admin(cookies: &CookieJar<'_>) -> Result<(), Redirect> {
 
 #[get("/static/admin.css")]
 pub fn admin_css() -> RawCss<&'static str> {
-    RawCss(include_str!("../admin_static/admin.css"))
+    RawCss(include_str!("../../templates/admin/admin.css"))
 }
 
 #[get("/login")]
@@ -544,6 +679,7 @@ pub fn admin_logout_get(cookies: &CookieJar<'_>) -> Flash<Redirect> {
 pub async fn admin_dashboard(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
+    flash: Option<FlashMessage<'_>>,
 ) -> Result<RawHtml<String>, Redirect> {
     require_admin(cookies)?;
 
@@ -620,8 +756,14 @@ pub async fn admin_dashboard(
             .collect()
     };
 
+    let (flash_kind, flash_message) = flash
+        .map(|msg| (msg.kind().to_string(), msg.message().to_string()))
+        .unwrap_or_else(|| ("".to_string(), "".to_string()));
+
     let template = AdminDashboardTemplate {
         active_nav: "dashboard",
+        flash_kind,
+        flash_message,
         online_users,
         online_growth,
         score_submits,
@@ -635,11 +777,62 @@ pub async fn admin_dashboard(
 }
 
 #[get("/index")]
-pub async fn admin_dashboard_index(
-    pool: &State<DbPool>,
+pub fn admin_dashboard_index() -> Redirect {
+    Redirect::to("/web")
+}
+
+#[post("/updatedatabase/refreshsonghash")]
+pub async fn admin_refresh_song_hash_post(
+    operation_manager: &State<OperationManager>,
     cookies: &CookieJar<'_>,
-) -> Result<RawHtml<String>, Redirect> {
-    admin_dashboard(pool, cookies).await
+) -> Flash<Redirect> {
+    if !is_admin_logged_in(cookies) {
+        return Flash::error(Redirect::to("/web/login"), "请先登录");
+    }
+
+    match operation_manager
+        .execute_operation("refresh_song_file_cache", None)
+        .await
+    {
+        Ok(_) => Flash::success(Redirect::to("/web"), "Song Hash 刷新成功"),
+        Err(err) => Flash::error(Redirect::to("/web"), format!("Song Hash 刷新失败: {err}")),
+    }
+}
+
+#[post("/updatedatabase/refreshsbundle")]
+pub async fn admin_refresh_bundle_post(
+    operation_manager: &State<OperationManager>,
+    cookies: &CookieJar<'_>,
+) -> Flash<Redirect> {
+    if !is_admin_logged_in(cookies) {
+        return Flash::error(Redirect::to("/web/login"), "请先登录");
+    }
+
+    match operation_manager
+        .execute_operation("refresh_content_bundle_cache", None)
+        .await
+    {
+        Ok(_) => Flash::success(Redirect::to("/web"), "Bundle 刷新成功"),
+        Err(err) => Flash::error(Redirect::to("/web"), format!("Bundle 刷新失败: {err}")),
+    }
+}
+
+#[post("/updatedatabase/refreshsongrating")]
+pub async fn admin_refresh_song_rating_post(
+    operation_manager: &State<OperationManager>,
+    cookies: &CookieJar<'_>,
+) -> Flash<Redirect> {
+    if !is_admin_logged_in(cookies) {
+        return Flash::error(Redirect::to("/web/login"), "请先登录");
+    }
+
+    match operation_manager
+        .execute_operation("refresh_all_score_rating", None)
+        .await
+    {
+        Ok(_) => Flash::success(Redirect::to("/web"), "Rating 全量重算完成"),
+        Err(err) => Flash::error(Redirect::to("/web"), format!("Rating 重算失败: {err}")),
+    }
 }
 
 #[get("/users?<q>&<status>")]
@@ -811,56 +1004,236 @@ pub async fn admin_user_detail_get(
     Ok(render_template(&template))
 }
 
-#[get("/allsong")]
+#[get("/allsong?<q>")]
 pub async fn admin_allsong_get(
+    q: Option<&str>,
+    flash: Option<FlashMessage<'_>>,
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> Result<RawHtml<String>, Redirect> {
     require_admin(cookies)?;
 
-    let db_rows = sqlx::query_as!(
-        ChartDbRow,
-        "SELECT song_id, name, rating_pst, rating_prs, rating_ftr, rating_byn, rating_etr
-         FROM chart
-         ORDER BY song_id ASC",
-    )
-    .fetch_all(pool.inner())
-    .await
-    .unwrap_or_default();
+    let query = clean_query_value(q).unwrap_or_default();
 
-    let rows = db_rows
-        .into_iter()
-        .map(|x| {
-            vec![
-                x.song_id,
-                x.name.unwrap_or_default(),
-                format_rating_tenths(x.rating_pst),
-                format_rating_tenths(x.rating_prs),
-                format_rating_tenths(x.rating_ftr),
-                format_rating_tenths(x.rating_byn),
-                format_rating_tenths(x.rating_etr),
-            ]
-        })
-        .collect();
+    let db_rows = if query.is_empty() {
+        sqlx::query_as!(
+            ChartDbRow,
+            "SELECT song_id, name, rating_pst, rating_prs, rating_ftr, rating_byn, rating_etr
+             FROM chart
+             ORDER BY song_id ASC"
+        )
+        .fetch_all(pool.inner())
+        .await
+        .unwrap_or_default()
+    } else {
+        let like = format!("%{query}%");
+        sqlx::query_as!(
+            ChartDbRow,
+            "SELECT song_id, name, rating_pst, rating_prs, rating_ftr, rating_byn, rating_etr
+             FROM chart
+             WHERE song_id LIKE ? OR name LIKE ?
+             ORDER BY song_id ASC",
+            like,
+            like
+        )
+        .fetch_all(pool.inner())
+        .await
+        .unwrap_or_default()
+    };
 
-    let template = AdminSimpleTableTemplate {
+    let songs = db_rows.into_iter().map(chart_db_row_to_song_view).collect();
+
+    let (flash_kind, flash_message) = flash
+        .map(|msg| (msg.kind().to_string(), msg.message().to_string()))
+        .unwrap_or_else(|| ("".to_string(), "".to_string()));
+
+    let template = AdminAllSongTemplate {
         active_nav: "scores",
-        page_title: "全部歌曲".to_string(),
-        page_subtitle: "对应 Python: /web/allsong".to_string(),
-        headers: vec![
-            "song_id".to_string(),
-            "name".to_string(),
-            "PST".to_string(),
-            "PRS".to_string(),
-            "FTR".to_string(),
-            "BYD".to_string(),
-            "ETR".to_string(),
-        ],
-        rows,
-        empty_text: "没有谱面数据".to_string(),
+        query,
+        flash_kind,
+        flash_message,
+        songs,
     };
 
     Ok(render_template(&template))
+}
+
+#[get("/changesong")]
+pub async fn admin_changesong_get(cookies: &CookieJar<'_>) -> Result<Redirect, Redirect> {
+    require_admin(cookies)?;
+    Ok(Redirect::to("/web/allsong"))
+}
+
+#[post("/changesong/addsong", data = "<form>")]
+pub async fn admin_changesong_add_post(
+    form: Form<SongCrudForm>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> Flash<Redirect> {
+    if !is_admin_logged_in(cookies) {
+        return Flash::error(Redirect::to("/web/login"), "请先登录");
+    }
+
+    let sid = match normalize_chart_text(&form.sid, "song_id") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allsong"), msg),
+    };
+    let name_en = match normalize_chart_text(&form.name_en, "name_en") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allsong"), msg),
+    };
+
+    let rating_pst = match parse_rating_input_tenths(&form.rating_pst, "rating_pst") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allsong"), msg),
+    };
+    let rating_prs = match parse_rating_input_tenths(&form.rating_prs, "rating_prs") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allsong"), msg),
+    };
+    let rating_ftr = match parse_rating_input_tenths(&form.rating_ftr, "rating_ftr") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allsong"), msg),
+    };
+    let rating_byd = match parse_rating_input_tenths(&form.rating_byd, "rating_byd") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allsong"), msg),
+    };
+    let rating_etr = match parse_rating_input_tenths(&form.rating_etr, "rating_etr") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allsong"), msg),
+    };
+
+    let exists = match sqlx::query_scalar!(
+        "SELECT COUNT(*) as `count!: i64` FROM chart WHERE song_id = ?",
+        sid
+    )
+    .fetch_one(pool.inner())
+    .await
+    {
+        Ok(value) => value,
+        Err(err) => return Flash::error(Redirect::to("/web/allsong"), format!("查询失败: {err}")),
+    };
+
+    if exists > 0 {
+        return Flash::error(Redirect::to("/web/allsong"), "歌曲已存在");
+    }
+
+    let insert = sqlx::query!(
+        "INSERT INTO chart (song_id, name, rating_pst, rating_prs, rating_ftr, rating_byn, rating_etr)
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
+        sid,
+        name_en,
+        rating_pst,
+        rating_prs,
+        rating_ftr,
+        rating_byd,
+        rating_etr
+    )
+    .execute(pool.inner())
+    .await;
+
+    match insert {
+        Ok(_) => Flash::success(Redirect::to("/web/allsong"), "歌曲新增成功"),
+        Err(err) => Flash::error(Redirect::to("/web/allsong"), format!("新增失败: {err}")),
+    }
+}
+
+#[post("/changesong/updatesong", data = "<form>")]
+pub async fn admin_changesong_update_post(
+    form: Form<SongCrudForm>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> Flash<Redirect> {
+    if !is_admin_logged_in(cookies) {
+        return Flash::error(Redirect::to("/web/login"), "请先登录");
+    }
+
+    let sid = match normalize_chart_text(&form.sid, "song_id") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allsong"), msg),
+    };
+    let name_en = match normalize_chart_text(&form.name_en, "name_en") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allsong"), msg),
+    };
+
+    let rating_pst = match parse_rating_input_tenths(&form.rating_pst, "rating_pst") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allsong"), msg),
+    };
+    let rating_prs = match parse_rating_input_tenths(&form.rating_prs, "rating_prs") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allsong"), msg),
+    };
+    let rating_ftr = match parse_rating_input_tenths(&form.rating_ftr, "rating_ftr") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allsong"), msg),
+    };
+    let rating_byd = match parse_rating_input_tenths(&form.rating_byd, "rating_byd") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allsong"), msg),
+    };
+    let rating_etr = match parse_rating_input_tenths(&form.rating_etr, "rating_etr") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allsong"), msg),
+    };
+
+    let update = sqlx::query!(
+        "UPDATE chart
+         SET name = ?,
+             rating_pst = ?,
+             rating_prs = ?,
+             rating_ftr = ?,
+             rating_byn = ?,
+             rating_etr = ?
+         WHERE song_id = ?",
+        name_en,
+        rating_pst,
+        rating_prs,
+        rating_ftr,
+        rating_byd,
+        rating_etr,
+        sid
+    )
+    .execute(pool.inner())
+    .await;
+
+    match update {
+        Ok(done) if done.rows_affected() > 0 => {
+            Flash::success(Redirect::to("/web/allsong"), "歌曲更新成功")
+        }
+        Ok(_) => Flash::error(Redirect::to("/web/allsong"), "歌曲不存在"),
+        Err(err) => Flash::error(Redirect::to("/web/allsong"), format!("更新失败: {err}")),
+    }
+}
+
+#[post("/changesong/deletesong", data = "<form>")]
+pub async fn admin_changesong_delete_post(
+    form: Form<SongDeleteForm>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> Flash<Redirect> {
+    if !is_admin_logged_in(cookies) {
+        return Flash::error(Redirect::to("/web/login"), "请先登录");
+    }
+
+    let sid = match normalize_chart_text(&form.sid, "song_id") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allsong"), msg),
+    };
+
+    let delete = sqlx::query!("DELETE FROM chart WHERE song_id = ?", sid)
+        .execute(pool.inner())
+        .await;
+
+    match delete {
+        Ok(done) if done.rows_affected() > 0 => {
+            Flash::success(Redirect::to("/web/allsong"), "歌曲删除成功")
+        }
+        Ok(_) => Flash::error(Redirect::to("/web/allsong"), "歌曲不存在"),
+        Err(err) => Flash::error(Redirect::to("/web/allsong"), format!("删除失败: {err}")),
+    }
 }
 
 #[get("/singleplayer")]
@@ -1450,50 +1823,197 @@ pub async fn admin_allchar_get(
     Ok(render_template(&template))
 }
 
-#[get("/allitem")]
+#[get("/allitem?<q>")]
 pub async fn admin_allitem_get(
+    q: Option<&str>,
+    flash: Option<FlashMessage<'_>>,
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> Result<RawHtml<String>, Redirect> {
     require_admin(cookies)?;
 
-    let db_rows = sqlx::query_as!(
-        ItemDbRow,
-        "SELECT item_id, type, is_available FROM item ORDER BY type, item_id",
-    )
-    .fetch_all(pool.inner())
-    .await
-    .unwrap_or_default();
+    let query = clean_query_value(q).unwrap_or_default();
 
-    let rows = db_rows
-        .into_iter()
-        .map(|x| {
-            vec![
-                x.item_id,
-                x.r#type,
-                if x.is_available.unwrap_or(0) != 0 {
-                    "true".to_string()
-                } else {
-                    "false".to_string()
-                },
-            ]
-        })
-        .collect();
+    let db_rows = if query.is_empty() {
+        sqlx::query_as!(
+            ItemDbRow,
+            "SELECT item_id, type, is_available
+             FROM item
+             ORDER BY type, item_id",
+        )
+        .fetch_all(pool.inner())
+        .await
+        .unwrap_or_default()
+    } else {
+        let like = format!("%{query}%");
+        sqlx::query_as!(
+            ItemDbRow,
+            "SELECT item_id, type, is_available
+             FROM item
+             WHERE item_id LIKE ? OR type LIKE ?
+             ORDER BY type, item_id",
+            like,
+            like
+        )
+        .fetch_all(pool.inner())
+        .await
+        .unwrap_or_default()
+    };
 
-    let template = AdminSimpleTableTemplate {
+    let items = db_rows.into_iter().map(item_db_row_to_item_view).collect();
+
+    let (flash_kind, flash_message) = flash
+        .map(|msg| (msg.kind().to_string(), msg.message().to_string()))
+        .unwrap_or_else(|| ("".to_string(), "".to_string()));
+
+    let template = AdminAllItemTemplate {
         active_nav: "items",
-        page_title: "全部物品".to_string(),
-        page_subtitle: "对应 Python: /web/allitem".to_string(),
-        headers: vec![
-            "item_id".to_string(),
-            "type".to_string(),
-            "is_available".to_string(),
-        ],
-        rows,
-        empty_text: "没有物品数据".to_string(),
+        query,
+        flash_kind,
+        flash_message,
+        items,
     };
 
     Ok(render_template(&template))
+}
+
+#[get("/changeitem")]
+pub async fn admin_changeitem_get(cookies: &CookieJar<'_>) -> Result<Redirect, Redirect> {
+    require_admin(cookies)?;
+    Ok(Redirect::to("/web/allitem"))
+}
+
+#[post("/changeitem/add", data = "<form>")]
+pub async fn admin_changeitem_add_post(
+    form: Form<ItemAddForm>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> Flash<Redirect> {
+    if !is_admin_logged_in(cookies) {
+        return Flash::error(Redirect::to("/web/login"), "请先登录");
+    }
+
+    let item_id = match normalize_chart_text(&form.item_id, "item_id") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allitem"), msg),
+    };
+    let item_type = match normalize_chart_text(&form.item_type, "type") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allitem"), msg),
+    };
+    let is_available = normalize_item_available(form.is_available);
+
+    let exists = match sqlx::query_scalar!(
+        "SELECT COUNT(*) as `count!: i64`
+         FROM item
+         WHERE item_id = ? AND type = ?",
+        item_id,
+        item_type
+    )
+    .fetch_one(pool.inner())
+    .await
+    {
+        Ok(value) => value,
+        Err(err) => {
+            return Flash::error(Redirect::to("/web/allitem"), format!("查询失败: {err}"));
+        }
+    };
+
+    if exists > 0 {
+        return Flash::error(Redirect::to("/web/allitem"), "物品已存在");
+    }
+
+    let insert = sqlx::query!(
+        "INSERT INTO item (item_id, type, is_available)
+         VALUES (?, ?, ?)",
+        item_id,
+        item_type,
+        is_available
+    )
+    .execute(pool.inner())
+    .await;
+
+    match insert {
+        Ok(_) => Flash::success(Redirect::to("/web/allitem"), "物品新增成功"),
+        Err(err) => Flash::error(Redirect::to("/web/allitem"), format!("新增失败: {err}")),
+    }
+}
+
+#[post("/changeitem/update", data = "<form>")]
+pub async fn admin_changeitem_update_post(
+    form: Form<ItemUpdateForm>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> Flash<Redirect> {
+    if !is_admin_logged_in(cookies) {
+        return Flash::error(Redirect::to("/web/login"), "请先登录");
+    }
+
+    let item_id = match normalize_chart_text(&form.item_id, "item_id") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allitem"), msg),
+    };
+    let item_type = match normalize_chart_text(&form.item_type, "type") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allitem"), msg),
+    };
+    let is_available = normalize_item_available(form.is_available);
+
+    let update = sqlx::query!(
+        "UPDATE item
+         SET is_available = ?
+         WHERE item_id = ? AND type = ?",
+        is_available,
+        item_id,
+        item_type
+    )
+    .execute(pool.inner())
+    .await;
+
+    match update {
+        Ok(done) if done.rows_affected() > 0 => {
+            Flash::success(Redirect::to("/web/allitem"), "物品更新成功")
+        }
+        Ok(_) => Flash::error(Redirect::to("/web/allitem"), "物品不存在"),
+        Err(err) => Flash::error(Redirect::to("/web/allitem"), format!("更新失败: {err}")),
+    }
+}
+
+#[post("/changeitem/delete", data = "<form>")]
+pub async fn admin_changeitem_delete_post(
+    form: Form<ItemDeleteForm>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> Flash<Redirect> {
+    if !is_admin_logged_in(cookies) {
+        return Flash::error(Redirect::to("/web/login"), "请先登录");
+    }
+
+    let item_id = match normalize_chart_text(&form.item_id, "item_id") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allitem"), msg),
+    };
+    let item_type = match normalize_chart_text(&form.item_type, "type") {
+        Ok(value) => value,
+        Err(msg) => return Flash::error(Redirect::to("/web/allitem"), msg),
+    };
+
+    let delete = sqlx::query!(
+        "DELETE FROM item
+         WHERE item_id = ? AND type = ?",
+        item_id,
+        item_type
+    )
+    .execute(pool.inner())
+    .await;
+
+    match delete {
+        Ok(done) if done.rows_affected() > 0 => {
+            Flash::success(Redirect::to("/web/allitem"), "物品删除成功")
+        }
+        Ok(_) => Flash::error(Redirect::to("/web/allitem"), "物品不存在"),
+        Err(err) => Flash::error(Redirect::to("/web/allitem"), format!("删除失败: {err}")),
+    }
 }
 
 #[get("/allpurchase")]
@@ -1851,9 +2371,16 @@ pub fn routes() -> Vec<Route> {
         admin_logout_get,
         admin_dashboard,
         admin_dashboard_index,
+        admin_refresh_song_hash_post,
+        admin_refresh_bundle_post,
+        admin_refresh_song_rating_post,
         admin_users_get,
         admin_allplayer_get,
         admin_allsong_get,
+        admin_changesong_get,
+        admin_changesong_add_post,
+        admin_changesong_update_post,
+        admin_changesong_delete_post,
         admin_singleplayer_get,
         admin_singleplayer_post,
         admin_singleplayerptt_get,
@@ -1862,6 +2389,10 @@ pub fn routes() -> Vec<Route> {
         admin_singlecharttop_post,
         admin_allchar_get,
         admin_allitem_get,
+        admin_changeitem_get,
+        admin_changeitem_add_post,
+        admin_changeitem_update_post,
+        admin_changeitem_delete_post,
         admin_allpurchase_get,
         admin_allpresent_get,
         admin_allredeem_get,

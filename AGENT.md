@@ -72,12 +72,14 @@
    - `sqlx::query!`
    - `sqlx::query_as!`
    - `sqlx::query_scalar!`
-2. 禁止在静态 SQL 中使用 function 版本（例如 `sqlx::query(...)` / `sqlx::query_as(...)` / `sqlx::query_scalar(...)`）。
-3. 仅在以下情况可保留动态 SQL（宏无法使用，SQL 文本必须运行时生成）：
+2. 若只是函数内部中间结果，且无明确类型需求或 `query_as!` 并不会更简洁，优先使用 `sqlx::query!`（`Record` 自动类型映射），避免频繁新增一次性 struct。
+3. 仅在需要稳定命名类型时使用 `sqlx::query_as!`（例如跨函数传递、对外返回模型、或同一结果结构多处复用）。
+4. 禁止在静态 SQL 中使用 function 版本（例如 `sqlx::query(...)` / `sqlx::query_as(...)` / `sqlx::query_scalar(...)`）。
+5. 仅在以下情况可保留动态 SQL（宏无法使用，SQL 文本必须运行时生成）：
    - 动态 IN 占位符个数
    - 动态表名/列名（且无法轻易枚举分支）
-4. 能改成分支宏就不要保留动态 SQL。
-5. 任何 SQL 改动后必须：
+6. 能改成分支宏就不要保留动态 SQL。
+7. 任何 SQL 改动后必须：
    - `cargo check`
    - `cargo sqlx prepare`
    - 提交 `.sqlx/` 变更

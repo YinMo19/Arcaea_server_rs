@@ -1,0 +1,47 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT item_id, type, is_available\n             FROM item\n             WHERE item_id LIKE ? OR type LIKE ?\n             ORDER BY type, item_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "type",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "is_available",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 4
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "14c4ceb6ddd3f27c271e4fa8f46127bac52c15a52fd49957c21633e44b9a6480"
+}

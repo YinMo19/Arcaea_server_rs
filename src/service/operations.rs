@@ -157,7 +157,7 @@ impl Operation for RefreshAllScoreRating {
                         -10.0
                     };
 
-                    // Update best_score ratings
+                    // Update best_score ratings and score_v2
                     sqlx::query!(
                         "UPDATE best_score
                          SET rating = GREATEST(
@@ -167,8 +167,37 @@ impl Operation for RefreshAllScoreRating {
                                  ELSE GREATEST(? + (score - 9500000) * 5.0 / 1500000.0, 0.0)
                              END,
                              0.0
-                         )
+                         ),
+                             score_v2 = CASE
+                                 WHEN ? <= 0.0 THEN 0.0
+                                 WHEN (COALESCE(perfect_count, 0) + COALESCE(near_count, 0) + COALESCE(miss_count, 0)) <= 0 THEN 0.0
+                                 ELSE ? * (
+                                     LEAST(
+                                         GREATEST(
+                                             COALESCE(shiny_perfect_count, 0) * 1.0
+                                             / NULLIF(COALESCE(perfect_count, 0) + COALESCE(near_count, 0) + COALESCE(miss_count, 0), 0)
+                                             - 0.9,
+                                             0.0
+                                         ),
+                                         0.095
+                                     ) / 9.5 * 25.0
+                                     +
+                                     LEAST(
+                                         GREATEST(
+                                             (
+                                                 (COALESCE(perfect_count, 0) + COALESCE(near_count, 0) / 2.0) * 1.0
+                                                 / NULLIF(COALESCE(perfect_count, 0) + COALESCE(near_count, 0) + COALESCE(miss_count, 0), 0)
+                                                 + COALESCE(shiny_perfect_count, 0) / 10000000.0
+                                             ) - 0.99,
+                                             0.0
+                                         ),
+                                         0.01
+                                     ) * 75.0
+                                 )
+                             END
                          WHERE song_id = ? AND difficulty = ?",
+                        def_rating,
+                        def_rating,
                         def_rating,
                         def_rating,
                         def_rating,

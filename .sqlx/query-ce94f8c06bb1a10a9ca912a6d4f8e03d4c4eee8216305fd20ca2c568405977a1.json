@@ -1,0 +1,91 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT song_id, name, rating_pst, rating_prs, rating_ftr, rating_byn, rating_etr\n             FROM chart\n             ORDER BY song_id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "song_id",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "char_set": 224,
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "rating_pst",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "rating_prs",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "rating_ftr",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "rating_byn",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "rating_etr",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "ce94f8c06bb1a10a9ca912a6d4f8e03d4c4eee8216305fd20ca2c568405977a1"
+}

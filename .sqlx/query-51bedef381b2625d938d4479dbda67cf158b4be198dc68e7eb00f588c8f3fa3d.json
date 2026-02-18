@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT song_id, name, rating_pst, rating_prs, rating_ftr, rating_byn, rating_etr\n         FROM chart\n         ORDER BY song_id ASC",
+  "query": "SELECT song_id, name, rating_pst, rating_prs, rating_ftr, rating_byn, rating_etr\n             FROM chart\n             WHERE song_id LIKE ? OR name LIKE ?\n             ORDER BY song_id ASC",
   "describe": {
     "columns": [
       {
@@ -75,7 +75,7 @@
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 2
     },
     "nullable": [
       false,
@@ -87,5 +87,5 @@
       true
     ]
   },
-  "hash": "e88ef6ab27477754b47bbdb172879047e17d3dacf9d0fa49a9d8b9e446379cd4"
+  "hash": "51bedef381b2625d938d4479dbda67cf158b4be198dc68e7eb00f588c8f3fa3d"
 }

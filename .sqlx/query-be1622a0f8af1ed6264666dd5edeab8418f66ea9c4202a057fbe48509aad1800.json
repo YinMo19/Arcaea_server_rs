@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT item_id, type, is_available FROM item ORDER BY type, item_id",
+  "query": "SELECT item_id, type, is_available\n             FROM item\n             ORDER BY type, item_id",
   "describe": {
     "columns": [
       {
@@ -43,5 +43,5 @@
       true
     ]
   },
-  "hash": "2fb855895fa4c3dc2a5b783e7aef3e6186d97dbd97d35311c2af29d0be148655"
+  "hash": "be1622a0f8af1ed6264666dd5edeab8418f66ea9c4202a057fbe48509aad1800"
 }

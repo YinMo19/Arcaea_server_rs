@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT COUNT(*) as `count!: i64`\n         FROM item\n         WHERE item_id = ? AND type = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!: i64",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "char_set": 63,
+          "max_size": 21
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f194518ddd01973a3191c9a6758482aba1b4c2a7bcb96e729e0055d61cb1dfdc"
+}

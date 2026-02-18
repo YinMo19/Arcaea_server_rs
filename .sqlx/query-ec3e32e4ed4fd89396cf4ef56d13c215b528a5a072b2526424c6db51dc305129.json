@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE chart\n         SET name = ?,\n             rating_pst = ?,\n             rating_prs = ?,\n             rating_ftr = ?,\n             rating_byn = ?,\n             rating_etr = ?\n         WHERE song_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "ec3e32e4ed4fd89396cf4ef56d13c215b528a5a072b2526424c6db51dc305129"
+}

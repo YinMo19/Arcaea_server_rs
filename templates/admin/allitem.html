@@ -1,0 +1,202 @@
+{% extends "admin/base.html" %}
+
+{% block title %}All Item{% endblock %}
+{% block page_title %}物品管理{% endblock %}
+{% block page_subtitle %}同页完成查询、行内编辑、删除与新增（sheet）{% endblock %}
+
+{% block content %}
+{% if flash_message != "" %}
+<article class="card section">
+  {% if flash_kind == "error" %}
+  <span class="tag tag-danger">{{ flash_message }}</span>
+  {% else %}
+  <span class="tag tag-ok">{{ flash_message }}</span>
+  {% endif %}
+</article>
+{% endif %}
+
+<article class="card section">
+  <div class="section-head">
+    <h3>物品列表</h3>
+    <button class="btn btn-primary" id="open-item-add-sheet" type="button">新增物品</button>
+  </div>
+
+  <form class="toolbar" method="get" action="/web/allitem">
+    <input class="input" name="q" placeholder="按 item_id / type 模糊搜索" value="{{ query }}">
+    <button class="btn" type="submit">查询</button>
+    <a class="btn" href="/web/allitem">重置</a>
+  </form>
+
+  <div class="table-wrap">
+    <table class="item-table">
+      <colgroup>
+        <col class="col-item-id">
+        <col class="col-item-type">
+        <col class="col-item-available">
+        <col class="col-item-actions">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>item_id</th>
+          <th>type</th>
+          <th>is_available</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if items.len() == 0 %}
+        <tr>
+          <td class="muted" colspan="4">暂无物品数据</td>
+        </tr>
+        {% else %}
+        {% for item in items %}
+        <tr data-item-row>
+          <td>{{ item.item_id }}</td>
+          <td>{{ item.item_type }}</td>
+          <td>
+            <select class="select row-select" name="is_available" data-editable disabled>
+              <option value="1" {% if item.is_available == 1 %}selected{% endif %}>true</option>
+              <option value="0" {% if item.is_available == 0 %}selected{% endif %}>false</option>
+            </select>
+          </td>
+          <td>
+            <form id="item-update-{{ loop.index }}" method="post" action="/web/changeitem/update">
+              <input type="hidden" name="item_id" value="{{ item.item_id }}">
+              <input type="hidden" name="item_type" value="{{ item.item_type }}">
+            </form>
+            <form id="item-delete-{{ loop.index }}" method="post" action="/web/changeitem/delete">
+              <input type="hidden" name="item_id" value="{{ item.item_id }}">
+              <input type="hidden" name="item_type" value="{{ item.item_type }}">
+            </form>
+            <div class="table-actions">
+              <button class="btn btn-xs" type="button" data-edit-save data-update-form="item-update-{{ loop.index }}">编辑</button>
+              <button class="btn btn-danger btn-xs" type="button" data-delete-form="item-delete-{{ loop.index }}" data-item-id="{{ item.item_id }}" data-item-type="{{ item.item_type }}">删除</button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</article>
+
+<div class="sheet-backdrop" id="item-add-sheet">
+  <article class="sheet-panel">
+    <div class="sheet-head">
+      <h3>新增物品</h3>
+      <button class="btn" type="button" data-sheet-close>关闭</button>
+    </div>
+    <form method="post" action="/web/changeitem/add" class="form-grid">
+      <div class="field">
+        <label>Item ID</label>
+        <input class="input" name="item_id" placeholder="eg. memory" required>
+      </div>
+      <div class="field">
+        <label>Type</label>
+        <input class="input" name="item_type" placeholder="eg. single / pack / core" required>
+      </div>
+      <div class="field">
+        <label>is_available</label>
+        <select class="select" name="is_available">
+          <option value="1" selected>true</option>
+          <option value="0">false</option>
+        </select>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" type="submit">提交新增</button>
+        <button class="btn" type="button" data-sheet-close>取消</button>
+      </div>
+    </form>
+  </article>
+</div>
+
+<script>
+(() => {
+  const sheet = document.getElementById("item-add-sheet");
+  const openButton = document.getElementById("open-item-add-sheet");
+  const closeButtons = document.querySelectorAll("[data-sheet-close]");
+
+  openButton?.addEventListener("click", () => {
+    sheet?.classList.add("open");
+  });
+  closeButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      sheet?.classList.remove("open");
+    });
+  });
+  sheet?.addEventListener("click", (event) => {
+    if (event.target === sheet) {
+      sheet.classList.remove("open");
+    }
+  });
+
+  document.querySelectorAll("tr[data-item-row]").forEach((row) => {
+    const editButton = row.querySelector("[data-edit-save]");
+    const fields = row.querySelectorAll("[data-editable]");
+    const updateFormId = editButton?.getAttribute("data-update-form");
+    const updateForm = updateFormId ? document.getElementById(updateFormId) : null;
+    const syncRowValues = () => {
+      if (!updateForm) {
+        return;
+      }
+      fields.forEach((field) => {
+        const key = field.getAttribute("name");
+        if (!key) {
+          return;
+        }
+        let hidden = updateForm.querySelector(`input[type="hidden"][name="${key}"]`);
+        if (!hidden) {
+          hidden = document.createElement("input");
+          hidden.type = "hidden";
+          hidden.name = key;
+          updateForm.appendChild(hidden);
+        }
+        hidden.value = field.value;
+      });
+    };
+
+    editButton?.addEventListener("click", () => {
+      const isEditing = row.classList.contains("row-editing");
+      if (!isEditing) {
+        row.classList.add("row-editing");
+        fields.forEach((field) => {
+          field.removeAttribute("disabled");
+        });
+        editButton.textContent = "保存";
+        editButton.classList.add("btn-primary");
+        fields[0]?.focus();
+        return;
+      }
+
+      if (updateForm) {
+        syncRowValues();
+        if (typeof updateForm.requestSubmit === "function") {
+          updateForm.requestSubmit();
+        } else {
+          updateForm.submit();
+        }
+      }
+    });
+
+    const deleteButton = row.querySelector("[data-delete-form]");
+    deleteButton?.addEventListener("click", () => {
+      const deleteFormId = deleteButton.getAttribute("data-delete-form");
+      const itemId = deleteButton.getAttribute("data-item-id") || "";
+      const itemType = deleteButton.getAttribute("data-item-type") || "";
+      const deleteForm = deleteFormId ? document.getElementById(deleteFormId) : null;
+      if (!deleteForm) {
+        return;
+      }
+      if (window.confirm(`确认删除 ${itemId}:${itemType} ?`)) {
+        if (typeof deleteForm.requestSubmit === "function") {
+          deleteForm.requestSubmit();
+        } else {
+          deleteForm.submit();
+        }
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

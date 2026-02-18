@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE best_score\n                         SET rating = GREATEST(\n                             CASE\n                                 WHEN score >= 10000000 THEN ? + 2.0\n                                 WHEN score >= 9800000 THEN ? + 1.0 + (score - 9800000) * 5.0 / 1000000.0\n                                 ELSE GREATEST(? + (score - 9500000) * 5.0 / 1500000.0, 0.0)\n                             END,\n                             0.0\n                         ),\n                             score_v2 = CASE\n                                 WHEN ? <= 0.0 THEN 0.0\n                                 WHEN (COALESCE(perfect_count, 0) + COALESCE(near_count, 0) + COALESCE(miss_count, 0)) <= 0 THEN 0.0\n                                 ELSE ? * (\n                                     LEAST(\n                                         GREATEST(\n                                             COALESCE(shiny_perfect_count, 0) * 1.0\n                                             / NULLIF(COALESCE(perfect_count, 0) + COALESCE(near_count, 0) + COALESCE(miss_count, 0), 0)\n                                             - 0.9,\n                                             0.0\n                                         ),\n                                         0.095\n                                     ) / 9.5 * 25.0\n                                     +\n                                     LEAST(\n                                         GREATEST(\n                                             (\n                                                 (COALESCE(perfect_count, 0) + COALESCE(near_count, 0) / 2.0) * 1.0\n                                                 / NULLIF(COALESCE(perfect_count, 0) + COALESCE(near_count, 0) + COALESCE(miss_count, 0), 0)\n                                                 + COALESCE(shiny_perfect_count, 0) / 10000000.0\n                                             ) - 0.99,\n                                             0.0\n                                         ),\n                                         0.01\n                                     ) * 75.0\n                                 )\n                             END\n                         WHERE song_id = ? AND difficulty = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "84ba34d4c6ee1558e31c9e54c4c1e9982a466f0f870234f60d847354bc025005"
+}

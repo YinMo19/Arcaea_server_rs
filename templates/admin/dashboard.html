@@ -5,6 +5,16 @@
 {% block page_subtitle %}今天的核心状态、异常提醒和快捷入口{% endblock %}
 
 {% block content %}
+{% if flash_message != "" %}
+<article class="card section">
+  {% if flash_kind == "error" %}
+  <span class="tag tag-danger">{{ flash_message }}</span>
+  {% else %}
+  <span class="tag tag-ok">{{ flash_message }}</span>
+  {% endif %}
+</article>
+{% endif %}
+
 <section class="kpis">
   <article class="card kpi">
     <div class="kpi-label">在线玩家（24h）</div>
@@ -58,29 +68,35 @@
       <h3>快捷操作</h3>
       <span class="muted">高频任务</span>
     </div>
-    <div class="data-list">
-      <div class="data-item">
-        <div>
-          <strong>刷新 Song Hash</strong>
-          <div class="muted">对应 Python: refreshsonghash</div>
+      <div class="data-list">
+        <div class="data-item">
+          <div>
+            <strong>刷新 Song Hash</strong>
+            <div class="muted">对应 Python: refreshsonghash</div>
+          </div>
+          <form method="post" action="/web/updatedatabase/refreshsonghash">
+            <button class="btn" type="submit">执行</button>
+          </form>
         </div>
-        <button class="btn">执行</button>
-      </div>
-      <div class="data-item">
-        <div>
-          <strong>刷新 Bundle</strong>
-          <div class="muted">对应 Python: refreshsbundle</div>
+        <div class="data-item">
+          <div>
+            <strong>刷新 Bundle</strong>
+            <div class="muted">对应 Python: refreshsbundle</div>
+          </div>
+          <form method="post" action="/web/updatedatabase/refreshsbundle">
+            <button class="btn" type="submit">执行</button>
+          </form>
         </div>
-        <button class="btn">执行</button>
-      </div>
-      <div class="data-item">
-        <div>
-          <strong>全量重算 Rating</strong>
-          <div class="muted">对应 Python: refreshsongrating</div>
+        <div class="data-item">
+          <div>
+            <strong>全量重算 Rating</strong>
+            <div class="muted">对应 Python: refreshsongrating</div>
+          </div>
+          <form method="post" action="/web/updatedatabase/refreshsongrating">
+            <button class="btn btn-danger" type="submit">执行</button>
+          </form>
         </div>
-        <button class="btn btn-danger">执行</button>
       </div>
-    </div>
-  </article>
+    </article>
 </section>
 {% endblock %}
