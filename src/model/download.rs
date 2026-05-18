@@ -97,7 +97,9 @@ pub struct DownloadFile {
 /// Download song information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadSong {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub audio: Option<DownloadAudio>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub chart: Option<std::collections::HashMap<String, DownloadFile>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub additional_files: Option<Vec<DownloadFile>>,
