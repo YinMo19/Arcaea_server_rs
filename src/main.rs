@@ -185,6 +185,28 @@ async fn configure_rocket() -> Rocket<Build> {
 
     let mut rocket = rocket::custom(figment)
         .attach(CORS)
+        .attach(AdHoc::on_request(
+            "Normalize Python client trailing slashes",
+            |request, _| {
+                Box::pin(async move {
+                    let path = request.uri().path().as_str();
+                    let trailing_slash_path = [
+                        format!("{GAME_API_PREFIX}/multiplayer/me/matchmaking/join/"),
+                        format!("{GAME_API_PREFIX}/multiplayer/me/matchmaking/status/"),
+                        format!("{GAME_API_PREFIX}/multiplayer/me/matchmaking/leave/"),
+                    ];
+
+                    if trailing_slash_path.iter().any(|target| target == path) {
+                        if let Some(uri) = request
+                            .uri()
+                            .map_path(|p| p.as_str().trim_end_matches('/').to_string())
+                        {
+                            request.set_uri(uri);
+                        }
+                    }
+                })
+            },
+        ))
         .attach(AdHoc::on_ignite("Database", |rocket| async {
             match Database::connect().await {
                 Ok(pool) => {
