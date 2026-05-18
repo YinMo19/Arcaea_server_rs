@@ -19,26 +19,30 @@ pub async fn login<'a>(
     request: Form<LoginRequest>,
     ctx: ClientContext<'_>,
 ) -> Result<AuthResponse<'a>, ArcError> {
-    assert_eq!(request.grant_type, Some("client_credentials".to_string()));
+    if request.grant_type.as_deref() != Some("client_credentials") {
+        return Err(ArcError::input("Invalid grant_type"));
+    }
 
-    let auth_str = String::from_utf8(
-        base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            // Authorization: Basic xxxxx
-            &ctx.clone().authorization.unwrap()[6..],
-        )
-        .unwrap(),
-    )
-    .unwrap();
+    let authorization = ctx
+        .authorization
+        .ok_or_else(|| ArcError::no_access("Missing Authorization header", -4))?;
+    let encoded_auth = authorization
+        .strip_prefix("Basic ")
+        .ok_or_else(|| ArcError::no_access("Invalid Authorization header", -4))?;
+    let auth_bytes =
+        base64::Engine::decode(&base64::engine::general_purpose::STANDARD, encoded_auth)
+            .map_err(|_| ArcError::no_access("Invalid Authorization header", -4))?;
+    let auth_str = String::from_utf8(auth_bytes)
+        .map_err(|_| ArcError::no_access("Invalid Authorization header", -4))?;
 
-    let mut id_pwd = auth_str.split(":");
-
-    let (name, password) = (id_pwd.next().unwrap(), id_pwd.next().unwrap());
+    let (name, password) = auth_str
+        .split_once(':')
+        .ok_or_else(|| ArcError::no_access("Invalid Authorization header", -4))?;
 
     let login_data = UserLoginDto {
         name: name.to_string(),
         password: password.to_string(),
-        device_id: ctx.headers.get("Deviceid").map(|s| s.to_owned()),
+        device_id: ctx.get_header("DeviceId").cloned(),
     };
 
     let ip = ctx.get_client_ip();
