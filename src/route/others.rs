@@ -181,7 +181,7 @@ pub async fn awaken_maya(
 
     Ok(success_return(serde_json::json!({
         "user_id": auth.user_id,
-        "updated_characters": [updated_character]
+        "updated_characters": [updated_character.to_dict()]
     })))
 }
 
