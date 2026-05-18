@@ -1250,7 +1250,10 @@ impl UserService {
                 .execute(&self.pool)
                 .await?;
             }
-            "is_hide_rating" | "max_stamina_notification_enabled" | "mp_notification_enabled" => {
+            "is_hide_rating"
+            | "max_stamina_notification_enabled"
+            | "mp_notification_enabled"
+            | "is_allow_marketing_email" => {
                 let bool_value = value == "true";
                 let int_value = if bool_value { 1 } else { 0 };
 
@@ -1276,6 +1279,15 @@ impl UserService {
                     "mp_notification_enabled" => {
                         sqlx::query!(
                             "UPDATE user SET mp_notification_enabled = ? WHERE user_id = ?",
+                            int_value,
+                            user_id
+                        )
+                        .execute(&self.pool)
+                        .await?;
+                    }
+                    "is_allow_marketing_email" => {
+                        sqlx::query!(
+                            "UPDATE user SET is_allow_marketing_email = ? WHERE user_id = ?",
                             int_value,
                             user_id
                         )

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user SET is_allow_marketing_email = ? WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "f217f78756d70e1293de0b05d9a867ae0b43330118d5a4548c4f295bf1401273"
+}
