@@ -380,9 +380,8 @@ pub struct CoreItem {
 impl CoreItem {
     pub fn to_dict_character_format(&self) -> serde_json::Value {
         serde_json::json!({
-            "item_id": self.item_id,
-            "amount": self.amount,
-            "type": "core"
+            "core_type": self.item_id,
+            "amount": self.amount
         })
     }
 }
