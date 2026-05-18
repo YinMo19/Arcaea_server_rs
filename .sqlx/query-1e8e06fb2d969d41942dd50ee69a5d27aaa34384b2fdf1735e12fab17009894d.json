@@ -1,0 +1,36 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT custom_banner, is_profile_public FROM user WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "custom_banner",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "char_set": 224,
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "is_profile_public",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 4
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "1e8e06fb2d969d41942dd50ee69a5d27aaa34384b2fdf1735e12fab17009894d"
+}

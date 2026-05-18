@@ -402,6 +402,36 @@
           "char_set": 63,
           "max_size": 11
         }
+      },
+      {
+        "ordinal": 40,
+        "name": "custom_banner",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "char_set": 224,
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 41,
+        "name": "is_allow_marketing_email",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 4
+        }
+      },
+      {
+        "ordinal": 42,
+        "name": "is_profile_public",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 4
+        }
       }
     ],
     "parameters": {
@@ -409,6 +439,9 @@
     },
     "nullable": [
       false,
+      true,
+      true,
+      true,
       true,
       true,
       true,

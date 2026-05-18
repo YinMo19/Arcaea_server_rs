@@ -51,6 +51,9 @@ pub struct User {
     pub mp_notification_enabled: Option<i8>,
     pub highest_rating_ptt: Option<i32>,
     pub insight_state: Option<i32>,
+    pub custom_banner: Option<String>,
+    pub is_allow_marketing_email: Option<i8>,
+    pub is_profile_public: Option<i8>,
 }
 
 /// Login session model representing the login table
@@ -69,6 +72,7 @@ pub struct UserRegisterDto {
     pub name: String,
     pub password: String,
     pub email: String,
+    pub is_allow_marketing_email: bool,
 }
 
 /// User login data transfer object
@@ -190,6 +194,7 @@ pub struct UserInfo {
     pub global_rank: Option<i32>,
     pub country: Option<String>,
     pub custom_banner: Option<String>,
+    pub is_profile_public: bool,
     pub course_banners: Vec<serde_json::Value>,
     pub locked_char_ids: Vec<i32>,
     pub pick_ticket: i32,
@@ -256,6 +261,14 @@ impl User {
         self.mp_notification_enabled.unwrap_or(1) != 0
     }
 
+    pub fn is_allow_marketing_email(&self) -> bool {
+        self.is_allow_marketing_email.unwrap_or(0) != 0
+    }
+
+    pub fn is_profile_public(&self) -> bool {
+        self.is_profile_public.unwrap_or(0) != 0
+    }
+
     /// Check if user is currently banned
     pub fn is_banned(&self, current_time: i64) -> bool {
         if let Some(ban_flag) = &self.ban_flag {
@@ -315,7 +328,8 @@ impl From<User> for UserInfo {
             join_date: user.join_date.unwrap_or(0),
             global_rank: Some(0),
             country: Some(String::new()),
-            custom_banner: Some(String::new()),
+            custom_banner: Some(user.custom_banner.clone().unwrap_or_default()),
+            is_profile_public: user.is_profile_public(),
             course_banners: Vec::new(),
             locked_char_ids: Vec::new(),
             pick_ticket: 0,
@@ -325,7 +339,7 @@ impl From<User> for UserInfo {
                 is_hide_rating: user.is_hide_rating(),
                 max_stamina_notification_enabled: user.max_stamina_notification_enabled(),
                 mp_notification_enabled: user.mp_notification_enabled(),
-                is_allow_marketing_email: false,
+                is_allow_marketing_email: user.is_allow_marketing_email(),
             },
 
             character_stats: Vec::new(), // TODO: Load from character service

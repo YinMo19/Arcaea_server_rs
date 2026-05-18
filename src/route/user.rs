@@ -18,6 +18,7 @@ pub struct RegisterRequest {
     pub password: String,
     pub email: String,
     pub device_id: Option<String>,
+    pub is_allow_marketing_email: Option<String>,
 }
 
 /// User registration endpoint
@@ -35,6 +36,10 @@ pub async fn register(
         name: register_info.name.clone(),
         password: register_info.password.clone(),
         email: register_info.email.clone(),
+        is_allow_marketing_email: register_info
+            .is_allow_marketing_email
+            .as_deref()
+            .is_some_and(|value| value == "true"),
     };
 
     let ip = ctx.get_client_ip();
@@ -190,6 +195,35 @@ pub async fn update_user(
     );
 
     Ok(success_return(response))
+}
+
+/// User profile card update endpoint
+///
+/// Python baseline: `POST /user/me/profile`.
+#[derive(Debug, Deserialize, FromForm)]
+pub struct ProfileRequest {
+    pub is_profile_public: Option<String>,
+    pub banner: Option<String>,
+}
+
+#[post("/me/profile", data = "<request>")]
+pub async fn profile_post(
+    user_service: &State<UserService>,
+    auth: AuthGuard,
+    request: Form<ProfileRequest>,
+) -> RouteResult<Value> {
+    let profile = user_service
+        .update_user_profile(
+            auth.user_id,
+            request
+                .is_profile_public
+                .as_deref()
+                .map(|value| value == "true"),
+            request.banner.as_deref(),
+        )
+        .await?;
+
+    Ok(success_return(profile))
 }
 
 /// Toggle insight/invasion skill endpoint
@@ -417,6 +451,7 @@ pub fn routes() -> Vec<Route> {
         logout,
         user_by_code,
         update_user,
+        profile_post,
         toggle_invasion,
         character_change,
         toggle_uncap,

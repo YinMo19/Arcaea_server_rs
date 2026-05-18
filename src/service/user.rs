@@ -252,15 +252,16 @@ impl UserService {
                 user_id, name, password, join_date, user_code, rating_ptt,
                 character_id, is_skill_sealed, is_char_uncapped, is_char_uncapped_override,
                 is_hide_rating, favorite_character, max_stamina_notification_enabled,
-                current_map, ticket, prog_boost, email
-            ) VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0, -1, 0, '', ?, 0, ?)"#,
+                current_map, ticket, prog_boost, email, is_allow_marketing_email
+            ) VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0, -1, 0, '', ?, 0, ?, ?)"#,
             user_id,
             user_data.name,
             hashed_password,
             join_date,
             user_code,
             CONFIG.default_memories,
-            user_data.email
+            user_data.email,
+            if user_data.is_allow_marketing_email { 1 } else { 0 }
         )
         .execute(&self.pool)
         .await?;
@@ -1290,6 +1291,56 @@ impl UserService {
         self.get_user_info(user_id).await
     }
 
+    /// Update user's profile card fields.
+    pub async fn update_user_profile(
+        &self,
+        user_id: i32,
+        is_profile_public: Option<bool>,
+        custom_banner: Option<&str>,
+    ) -> ArcResult<Value> {
+        let current = sqlx::query!(
+            "SELECT custom_banner, is_profile_public FROM user WHERE user_id = ?",
+            user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| ArcError::no_data("No user.", 108))?;
+
+        let mut profile_public = current.is_profile_public.unwrap_or(0) != 0;
+        let mut banner = current.custom_banner.unwrap_or_default();
+
+        if let Some(next_profile_public) = is_profile_public {
+            let profile_public_int = if next_profile_public { 1 } else { 0 };
+            sqlx::query!(
+                "UPDATE user SET is_profile_public = ? WHERE user_id = ?",
+                profile_public_int,
+                user_id
+            )
+            .execute(&self.pool)
+            .await?;
+            profile_public = next_profile_public;
+        }
+
+        if let Some(next_banner) = custom_banner {
+            self.validate_user_banner(user_id, next_banner).await?;
+            sqlx::query!(
+                "UPDATE user SET custom_banner = ? WHERE user_id = ?",
+                next_banner,
+                user_id
+            )
+            .execute(&self.pool)
+            .await?;
+            banner = next_banner.to_string();
+        }
+
+        Ok(serde_json::json!({
+            "is_profile_public": profile_public,
+            "showcase_characters": [-1, -1, -1],
+            "world_unlock": "",
+            "custom_banner": banner
+        }))
+    }
+
     /// Delete user account
     ///
     /// Deletes a user account and all associated data.
@@ -1704,6 +1755,26 @@ impl UserService {
         Ok(())
     }
 
+    async fn validate_user_banner(&self, user_id: i32, banner: &str) -> ArcResult<()> {
+        if banner.is_empty() || banner == "hidden" {
+            return Ok(());
+        }
+
+        let exists = sqlx::query_scalar!(
+            "SELECT EXISTS(SELECT 1 FROM user_item WHERE user_id = ? AND item_id = ? AND type IN ('course_banner', 'online_banner')) as `exists`",
+            user_id,
+            banner
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        if exists != 0 {
+            Ok(())
+        } else {
+            Err(ArcError::input("Invalid banner."))
+        }
+    }
+
     /// Get user's friend list with detailed information
     ///
     /// Returns a list of friends with their characters and recent scores.
@@ -1794,7 +1865,7 @@ impl UserService {
                     Vec::new()
                 };
 
-                let friend_json = serde_json::json!({
+                let mut friend_json = serde_json::json!({
                     "is_mutual": is_mutual,
                     "is_char_uncapped_override": is_char_uncapped_override,
                     "is_char_uncapped": is_char_uncapped,
@@ -1804,8 +1875,14 @@ impl UserService {
                     "character": character_id,
                     "recent_score": recent_score,
                     "name": friend.name,
-                    "user_id": friend.user_id
+                    "user_id": friend.user_id,
+                    "is_profile_public": friend.is_profile_public.unwrap_or(0) != 0
                 });
+
+                if friend.is_profile_public.unwrap_or(0) != 0 {
+                    friend_json["custom_banner"] =
+                        Value::String(friend.custom_banner.unwrap_or_default());
+                }
 
                 friends.push(friend_json);
             }

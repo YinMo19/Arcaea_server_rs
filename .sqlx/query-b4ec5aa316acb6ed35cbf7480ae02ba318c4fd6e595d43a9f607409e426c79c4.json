@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO user (\n                user_id, name, password, join_date, user_code, rating_ptt,\n                character_id, is_skill_sealed, is_char_uncapped, is_char_uncapped_override,\n                is_hide_rating, favorite_character, max_stamina_notification_enabled,\n                current_map, ticket, prog_boost, email, is_allow_marketing_email\n            ) VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0, -1, 0, '', ?, 0, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "b4ec5aa316acb6ed35cbf7480ae02ba318c4fd6e595d43a9f607409e426c79c4"
+}

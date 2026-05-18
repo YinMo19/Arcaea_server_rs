@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user SET is_profile_public = ? WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "0fd8fcc68b9f1611c243fc271f3bbd8ba18069c9566e820cd3b436f9bfbf7f25"
+}

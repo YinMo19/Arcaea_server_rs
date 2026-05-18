@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user SET custom_banner = ? WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "5fe3fe7765c536ba88a106fe7af9e60bbd7ddfbc771cc34bb3e7b0b9175b3523"
+}
