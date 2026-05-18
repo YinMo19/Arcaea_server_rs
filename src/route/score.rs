@@ -1,13 +1,83 @@
+use crate::error::ArcError;
 use crate::model::download::{CourseTokenRequest, ScoreSubmission, WorldTokenRequest};
 use crate::model::{CourseTokenResponse, WorldTokenResponse};
 use crate::route::common::AuthGuard;
 use crate::route::{success_return, RouteResult};
 use crate::service::score::ScoreService;
 use rocket::form::Form;
-use rocket::{get, post, routes, Route, State};
+use rocket::{get, post, routes, FromForm, Route, State};
 
 use serde_json::Value;
 use std::collections::HashMap;
+
+#[derive(Debug, Clone, FromForm)]
+pub struct ScoreSubmissionForm {
+    pub song_token: Option<String>,
+    pub song_hash: Option<String>,
+    pub song_id: Option<String>,
+    pub difficulty: Option<i32>,
+    pub score: Option<i32>,
+    pub shiny_perfect_count: Option<i32>,
+    pub perfect_count: Option<i32>,
+    pub near_count: Option<i32>,
+    pub miss_count: Option<i32>,
+    pub health: Option<i32>,
+    pub modifier: Option<i32>,
+    pub clear_type: Option<i32>,
+    pub beyond_gauge: Option<i32>,
+    pub submission_hash: Option<String>,
+    pub combo_interval_bonus: Option<i32>,
+    pub hp_interval_bonus: Option<i32>,
+    pub fever_bonus: Option<i32>,
+    pub rank_bonus: Option<i32>,
+    pub maya_gauge: Option<i32>,
+    pub nextstage_bonus: Option<i32>,
+    pub highest_health: Option<i32>,
+    pub lowest_health: Option<i32>,
+    pub room_code: Option<String>,
+    pub room_total_score: Option<i32>,
+    pub room_total_players: Option<i32>,
+}
+
+impl TryFrom<ScoreSubmissionForm> for ScoreSubmission {
+    type Error = ArcError;
+
+    fn try_from(form: ScoreSubmissionForm) -> Result<Self, Self::Error> {
+        Ok(Self {
+            song_token: form.song_token.ok_or_else(score_submission_error)?,
+            song_hash: form.song_hash.ok_or_else(score_submission_error)?,
+            song_id: form.song_id.ok_or_else(score_submission_error)?,
+            difficulty: form.difficulty.ok_or_else(score_submission_error)?,
+            score: form.score.ok_or_else(score_submission_error)?,
+            shiny_perfect_count: form
+                .shiny_perfect_count
+                .ok_or_else(score_submission_error)?,
+            perfect_count: form.perfect_count.ok_or_else(score_submission_error)?,
+            near_count: form.near_count.ok_or_else(score_submission_error)?,
+            miss_count: form.miss_count.ok_or_else(score_submission_error)?,
+            health: form.health.ok_or_else(score_submission_error)?,
+            modifier: form.modifier.ok_or_else(score_submission_error)?,
+            clear_type: form.clear_type.ok_or_else(score_submission_error)?,
+            beyond_gauge: form.beyond_gauge.ok_or_else(score_submission_error)?,
+            submission_hash: form.submission_hash.ok_or_else(score_submission_error)?,
+            combo_interval_bonus: form.combo_interval_bonus,
+            hp_interval_bonus: form.hp_interval_bonus,
+            fever_bonus: form.fever_bonus,
+            rank_bonus: form.rank_bonus,
+            maya_gauge: form.maya_gauge,
+            nextstage_bonus: form.nextstage_bonus,
+            highest_health: form.highest_health,
+            lowest_health: form.lowest_health,
+            room_code: form.room_code,
+            room_total_score: form.room_total_score,
+            room_total_players: form.room_total_players,
+        })
+    }
+}
+
+fn score_submission_error() -> ArcError {
+    ArcError::rocket_err("Missing score submission field")
+}
 
 /// Score routes
 pub fn routes() -> Vec<Route> {
@@ -111,10 +181,11 @@ pub async fn score_token_course(
 pub async fn song_score_post(
     user_auth: AuthGuard,
     score_service: &State<ScoreService>,
-    submission: Form<ScoreSubmission>,
+    submission: Form<ScoreSubmissionForm>,
 ) -> RouteResult<HashMap<String, Value>> {
+    let submission = submission.into_inner().try_into()?;
     let result = score_service
-        .submit_score(user_auth.user_id, submission.into_inner())
+        .submit_score(user_auth.user_id, submission)
         .await?;
 
     Ok(success_return(result))
