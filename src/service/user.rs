@@ -686,8 +686,8 @@ impl UserService {
                 .await?
                 .ok_or_else(|| ArcError::no_data("No user.", 108))?;
 
-        // Toggle insight state (4 -> 0 -> 1 -> 2 -> 3 -> 4)
-        let insight_toggle_states = [4, 0, 1, 2, 3];
+        // Python baseline cycles Constant.INSIGHT_TOGGLE_STATES: 3 -> 4 -> 5 -> 6 -> 3.
+        let insight_toggle_states = Constants::INSIGHT_TOGGLE_STATES;
         let current_index = insight_toggle_states
             .iter()
             .position(|&x| x == current_state.insight_state.unwrap_or(4))
