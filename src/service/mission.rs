@@ -101,7 +101,7 @@ impl MissionService {
         }
 
         if current_status != 2 {
-            return Err(ArcError::input("Mission is not cleared."));
+            return Err(ArcError::rocket_err("Mission is not cleared."));
         }
 
         let updated = sqlx::query!(
@@ -113,7 +113,7 @@ impl MissionService {
         .await?;
 
         if updated.rows_affected() == 0 {
-            return Err(ArcError::input("Mission claim state is invalid."));
+            return Err(ArcError::rocket_err("Mission claim state is invalid."));
         }
 
         for reward in &rewards {
