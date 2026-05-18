@@ -1,7 +1,7 @@
 use crate::route::common::{success_return, AuthGuard, RouteResult};
 use crate::service::UserService;
 use rocket::form::Form;
-use rocket::{post, routes, FromForm, Route, State};
+use rocket::{get, post, routes, FromForm, Route, State};
 use serde::Deserialize;
 
 /// Friend add request payload (Python baseline: `friend_code`)
@@ -14,6 +14,21 @@ pub struct FriendAddRequest {
 #[derive(Debug, Deserialize, FromForm)]
 pub struct FriendDeleteRequest {
     pub friend_id: i32,
+}
+
+/// Friend list endpoint
+///
+/// Python baseline: `GET /friend/me`.
+#[get("/friend/me")]
+pub async fn friend_get(
+    user_service: &State<UserService>,
+    auth: AuthGuard,
+) -> RouteResult<serde_json::Value> {
+    let friends = user_service.get_user_friends(auth.user_id).await?;
+
+    Ok(success_return(serde_json::json!({
+        "friends": friends
+    })))
 }
 
 /// Add friend endpoint
@@ -68,5 +83,5 @@ pub async fn delete_friend(
 
 /// Get all friend routes
 pub fn routes() -> Vec<Route> {
-    routes![add_friend, delete_friend]
+    routes![friend_get, add_friend, delete_friend]
 }
