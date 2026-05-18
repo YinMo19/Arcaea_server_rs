@@ -109,7 +109,7 @@ impl PresentService {
         if user_present_exists == 0 {
             return Err(ArcError::no_data(
                 format!("Present '{present_id}' not found for user {user_id}"),
-                404,
+                108,
             ));
         }
 
@@ -125,7 +125,7 @@ impl PresentService {
         })?;
 
         let present_record = present_record.ok_or_else(|| {
-            ArcError::no_data(format!("Present '{present_id}' does not exist"), 404)
+            ArcError::no_data(format!("Present '{present_id}' does not exist"), 108)
         })?;
 
         // Check if present has expired
