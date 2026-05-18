@@ -57,7 +57,11 @@ pub async fn game_content_bundle(
 ) -> RouteResult<BundleDownloadResponse> {
     let app_version = match version_ctx.app_version {
         Some(version) => version,
-        None => return Err(ArcError::no_data("no app version provided", 404)),
+        None => {
+            return Ok(success_return(BundleDownloadResponse {
+                ordered_results: Vec::new(),
+            }))
+        }
     };
     let ordered_results = bundle_service
         .get_bundle_list(
