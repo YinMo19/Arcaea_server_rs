@@ -2251,7 +2251,9 @@ impl ScoreService {
         };
 
         let parser = get_map_parser();
-        let map = parser.load_world_map(&current_map)?;
+        let map = parser
+            .load_world_map(&current_map)
+            .map_err(|_| ArcError::rocket_err(format!("Map {current_map} not found")))?;
 
         Ok(map.stamina_cost.unwrap_or(1))
     }
