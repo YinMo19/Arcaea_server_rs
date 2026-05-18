@@ -176,7 +176,7 @@ pub async fn redeem(
     let code = request
         .code
         .as_deref()
-        .ok_or_else(|| crate::error::ArcError::input("`code` is required"))?;
+        .ok_or_else(|| crate::error::ArcError::rocket_err("`code` is required"))?;
     let result = purchase_service.redeem_code(auth.user_id, code).await?;
     Ok(success_return(result))
 }
