@@ -145,11 +145,18 @@ pub async fn buy_special(
 ///
 /// Allows users to purchase stamina using fragments once per day.
 /// Checks fragment stamina cooldown before allowing purchase.
-#[post("/purchase/me/stamina/fragment")]
+#[post("/purchase/me/stamina/<buy_stamina_type>")]
 pub async fn purchase_stamina(
     purchase_service: &State<PurchaseService>,
     auth: AuthGuard,
+    buy_stamina_type: &str,
 ) -> RouteResult<Value> {
+    if buy_stamina_type != "fragment" {
+        return Err(crate::error::ArcError::input(
+            "Invalid type of buying stamina",
+        ));
+    }
+
     let result = purchase_service
         .purchase_stamina_with_fragment(auth.user_id)
         .await?;
