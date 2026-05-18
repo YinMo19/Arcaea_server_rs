@@ -418,3 +418,22 @@ pub fn routes() -> Vec<Route> {
         bundle_download
     ]
 }
+
+/// Game API routes from this module.
+///
+/// Excludes the root-level bundle download file endpoint, which is mounted
+/// separately to match the Python server.
+pub fn game_routes() -> Vec<Route> {
+    routes![
+        game_info,
+        notification_me,
+        game_content_bundle,
+        finale_progress,
+        finale_start,
+        finale_end,
+        insight_complete,
+        awaken_maya,
+        applog_me,
+        aggregate
+    ]
+}

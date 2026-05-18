@@ -182,6 +182,7 @@ async fn configure_rocket() -> Rocket<Build> {
         ));
     let game_user_prefix = format!("{GAME_API_PREFIX}/user");
     let game_account_prefix = format!("{GAME_API_PREFIX}/account");
+    let game_auth_prefix = format!("{GAME_API_PREFIX}/auth");
 
     let mut rocket = rocket::custom(figment)
         .attach(CORS)
@@ -278,12 +279,23 @@ async fn configure_rocket() -> Rocket<Build> {
         )
         .mount("/web", Arcaea_server_rs::route::admin::routes())
         .mount("/auth", Arcaea_server_rs::route::auth::routes())
+        .mount(game_auth_prefix, Arcaea_server_rs::route::auth::routes())
         .mount("/", rocket::routes![bundle_download, serve_download_file])
-        .mount(GAME_API_PREFIX, Arcaea_server_rs::route::others::routes())
+        .mount("/", Arcaea_server_rs::route::others::game_routes())
+        .mount("/", Arcaea_server_rs::route::course::routes())
+        .mount("/", Arcaea_server_rs::route::mission::routes())
+        .mount("/", Arcaea_server_rs::route::friend::routes())
+        .mount("/", Arcaea_server_rs::route::download::game_routes())
+        .mount("/", Arcaea_server_rs::route::score::routes())
+        .mount("/", Arcaea_server_rs::route::multiplayer::routes())
+        .mount("/", Arcaea_server_rs::route::present::routes())
+        .mount("/", Arcaea_server_rs::route::world::routes())
+        .mount("/", Arcaea_server_rs::route::purchase::routes())
+        .mount(GAME_API_PREFIX, Arcaea_server_rs::route::others::game_routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::course::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::mission::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::friend::routes())
-        .mount(GAME_API_PREFIX, Arcaea_server_rs::route::download::routes())
+        .mount(GAME_API_PREFIX, Arcaea_server_rs::route::download::game_routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::score::routes())
         .mount(
             GAME_API_PREFIX,

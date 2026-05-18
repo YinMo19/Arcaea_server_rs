@@ -82,3 +82,11 @@ pub async fn serve_download_file(
 pub fn routes() -> Vec<Route> {
     routes![download_song, serve_download_file]
 }
+
+/// Game API download routes.
+///
+/// Excludes the root-level file serving endpoint, which is mounted separately
+/// as `/download/<song_id>/<file_name>` like the Python server.
+pub fn game_routes() -> Vec<Route> {
+    routes![download_song]
+}
