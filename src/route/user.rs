@@ -48,7 +48,7 @@ pub async fn register(
         .clone()
         .or_else(|| ctx.get_device_id());
 
-    let user_auth = user_service
+    user_service
         .register_user(register_data, device_id.clone(), ip.map(|c| c.to_string()))
         .await?;
 
@@ -58,11 +58,11 @@ pub async fn register(
         password: register_info.password.clone(),
         device_id,
     };
-    user_service.login_user(login_data, ip).await?;
+    let login_auth = user_service.login_user(login_data, ip).await?;
 
     let response = RegisterResponse {
-        user_id: user_auth.user_id,
-        access_token: user_auth.token,
+        user_id: login_auth.user_id,
+        access_token: login_auth.token,
     };
 
     Ok(success_return(response))
