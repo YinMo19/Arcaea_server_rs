@@ -327,8 +327,14 @@ pub struct StepItem {
 impl StepItem {
     /// Convert to dictionary format for API response
     pub fn to_dict(&self) -> serde_json::Value {
+        let item_id = if self.item_id.is_empty() {
+            self.item_type.as_str()
+        } else {
+            self.item_id.as_str()
+        };
+
         serde_json::json!({
-            "id": self.item_id,
+            "id": item_id,
             "type": self.item_type,
             "amount": self.amount
         })
