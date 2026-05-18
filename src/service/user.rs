@@ -1347,7 +1347,11 @@ impl UserService {
     pub async fn delete_user_account(&self, user_id: i32) -> ArcResult<()> {
         // Check if account deletion is allowed based on config
         if !CONFIG.allow_self_account_delete {
-            return Err(ArcError::no_data("Cannot delete the account.", 151));
+            return Err(ArcError::no_data_status(
+                "Cannot delete the account.",
+                151,
+                404,
+            ));
         }
 
         // Start a transaction for atomic deletion

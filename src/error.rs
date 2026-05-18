@@ -226,6 +226,17 @@ impl ArcError {
         }
     }
 
+    /// Create a no data error with a specific HTTP status code.
+    pub fn no_data_status<S: Into<String>>(message: S, error_code: i32, status: u16) -> Self {
+        Self::NoData {
+            message: message.into(),
+            error_code,
+            api_error_code: -2,
+            extra_data: None,
+            status,
+        }
+    }
+
     /// Create a new user ban error with extra data
     pub fn user_ban<S: Into<String>>(
         message: S,

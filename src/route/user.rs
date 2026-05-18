@@ -432,7 +432,11 @@ pub async fn user_delete(user_service: &State<UserService>, auth: AuthGuard) -> 
 /// Resends email verification (currently unavailable).
 #[post("/email/resend_verify")]
 pub async fn email_resend_verify() -> RouteResult<Value> {
-    Err(ArcError::no_data("Email verification unavailable.", 151))
+    Err(ArcError::no_data_status(
+        "Email verification unavailable.",
+        151,
+        404,
+    ))
 }
 
 /// Email verification status endpoint
@@ -440,7 +444,11 @@ pub async fn email_resend_verify() -> RouteResult<Value> {
 /// Checks email verification status (currently unavailable).
 #[post("/verify")]
 pub async fn email_verify() -> RouteResult<Value> {
-    Err(ArcError::no_data("Email verification unavailable.", 151))
+    Err(ArcError::no_data_status(
+        "Email verification unavailable.",
+        151,
+        404,
+    ))
 }
 
 /// Get all user routes
