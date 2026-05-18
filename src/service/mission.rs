@@ -33,7 +33,7 @@ impl MissionService {
 
     pub async fn clear_mission(&self, user_id: i32, mission_id: &str) -> ArcResult<Value> {
         let _ = mission_rewards(mission_id)
-            .ok_or_else(|| ArcError::no_data(format!("Mission `{mission_id}` not found"), 108))?;
+            .ok_or_else(|| ArcError::rocket_err(format!("Mission `{mission_id}` not found")))?;
 
         let current = sqlx::query!(
             "SELECT status FROM user_mission WHERE user_id = ? AND mission_id = ?",
@@ -69,7 +69,7 @@ impl MissionService {
 
     pub async fn claim_mission(&self, user_id: i32, mission_id: &str) -> ArcResult<Value> {
         let rewards = mission_rewards(mission_id)
-            .ok_or_else(|| ArcError::no_data(format!("Mission `{mission_id}` not found"), 108))?;
+            .ok_or_else(|| ArcError::rocket_err(format!("Mission `{mission_id}` not found")))?;
 
         let current = sqlx::query!(
             "SELECT status FROM user_mission WHERE user_id = ? AND mission_id = ?",
