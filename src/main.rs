@@ -17,7 +17,8 @@ use Arcaea_server_rs::route::CORS;
 use Arcaea_server_rs::service::{
     arc_data::arc_data_file_path_from_env, AssetInitService, AssetManager, BundleService,
     CharacterService, DownloadService, ItemService, MultiplayerService, NotificationService,
-    OperationManager, PresentService, PurchaseService, ScoreService, UserService, WorldService,
+    OperationManager, PresentService, PurchaseService, ScoreService, StorageService, UserService,
+    WorldService,
 };
 use Arcaea_server_rs::{config, Database, DbPool};
 
@@ -41,6 +42,22 @@ async fn init_services(
     OperationManager,
     MultiplayerService,
 ) {
+    let storage_service = match StorageService::from_env().await {
+        Ok(storage) => {
+            if storage.is_s3() {
+                log::info!("Using S3 asset storage backend");
+                Some(std::sync::Arc::new(storage))
+            } else {
+                log::info!("Using local asset storage backend");
+                None
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to initialize asset storage: {e}");
+            std::process::exit(1);
+        }
+    };
+
     let download_link_prefix = env::var("DOWNLOAD_LINK_PREFIX")
         .ok()
         .filter(|s| !s.trim().is_empty())
@@ -64,6 +81,7 @@ async fn init_services(
             .with_song_folder(std::path::PathBuf::from("./songs"))
             .with_songlist_path(std::path::PathBuf::from("./songs/songlist"))
             .with_bundle_folder(std::path::PathBuf::from("./bundles"))
+            .with_storage(storage_service.clone())
             .set_pre_calculate_hashes(true),
     );
 
@@ -90,7 +108,8 @@ async fn init_services(
         pool.clone(),
         std::path::PathBuf::from("bundles"),
         bundle_download_link_prefix,
-    );
+    )
+    .with_storage(storage_service.clone());
 
     // Initialize bundle service
     log::info!("Initializing bundle service...");

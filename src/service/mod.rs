@@ -15,6 +15,7 @@ pub mod present;
 pub mod purchase;
 pub mod runtime_assets;
 pub mod score;
+pub mod storage;
 pub mod user;
 pub mod world;
 
@@ -33,5 +34,6 @@ pub use operations::OperationManager;
 pub use present::PresentService;
 pub use purchase::PurchaseService;
 pub use score::ScoreService;
+pub use storage::StorageService;
 pub use user::UserService;
 pub use world::WorldService;

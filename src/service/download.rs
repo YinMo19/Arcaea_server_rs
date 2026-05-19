@@ -236,9 +236,10 @@ impl DownloadService {
 
         let mut download_songs = HashMap::new();
         let mut download_tokens = Vec::new();
+        let s3_storage = self.asset_manager.s3_storage();
 
         // Clear expired tokens before generating new ones
-        if include_urls {
+        if include_urls && s3_storage.is_none() {
             self.clear_expired_download_tokens().await?;
         }
 
@@ -259,15 +260,23 @@ impl DownloadService {
             for file_name in file_names {
                 let checksum = self.get_song_file_md5(&song_id, &file_name);
                 let (url, token) = if include_urls {
-                    let token = self.generate_download_token(user.user_id, &song_id, &file_name);
-                    let url = self.generate_download_url(&song_id, &file_name, &token);
-                    download_tokens.push((
-                        user.user_id,
-                        song_id.clone(),
-                        file_name.clone(),
-                        token.clone(),
-                    ));
-                    (Some(url), Some(token))
+                    if let Some(storage) = &s3_storage {
+                        (
+                            storage.presign_song(&song_id, &file_name).await?,
+                            None::<String>,
+                        )
+                    } else {
+                        let token =
+                            self.generate_download_token(user.user_id, &song_id, &file_name);
+                        let url = self.generate_download_url(&song_id, &file_name, &token);
+                        download_tokens.push((
+                            user.user_id,
+                            song_id.clone(),
+                            file_name.clone(),
+                            token.clone(),
+                        ));
+                        (Some(url), Some(token))
+                    }
                 } else {
                     (None, None)
                 };
@@ -300,12 +309,17 @@ impl DownloadService {
     ) {
         match file_name {
             "base.ogg" => {
-                let audio = DownloadAudio {
-                    checksum: checksum.clone(),
-                    url: url.clone(),
-                    difficulty_3: None,
-                };
-                download_song.audio = Some(audio);
+                if let Some(ref mut audio) = download_song.audio {
+                    audio.checksum = checksum;
+                    audio.url = url;
+                } else {
+                    let audio = DownloadAudio {
+                        checksum,
+                        url,
+                        difficulty_3: None,
+                    };
+                    download_song.audio = Some(audio);
+                }
             }
             "3.ogg" => {
                 if let Some(ref mut audio) = download_song.audio {

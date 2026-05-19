@@ -1,0 +1,141 @@
+<mxfile host="app.diagrams.net" modified="2026-05-19T00:00:00.000Z" agent="Codex" version="26.0.0">
+  <diagram name="Arcaea Server Storage Architecture" id="arcaea-storage-architecture">
+    <mxGraphModel dx="1500" dy="920" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="920" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="title" value="Arcaea Server Storage Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontFamily=Comic Sans MS;fontSize=24;fontStyle=1;fontColor=#172B4D" vertex="1" parent="1">
+          <mxGeometry x="80" y="36" width="520" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="Runtime switches between local files and S3-compatible object storage through STORAGE_BACKEND." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontFamily=Comic Sans MS;fontSize=13;fontColor=#44546A" vertex="1" parent="1">
+          <mxGeometry x="80" y="76" width="720" height="28" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="runtimeGroup" value="Runtime API Path" style="swimlane;html=1;whiteSpace=wrap;rounded=1;startSize=34;arcSize=8;fontFamily=Comic Sans MS;fontSize=15;fontStyle=1;fontColor=#172B4D;fillColor=#F7F9FC;strokeColor=#B7C3D0;swimlaneFillColor=#EDF2F7" vertex="1" parent="1">
+          <mxGeometry x="60" y="120" width="950" height="470" as="geometry"/>
+        </mxCell>
+        <mxCell id="storageGroup" value="Storage Targets" style="swimlane;html=1;whiteSpace=wrap;rounded=1;startSize=34;arcSize=8;fontFamily=Comic Sans MS;fontSize=15;fontStyle=1;fontColor=#172B4D;fillColor=#FAFBFC;strokeColor=#B7C3D0;swimlaneFillColor=#EDF2F7" vertex="1" parent="1">
+          <mxGeometry x="1060" y="120" width="330" height="470" as="geometry"/>
+        </mxCell>
+        <mxCell id="syncGroup" value="Asset Sync Path" style="swimlane;html=1;whiteSpace=wrap;rounded=1;startSize=34;arcSize=8;fontFamily=Comic Sans MS;fontSize=15;fontStyle=1;fontColor=#172B4D;fillColor=#FFFDF7;strokeColor=#B7C3D0;swimlaneFillColor=#FFF4D6" vertex="1" parent="1">
+          <mxGeometry x="60" y="650" width="1330" height="190" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="client" value="Game Client" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Comic Sans MS;fontSize=14;fontStyle=1;fontColor=#172B4D;fillColor=#DEEBFF;strokeColor=#4C9AFF;arcSize=8;spacing=12" vertex="1" parent="1">
+          <mxGeometry x="100" y="220" width="150" height="64" as="geometry"/>
+        </mxCell>
+        <mxCell id="env" value="Environment&#xa;STORAGE_BACKEND&#xa;S3_ENDPOINT / S3_BUCKET&#xa;S3_FORCE_PATH_STYLE" style="shape=document;whiteSpace=wrap;html=1;boundedLbl=1;fontFamily=Comic Sans MS;fontSize=12;fontColor=#172B4D;fillColor=#F4F5F7;strokeColor=#6B778C;spacing=10" vertex="1" parent="1">
+          <mxGeometry x="100" y="420" width="170" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="routes" value="Routes&#xa;/serve/download/me/song&#xa;/game/content_bundle&#xa;/download/*&#xa;/bundle_download/*" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Comic Sans MS;fontSize=12;fontColor=#172B4D;fillColor=#EAE6FF;strokeColor=#6554C0;arcSize=8;spacing=10" vertex="1" parent="1">
+          <mxGeometry x="340" y="210" width="205" height="122" as="geometry"/>
+        </mxCell>
+        <mxCell id="download" value="DownloadService&#xa;song metadata&#xa;local token URL&#xa;or S3 presigned URL" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Comic Sans MS;fontSize=12;fontColor=#172B4D;fillColor=#FFF0B3;strokeColor=#FFAB00;arcSize=8;spacing=10" vertex="1" parent="1">
+          <mxGeometry x="610" y="175" width="205" height="112" as="geometry"/>
+        </mxCell>
+        <mxCell id="bundle" value="BundleService&#xa;bundle update path&#xa;local token URL&#xa;or S3 presigned URL" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Comic Sans MS;fontSize=12;fontColor=#172B4D;fillColor=#FFF0B3;strokeColor=#FFAB00;arcSize=8;spacing=10" vertex="1" parent="1">
+          <mxGeometry x="610" y="340" width="205" height="112" as="geometry"/>
+        </mxCell>
+        <mxCell id="asset" value="AssetManager&#xa;song list&#xa;allowed files&#xa;checksums" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Comic Sans MS;fontSize=12;fontColor=#172B4D;fillColor=#FFEBE6;strokeColor=#DE350B;arcSize=8;spacing=10" vertex="1" parent="1">
+          <mxGeometry x="850" y="225" width="125" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="storage" value="StorageService&#xa;manifest cache&#xa;S3 presigner&#xa;refresh_manifest()" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Comic Sans MS;fontSize=12;fontColor=#172B4D;fillColor=#E3FCEF;strokeColor=#36B37E;arcSize=8;spacing=10" vertex="1" parent="1">
+          <mxGeometry x="850" y="410" width="125" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="db" value="MariaDB / TiDB&#xa;users&#xa;purchases&#xa;scores&#xa;local download tokens" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Comic Sans MS;fontSize=12;fontColor=#172B4D;fillColor=#F4F5F7;strokeColor=#6B778C;spacing=10" vertex="1" parent="1">
+          <mxGeometry x="1125" y="165" width="210" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="local" value="Local Filesystem&#xa;./songs&#xa;./bundles" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Comic Sans MS;fontSize=12;fontColor=#172B4D;fillColor=#FFF0B3;strokeColor=#FFAB00;spacing=10" vertex="1" parent="1">
+          <mxGeometry x="1125" y="335" width="210" height="95" as="geometry"/>
+        </mxCell>
+        <mxCell id="s3" value="S3 / MinIO Bucket&#xa;manifest.json&#xa;songs/*&#xa;bundles/*" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Comic Sans MS;fontSize=12;fontColor=#172B4D;fillColor=#DEEBFF;strokeColor=#4C9AFF;spacing=10" vertex="1" parent="1">
+          <mxGeometry x="1125" y="470" width="210" height="100" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="cli" value="sync_s3_manifest CLI&#xa;clap command&#xa;uploads assets&#xa;publishes manifest" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Comic Sans MS;fontSize=12;fontStyle=1;fontColor=#172B4D;fillColor=#EAE6FF;strokeColor=#6554C0;arcSize=8;spacing=10" vertex="1" parent="1">
+          <mxGeometry x="160" y="710" width="205" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="localSync" value="Local Assets&#xa;songs/&#xa;bundles/" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Comic Sans MS;fontSize=12;fontColor=#172B4D;fillColor=#FFF0B3;strokeColor=#FFAB00;spacing=10" vertex="1" parent="1">
+          <mxGeometry x="510" y="718" width="190" height="84" as="geometry"/>
+        </mxCell>
+        <mxCell id="manifest" value="Generated Manifest&#xa;song keys + md5 + size&#xa;bundle keys + versions" style="rounded=1;whiteSpace=wrap;html=1;fontFamily=Comic Sans MS;fontSize=12;fontColor=#172B4D;fillColor=#F4F5F7;strokeColor=#6B778C;arcSize=8;spacing=10" vertex="1" parent="1">
+          <mxGeometry x="820" y="710" width="235" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="bucketSync" value="S3 / MinIO Bucket&#xa;objects + manifest" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fontFamily=Comic Sans MS;fontSize=12;fontColor=#172B4D;fillColor=#DEEBFF;strokeColor=#4C9AFF;spacing=10" vertex="1" parent="1">
+          <mxGeometry x="1160" y="710" width="190" height="100" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="edge-client-routes" value="API requests" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontFamily=Comic Sans MS;fontSize=11;fontColor=#44546A;strokeColor=#44546A;strokeWidth=2;endArrow=block;endFill=1" edge="1" parent="1" source="client" target="routes">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-routes-download" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#44546A;strokeWidth=2;endArrow=block;endFill=1" edge="1" parent="1" source="routes" target="download">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-routes-bundle" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#44546A;strokeWidth=2;endArrow=block;endFill=1" edge="1" parent="1" source="routes" target="bundle">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-download-asset" value="song files" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontFamily=Comic Sans MS;fontSize=11;fontColor=#44546A;strokeColor=#44546A;strokeWidth=2;endArrow=block;endFill=1" edge="1" parent="1" source="download" target="asset">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-download-storage" value="S3 mode" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontFamily=Comic Sans MS;fontSize=11;fontColor=#36B37E;strokeColor=#36B37E;strokeWidth=2;dashed=1;endArrow=block;endFill=1" edge="1" parent="1" source="download" target="storage">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="713" y="500"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-bundle-storage" value="S3 mode" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontFamily=Comic Sans MS;fontSize=11;fontColor=#36B37E;strokeColor=#36B37E;strokeWidth=2;dashed=1;endArrow=block;endFill=1" edge="1" parent="1" source="bundle" target="storage">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-storage-s3" value="load manifest, presign" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontFamily=Comic Sans MS;fontSize=11;fontColor=#36B37E;strokeColor=#36B37E;strokeWidth=2;endArrow=block;endFill=1" edge="1" parent="1" source="storage" target="s3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-asset-local" value="local mode scan/read" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontFamily=Comic Sans MS;fontSize=11;fontColor=#FF8B00;strokeColor=#FF8B00;strokeWidth=2;endArrow=block;endFill=1" edge="1" parent="1" source="asset" target="local">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-server-db" value="sqlx pool" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontFamily=Comic Sans MS;fontSize=11;fontColor=#44546A;strokeColor=#44546A;strokeWidth=2;endArrow=block;endFill=1" edge="1" parent="1" source="download" target="db">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1035" y="210"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-bundle-db" value="local token state" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontFamily=Comic Sans MS;fontSize=11;fontColor=#44546A;strokeColor=#44546A;strokeWidth=2;endArrow=block;endFill=1" edge="1" parent="1" source="bundle" target="db">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1035" y="360"/>
+              <mxPoint x="1035" y="245"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-env-routes" value="startup config" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontFamily=Comic Sans MS;fontSize=11;fontColor=#6B778C;strokeColor=#6B778C;strokeWidth=2;dashed=1;endArrow=block;endFill=1" edge="1" parent="1" source="env" target="storage">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="930" y="472"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-client-s3" value="direct file download" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontFamily=Comic Sans MS;fontSize=11;fontColor=#0052CC;strokeColor=#0052CC;strokeWidth=2;endArrow=block;endFill=1" edge="1" parent="1" source="client" target="s3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="250" y="550"/>
+              <mxPoint x="1130" y="550"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="edge-cli-local" value="read local files" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontFamily=Comic Sans MS;fontSize=11;fontColor=#44546A;strokeColor=#44546A;strokeWidth=2;endArrow=block;endFill=1" edge="1" parent="1" source="cli" target="localSync">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-local-manifest" value="hash + collect metadata" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontFamily=Comic Sans MS;fontSize=11;fontColor=#44546A;strokeColor=#44546A;strokeWidth=2;endArrow=block;endFill=1" edge="1" parent="1" source="localSync" target="manifest">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edge-manifest-bucket" value="upload objects + manifest" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontFamily=Comic Sans MS;fontSize=11;fontColor=#0052CC;strokeColor=#0052CC;strokeWidth=2;endArrow=block;endFill=1" edge="1" parent="1" source="manifest" target="bucketSync">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,9 +1,11 @@
 use crate::error::{ArcError, ArcResult};
+use crate::service::storage::{BundleFileMeta, StorageService};
 use serde::{Deserialize, Serialize};
 use sqlx::MySqlPool;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Content bundle information
@@ -134,6 +136,7 @@ pub struct BundleService {
     cache: std::sync::Arc<RwLock<BundleCache>>,
     strict_mode: bool,
     download_prefix: Option<String>,
+    storage: Option<Arc<StorageService>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -153,7 +156,13 @@ impl BundleService {
             cache: std::sync::Arc::new(RwLock::new(BundleCache::default())),
             strict_mode: false,
             download_prefix,
+            storage: None,
         }
+    }
+
+    pub fn with_storage(mut self, storage: Option<Arc<StorageService>>) -> Self {
+        self.storage = storage;
+        self
     }
 
     /// Set strict mode for bundle version checking
@@ -168,7 +177,15 @@ impl BundleService {
 
     /// Initialize bundle parser by scanning bundle directory
     pub async fn initialize(&self) -> ArcResult<()> {
-        let new_cache = self.parse_bundles()?;
+        if let Some(storage) = self.s3_storage() {
+            storage.refresh_manifest().await?;
+        }
+
+        let new_cache = if let Some(storage) = self.s3_storage() {
+            self.parse_s3_bundles(&storage).await?
+        } else {
+            self.parse_bundles()?
+        };
         let mut cache = self.cache.write().await;
         *cache = new_cache;
         Ok(())
@@ -196,6 +213,62 @@ impl BundleService {
         }
 
         Ok(cache)
+    }
+
+    async fn parse_s3_bundles(&self, storage: &StorageService) -> ArcResult<BundleCache> {
+        let mut cache = BundleCache::default();
+        let bundles = storage.bundle_entries().unwrap_or_default();
+
+        for entry in bundles {
+            self.add_manifest_bundle(entry, &mut cache);
+        }
+
+        for (app_version, bundles) in cache.bundles.iter_mut() {
+            bundles.sort_by_key(|a| a.version_tuple());
+            if let Some(last_bundle) = bundles.last() {
+                cache
+                    .max_bundle_version
+                    .insert(app_version.clone(), last_bundle.version.clone());
+            }
+        }
+
+        Ok(cache)
+    }
+
+    fn add_manifest_bundle(&self, entry: BundleFileMeta, cache: &mut BundleCache) {
+        let prev_version = entry
+            .prev_version
+            .clone()
+            .unwrap_or_else(|| "0.0.0".to_string());
+        let bundle = ContentBundle {
+            version: entry.version,
+            prev_version: Some(prev_version.clone()),
+            app_version: entry.app_version,
+            uuid: entry.uuid,
+            json_size: entry.json_size,
+            bundle_size: entry.bundle_size,
+            json_path: entry.json_key,
+            bundle_path: entry.bundle_key,
+            json_url: None,
+            bundle_url: None,
+        };
+
+        cache
+            .bundles
+            .entry(bundle.app_version.clone())
+            .or_default()
+            .push(bundle.clone());
+
+        cache.version_tuple_bundles.insert(
+            (bundle.version.clone(), prev_version.clone()),
+            bundle.clone(),
+        );
+
+        cache
+            .next_versions
+            .entry(prev_version)
+            .or_default()
+            .push(bundle.version);
     }
 
     /// Recursively scan directory for bundle files
@@ -351,19 +424,39 @@ impl BundleService {
         for bundle in matched_bundles {
             let mut bundle_with_urls = bundle.clone();
 
-            // Generate download tokens
-            let json_token = self.generate_token();
-            let bundle_token = self.generate_token();
+            if let Some(storage) = self.s3_storage() {
+                let entry = BundleFileMeta {
+                    version: bundle.version.clone(),
+                    prev_version: bundle.prev_version.clone(),
+                    app_version: bundle.app_version.clone(),
+                    uuid: bundle.uuid.clone(),
+                    json_size: bundle.json_size,
+                    bundle_size: bundle.bundle_size,
+                    json_key: bundle.json_path.clone(),
+                    bundle_key: bundle.bundle_path.clone(),
+                };
+                bundle_with_urls.json_url = storage.presign_bundle_json(&entry).await?;
+                bundle_with_urls.bundle_url = storage.presign_bundle_file(&entry).await?;
+            } else {
+                // Generate download tokens
+                let json_token = self.generate_token();
+                let bundle_token = self.generate_token();
 
-            // Store tokens in database
-            self.store_download_token(&json_token, &bundle.json_path, current_time, device_id)
-                .await?;
-            self.store_download_token(&bundle_token, &bundle.bundle_path, current_time, device_id)
+                // Store tokens in database
+                self.store_download_token(&json_token, &bundle.json_path, current_time, device_id)
+                    .await?;
+                self.store_download_token(
+                    &bundle_token,
+                    &bundle.bundle_path,
+                    current_time,
+                    device_id,
+                )
                 .await?;
 
-            // Generate URLs
-            bundle_with_urls.json_url = Some(self.generate_download_url(&json_token));
-            bundle_with_urls.bundle_url = Some(self.generate_download_url(&bundle_token));
+                // Generate URLs
+                bundle_with_urls.json_url = Some(self.generate_download_url(&json_token));
+                bundle_with_urls.bundle_url = Some(self.generate_download_url(&bundle_token));
+            }
 
             let response = bundle_with_urls.to_response();
             results.push(response);
@@ -524,5 +617,12 @@ impl BundleService {
         }
 
         Ok(full_path)
+    }
+
+    fn s3_storage(&self) -> Option<Arc<StorageService>> {
+        self.storage
+            .as_ref()
+            .filter(|storage| storage.is_s3())
+            .cloned()
     }
 }

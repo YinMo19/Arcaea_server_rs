@@ -5,6 +5,7 @@
 
 use crate::error::{ArcError, ArcResult};
 use crate::model::user::UserInfo;
+use crate::service::storage::StorageService;
 use serde::Deserialize;
 use sqlx::MySqlPool;
 use std::collections::{HashMap, HashSet};
@@ -329,6 +330,8 @@ pub struct AssetManager {
     songlist_cache: Arc<RwLock<SonglistCache>>,
     /// File cache protected by RwLock
     file_cache: Arc<RwLock<FileCache>>,
+    /// Optional remote object storage metadata and URL signer.
+    storage: Option<Arc<StorageService>>,
 
     /// Whether to pre-calculate file hashes
     pre_calculate_hashes: bool,
@@ -349,8 +352,14 @@ impl AssetManager {
             bundle_folder,
             songlist_cache: Arc::new(RwLock::new(SonglistCache::default())),
             file_cache: Arc::new(RwLock::new(FileCache::default())),
+            storage: None,
             pre_calculate_hashes: true,
         }
+    }
+
+    pub fn with_storage(mut self, storage: Option<Arc<StorageService>>) -> Self {
+        self.storage = storage;
+        self
     }
 
     /// Set whether to pre-calculate file hashes
@@ -363,11 +372,15 @@ impl AssetManager {
     pub async fn initialize_cache(&self) -> ArcResult<()> {
         log::info!("Initializing asset cache...");
 
+        if let Some(storage) = &self.storage {
+            storage.refresh_manifest().await?;
+        }
+
         // Parse songlist
         self.parse_songlist().await?;
 
         // Pre-calculate file hashes if enabled
-        if self.pre_calculate_hashes {
+        if self.pre_calculate_hashes && !self.uses_s3_storage() {
             self.pre_calculate_file_hashes().await?;
         }
 
@@ -460,6 +473,10 @@ impl AssetManager {
 
     /// Get file MD5 hash
     pub fn get_song_file_md5(&self, song_id: &str, file_name: &str) -> Option<String> {
+        if let Some(storage) = self.s3_storage() {
+            return storage.song_file_md5(song_id, file_name);
+        }
+
         let mut file_cache = self.file_cache.write().unwrap();
         file_cache.get_file_md5(self.song_file_folder.to_str().unwrap(), song_id, file_name)
     }
@@ -472,6 +489,10 @@ impl AssetManager {
 
     /// Get song file names
     pub fn get_song_file_names(&self, song_id: &str) -> Vec<String> {
+        if let Some(storage) = self.s3_storage() {
+            return storage.song_file_names(song_id).unwrap_or_default();
+        }
+
         let songlist_cache = self.songlist_cache.read().unwrap().clone();
         let mut file_cache = self.file_cache.write().unwrap();
         file_cache.get_song_files(
@@ -483,6 +504,10 @@ impl AssetManager {
 
     /// Get all song IDs
     pub fn get_all_song_ids(&self) -> Vec<String> {
+        if let Some(storage) = self.s3_storage() {
+            return storage.all_song_ids().unwrap_or_default();
+        }
+
         let mut file_cache = self.file_cache.write().unwrap();
         file_cache.get_all_song_ids(self.song_file_folder.to_str().unwrap())
     }
@@ -503,6 +528,17 @@ impl AssetManager {
         // TODO: Add config for this setting
         let forbid = false; // Config.DOWNLOAD_FORBID_WHEN_NO_ITEM
         forbid && self.has_songlist() && self.get_user_unlocks(user).is_empty()
+    }
+
+    pub fn s3_storage(&self) -> Option<Arc<StorageService>> {
+        self.storage
+            .as_ref()
+            .filter(|storage| storage.is_s3())
+            .cloned()
+    }
+
+    fn uses_s3_storage(&self) -> bool {
+        self.s3_storage().is_some()
     }
 }
 
