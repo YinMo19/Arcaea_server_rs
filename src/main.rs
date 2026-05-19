@@ -286,11 +286,17 @@ async fn configure_rocket() -> Rocket<Build> {
         .mount("/", Arcaea_server_rs::route::present::routes())
         .mount("/", Arcaea_server_rs::route::world::routes())
         .mount("/", Arcaea_server_rs::route::purchase::routes())
-        .mount(GAME_API_PREFIX, Arcaea_server_rs::route::others::game_routes())
+        .mount(
+            GAME_API_PREFIX,
+            Arcaea_server_rs::route::others::game_routes(),
+        )
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::course::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::mission::routes())
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::friend::routes())
-        .mount(GAME_API_PREFIX, Arcaea_server_rs::route::download::game_routes())
+        .mount(
+            GAME_API_PREFIX,
+            Arcaea_server_rs::route::download::game_routes(),
+        )
         .mount(GAME_API_PREFIX, Arcaea_server_rs::route::score::routes())
         .mount(
             GAME_API_PREFIX,

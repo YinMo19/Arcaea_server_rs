@@ -473,7 +473,7 @@ impl PurchaseService {
 
         // Check if user has already redeemed this code
         let already_redeemed = sqlx::query!(
-            "SELECT EXISTS(SELECT 1 FROM user_redeem WHERE user_id = ? AND code = ?) as `exists`",
+            "SELECT EXISTS(SELECT 1 FROM user_redeem WHERE user_id = ? AND code = ?) as `exists!: i64`",
             user_id,
             code
         )

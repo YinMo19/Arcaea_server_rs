@@ -1,15 +1,14 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT EXISTS(SELECT 1 FROM friend WHERE user_id_me = ? AND user_id_other = ?) as `exists`",
+  "query": "SELECT EXISTS(SELECT 1 FROM user_redeem WHERE user_id = ? AND code = ?) as `exists!: i64`",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "exists",
+        "name": "exists!: i64",
         "type_info": {
           "type": "Long",
           "flags": "NOT_NULL | BINARY",
-          "char_set": 63,
           "max_size": 1
         }
       }
@@ -21,5 +20,5 @@
       false
     ]
   },
-  "hash": "5eb8dcfe23cce06655ed059728d76a5f068c3246359e987931bc03b6f8455813"
+  "hash": "7567ece897aedfa31eb1ce4d38d57a6f633210c437b3e9f3fe76ff781d43b636"
 }

@@ -2,7 +2,19 @@
 -- This fixes duplicate rows caused by ON DUPLICATE KEY statements
 -- when unique constraints were absent.
 
-CREATE TEMPORARY TABLE tmp_user_char AS
+CREATE TEMPORARY TABLE tmp_user_char (
+    user_id INT NOT NULL,
+    character_id INT NOT NULL,
+    level INT,
+    exp DOUBLE,
+    is_uncapped TINYINT,
+    is_uncapped_override TINYINT,
+    skill_flag INT
+);
+
+INSERT INTO tmp_user_char (
+    user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag
+)
 SELECT
     user_id,
     character_id,
@@ -25,7 +37,19 @@ FROM tmp_user_char;
 
 DROP TEMPORARY TABLE tmp_user_char;
 
-CREATE TEMPORARY TABLE tmp_user_char_full AS
+CREATE TEMPORARY TABLE tmp_user_char_full (
+    user_id INT NOT NULL,
+    character_id INT NOT NULL,
+    level INT,
+    exp DOUBLE,
+    is_uncapped TINYINT,
+    is_uncapped_override TINYINT,
+    skill_flag INT
+);
+
+INSERT INTO tmp_user_char_full (
+    user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag
+)
 SELECT
     user_id,
     character_id,

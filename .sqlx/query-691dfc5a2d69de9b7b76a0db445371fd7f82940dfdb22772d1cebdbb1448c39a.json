@@ -9,7 +9,6 @@
         "type_info": {
           "type": "Blob",
           "flags": "BLOB",
-          "char_set": 224,
           "max_size": 262140
         }
       }

@@ -1,25 +1,24 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT EXISTS(SELECT 1 FROM user_item WHERE user_id = ? AND item_id = ? AND type IN ('course_banner', 'online_banner')) as `exists`",
+  "query": "SELECT EXISTS(SELECT 1 FROM user WHERE user_id = ?) as `exists!: i64`",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "exists",
+        "name": "exists!: i64",
         "type_info": {
           "type": "Long",
           "flags": "NOT_NULL | BINARY",
-          "char_set": 63,
           "max_size": 1
         }
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 1
     },
     "nullable": [
       false
     ]
   },
-  "hash": "cee251555a8d40d25f78e4be96eb68cf46e18c837850c39293d68b69448e52fe"
+  "hash": "c0c353ed446c25c63ee95677bc646fbc979fca16e571ba16cfcacc630192cb45"
 }

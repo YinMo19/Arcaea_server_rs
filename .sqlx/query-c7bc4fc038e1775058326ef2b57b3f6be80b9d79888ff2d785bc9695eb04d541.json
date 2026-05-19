@@ -1,15 +1,14 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT EXISTS(SELECT 1 FROM user_present WHERE user_id = ? AND present_id = ?)",
+  "query": "SELECT EXISTS(SELECT 1 FROM friend WHERE user_id_me = ? AND user_id_other = ?) as `exists!: i64`",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "EXISTS(SELECT 1 FROM user_present WHERE user_id = ? AND present_id = ?)",
+        "name": "exists!: i64",
         "type_info": {
           "type": "Long",
           "flags": "NOT_NULL | BINARY",
-          "char_set": 63,
           "max_size": 1
         }
       }
@@ -21,5 +20,5 @@
       false
     ]
   },
-  "hash": "da2e0c3fe133b48648c5aa9a4277220592976c3049632979fb349458d1c696cb"
+  "hash": "c7bc4fc038e1775058326ef2b57b3f6be80b9d79888ff2d785bc9695eb04d541"
 }

@@ -340,7 +340,7 @@ impl UnlockUserItem {
     async fn unlock_for_user(&self, user_id: i32) -> ArcResult<()> {
         // Check if user exists
         let user_exists = sqlx::query_scalar!(
-            "SELECT EXISTS(SELECT 1 FROM user WHERE user_id = ?)",
+            "SELECT EXISTS(SELECT 1 FROM user WHERE user_id = ?) as `exists!: i64`",
             user_id
         )
         .fetch_one(&self.pool)

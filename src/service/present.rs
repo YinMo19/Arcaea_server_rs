@@ -96,7 +96,7 @@ impl PresentService {
 
         // Check if user has this present
         let user_present_exists = sqlx::query_scalar!(
-            "SELECT EXISTS(SELECT 1 FROM user_present WHERE user_id = ? AND present_id = ?)",
+            "SELECT EXISTS(SELECT 1 FROM user_present WHERE user_id = ? AND present_id = ?) as `exists!: i64`",
             user_id,
             present_id
         )
@@ -227,7 +227,7 @@ impl PresentService {
     /// Check if a present exists
     pub async fn present_exists(&self, present_id: &str) -> Result<bool, ArcError> {
         let exists = sqlx::query_scalar!(
-            "SELECT EXISTS(SELECT 1 FROM present WHERE present_id = ?)",
+            "SELECT EXISTS(SELECT 1 FROM present WHERE present_id = ?) as `exists!: i64`",
             present_id
         )
         .fetch_one(&self.pool)

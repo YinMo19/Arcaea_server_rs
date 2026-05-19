@@ -1,15 +1,14 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT EXISTS(SELECT 1 FROM present WHERE present_id = ?)",
+  "query": "SELECT EXISTS(SELECT 1 FROM user WHERE name = ?) as `exists!: i64`",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "EXISTS(SELECT 1 FROM present WHERE present_id = ?)",
+        "name": "exists!: i64",
         "type_info": {
           "type": "Long",
           "flags": "NOT_NULL | BINARY",
-          "char_set": 63,
           "max_size": 1
         }
       }
@@ -21,5 +20,5 @@
       false
     ]
   },
-  "hash": "b1f237b3b69b7014e6b4c69a2e74e5f82e547d103cd97ba469cc73c9606e0fdd"
+  "hash": "333b10496c42db9a52fd67aa9c03f3c2293458dcc75a2ee90fb87eb33aba33a4"
 }

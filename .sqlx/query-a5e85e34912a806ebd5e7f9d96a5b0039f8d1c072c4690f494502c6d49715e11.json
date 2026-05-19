@@ -1,25 +1,24 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT EXISTS(SELECT 1 FROM user WHERE email = ?) as `exists`",
+  "query": "SELECT EXISTS(SELECT 1 FROM user_char WHERE user_id = ? AND character_id = ?) as `exists!: i64`",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "exists",
+        "name": "exists!: i64",
         "type_info": {
           "type": "Long",
           "flags": "NOT_NULL | BINARY",
-          "char_set": 63,
           "max_size": 1
         }
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
       false
     ]
   },
-  "hash": "7cc24f1ee84832ec5a36c01eafc7096757efe260a98422aa4b6435477bed57a8"
+  "hash": "a5e85e34912a806ebd5e7f9d96a5b0039f8d1c072c4690f494502c6d49715e11"
 }

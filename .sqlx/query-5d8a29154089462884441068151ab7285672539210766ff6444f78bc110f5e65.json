@@ -9,7 +9,6 @@
         "type_info": {
           "type": "Long",
           "flags": "",
-          "char_set": 63,
           "max_size": 11
         }
       },
@@ -19,7 +18,6 @@
         "type_info": {
           "type": "Double",
           "flags": "",
-          "char_set": 63,
           "max_size": 22
         }
       },
@@ -29,7 +27,6 @@
         "type_info": {
           "type": "Tiny",
           "flags": "",
-          "char_set": 63,
           "max_size": 4
         }
       }

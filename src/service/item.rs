@@ -20,7 +20,7 @@ impl ItemService {
     /// Check if item exists in database
     pub async fn select_exists(&self, item_id: &str, item_type: &str) -> ArcResult<bool> {
         let result = sqlx::query!(
-            "SELECT EXISTS(SELECT 1 FROM item WHERE item_id = ? AND type = ?) as `exists`",
+            "SELECT EXISTS(SELECT 1 FROM item WHERE item_id = ? AND type = ?) as `exists!: i64`",
             item_id,
             item_type
         )
@@ -159,7 +159,7 @@ impl ItemService {
 
         // Check if user already has the item
         let exists = sqlx::query!(
-            "SELECT EXISTS(SELECT 1 FROM user_item WHERE user_id = ? AND item_id = ? AND type = ?) as `exists`",
+            "SELECT EXISTS(SELECT 1 FROM user_item WHERE user_id = ? AND item_id = ? AND type = ?) as `exists!: i64`",
             user_id,
             item_id,
             item_type
@@ -193,7 +193,7 @@ impl ItemService {
         item_type: &str,
     ) -> ArcResult<()> {
         let exists = sqlx::query!(
-            "SELECT EXISTS(SELECT 1 FROM user_item WHERE user_id = ? AND item_id = ? AND type = ?) as `exists`",
+            "SELECT EXISTS(SELECT 1 FROM user_item WHERE user_id = ? AND item_id = ? AND type = ?) as `exists!: i64`",
             user_id,
             item_id,
             item_type
@@ -305,7 +305,7 @@ impl ItemService {
         let char_id = self.resolve_character_id(character_id).await?;
 
         let exists = sqlx::query!(
-            "SELECT EXISTS(SELECT 1 FROM user_char WHERE user_id = ? AND character_id = ?) as `exists`",
+            "SELECT EXISTS(SELECT 1 FROM user_char WHERE user_id = ? AND character_id = ?) as `exists!: i64`",
             user_id,
             char_id
         )

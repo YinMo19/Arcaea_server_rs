@@ -23,16 +23,14 @@ impl Purchase {
             if from <= current_time && current_time <= to {
                 if let Some(ref reason) = self.discount_reason {
                     match reason.as_str() {
-                        "anni5tix" => {
-                            if user_special_items.get("anni5tix").unwrap_or(&0) >= &1 {
+                        "anni5tix"
+                            if user_special_items.get("anni5tix").unwrap_or(&0) >= &1 => {
                                 return 0;
                             }
-                        }
-                        "pick_ticket" => {
-                            if user_special_items.get("pick_ticket").unwrap_or(&0) >= &1 {
+                        "pick_ticket"
+                            if user_special_items.get("pick_ticket").unwrap_or(&0) >= &1 => {
                                 return 0;
                             }
-                        }
                         _ => {}
                     }
                 }

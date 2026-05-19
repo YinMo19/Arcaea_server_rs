@@ -359,8 +359,8 @@ impl StaminaImpl {
             .unwrap()
             .as_millis() as i64;
 
-        let recovery_ticks = (self.max_stamina_ts - current_time) as f64
-            / Constants::STAMINA_RECOVER_TICK as f64;
+        let recovery_ticks =
+            (self.max_stamina_ts - current_time) as f64 / Constants::STAMINA_RECOVER_TICK as f64;
         let calculated_stamina = Constants::MAX_STAMINA - recovery_ticks.round() as i32;
 
         if calculated_stamina >= Constants::MAX_STAMINA {

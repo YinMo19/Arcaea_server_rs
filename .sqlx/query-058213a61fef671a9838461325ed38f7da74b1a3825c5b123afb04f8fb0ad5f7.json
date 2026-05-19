@@ -1,25 +1,24 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT EXISTS(SELECT 1 FROM user WHERE name = ?) as `exists`",
+  "query": "SELECT EXISTS(SELECT 1 FROM item WHERE item_id = ? AND type = ?) as `exists!: i64`",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "exists",
+        "name": "exists!: i64",
         "type_info": {
           "type": "Long",
           "flags": "NOT_NULL | BINARY",
-          "char_set": 63,
           "max_size": 1
         }
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
       false
     ]
   },
-  "hash": "8a814fefa84b8be419e5eb66be26dac2913798afc2e318151da7074ffd7ae873"
+  "hash": "058213a61fef671a9838461325ed38f7da74b1a3825c5b123afb04f8fb0ad5f7"
 }

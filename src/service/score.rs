@@ -517,7 +517,7 @@ impl ScoreService {
         if let Some(user_row) = user_score {
             // Calculate user's rank (considering both score and time_played for tie-breaking)
             let rank_result = sqlx::query!(
-                "SELECT COUNT(*) as rank FROM best_score
+                "SELECT COUNT(*) as `rank_count!: i64` FROM best_score
                  WHERE song_id = ? AND difficulty = ? AND
                  (score > ? OR (score = ? AND time_played > ?))",
                 song_id,
@@ -528,7 +528,7 @@ impl ScoreService {
             )
             .fetch_one(&self.pool)
             .await?;
-            let my_rank = (rank_result.rank + 1) as i32;
+            let my_rank = (rank_result.rank_count + 1) as i32;
 
             // Get total count
             let total_result = sqlx::query!(
@@ -2358,7 +2358,7 @@ fn climb_user_map(
         let mut i = 0usize;
         let mut t = prev_capture + step_value;
         while i < steps.len() && t > 0.0 {
-            let dt = steps[i].capture as f64;
+            let dt = steps[i].capture;
             if dt > t {
                 t = 0.0;
             } else {
@@ -2379,7 +2379,7 @@ fn climb_user_map(
     let mut j = prev_capture;
     let mut t = step_value;
     while t > 0.0 && i < steps.len() {
-        let dt = steps[i].capture as f64 - j;
+        let dt = steps[i].capture - j;
         if dt > t {
             j += t;
             t = 0.0;

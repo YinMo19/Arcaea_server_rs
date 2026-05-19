@@ -9,7 +9,6 @@
         "type_info": {
           "type": "Blob",
           "flags": "BLOB",
-          "char_set": 224,
           "max_size": 262140
         }
       },
@@ -19,7 +18,6 @@
         "type_info": {
           "type": "LongLong",
           "flags": "",
-          "char_set": 63,
           "max_size": 20
         }
       },
@@ -29,7 +27,6 @@
         "type_info": {
           "type": "VarString",
           "flags": "",
-          "char_set": 224,
           "max_size": 1020
         }
       }

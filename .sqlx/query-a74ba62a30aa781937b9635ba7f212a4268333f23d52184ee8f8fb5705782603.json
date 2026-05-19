@@ -9,7 +9,6 @@
         "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
-          "char_set": 224,
           "max_size": 1020
         }
       },
@@ -19,7 +18,6 @@
         "type_info": {
           "type": "Long",
           "flags": "",
-          "char_set": 63,
           "max_size": 11
         }
       },
@@ -29,7 +27,6 @@
         "type_info": {
           "type": "Long",
           "flags": "",
-          "char_set": 63,
           "max_size": 11
         }
       }

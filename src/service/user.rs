@@ -66,7 +66,7 @@ impl UserService {
 
         let exists = sqlx::query_as!(
             UserExists,
-            "SELECT EXISTS(SELECT 1 FROM user WHERE name = ?) as `exists`",
+            "SELECT EXISTS(SELECT 1 FROM user WHERE name = ?) as `exists!: i64`",
             name
         )
         .fetch_one(&self.pool)
@@ -95,7 +95,7 @@ impl UserService {
 
         let exists = sqlx::query_as!(
             UserExists,
-            "SELECT EXISTS(SELECT 1 FROM user WHERE email = ?) as `exists`",
+            "SELECT EXISTS(SELECT 1 FROM user WHERE email = ?) as `exists!: i64`",
             email
         )
         .fetch_one(&self.pool)
@@ -117,7 +117,7 @@ impl UserService {
 
         let exists = sqlx::query_as!(
             UserExists,
-            "SELECT EXISTS(SELECT 1 FROM user WHERE user_code = ?) as `exists`",
+            "SELECT EXISTS(SELECT 1 FROM user WHERE user_code = ?) as `exists!: i64`",
             user_code
         )
         .fetch_one(&self.pool)
@@ -139,7 +139,7 @@ impl UserService {
 
             let exists = sqlx::query_as!(
                 UserExists,
-                "SELECT EXISTS(SELECT 1 FROM user WHERE user_code = ?) as `exists`",
+                "SELECT EXISTS(SELECT 1 FROM user WHERE user_code = ?) as `exists!: i64`",
                 user_code
             )
             .fetch_one(&self.pool)
@@ -261,7 +261,11 @@ impl UserService {
             user_code,
             CONFIG.default_memories,
             user_data.email,
-            if user_data.is_allow_marketing_email { 1 } else { 0 }
+            if user_data.is_allow_marketing_email {
+                1
+            } else {
+                0
+            }
         )
         .execute(&self.pool)
         .await?;
@@ -745,11 +749,7 @@ impl UserService {
             })
         };
 
-        let (is_uncapped, is_uncapped_override) = if let Some(info) = char_info {
-            info
-        } else {
-            (0, 0) // Default values if character not found
-        };
+        let (is_uncapped, is_uncapped_override) = char_info.unwrap_or_default();
 
         let skill_sealed_val = if is_skill_sealed { 1 } else { 0 };
 
@@ -1578,7 +1578,7 @@ impl UserService {
 
         // Check if friendship already exists
         let exists = sqlx::query!(
-            "SELECT EXISTS(SELECT 1 FROM friend WHERE user_id_me = ? AND user_id_other = ?) as `exists`",
+            "SELECT EXISTS(SELECT 1 FROM friend WHERE user_id_me = ? AND user_id_other = ?) as `exists!: i64`",
             user_id,
             friend_id
         )
@@ -1607,7 +1607,7 @@ impl UserService {
     pub async fn delete_friend(&self, user_id: i32, friend_id: i32) -> ArcResult<()> {
         // Check if friendship exists
         let exists = sqlx::query!(
-            "SELECT EXISTS(SELECT 1 FROM friend WHERE user_id_me = ? AND user_id_other = ?) as `exists`",
+            "SELECT EXISTS(SELECT 1 FROM friend WHERE user_id_me = ? AND user_id_other = ?) as `exists!: i64`",
             user_id,
             friend_id
         )
@@ -1777,7 +1777,7 @@ impl UserService {
         }
 
         let exists = sqlx::query_scalar!(
-            "SELECT EXISTS(SELECT 1 FROM user_item WHERE user_id = ? AND item_id = ? AND type IN ('course_banner', 'online_banner')) as `exists`",
+            "SELECT EXISTS(SELECT 1 FROM user_item WHERE user_id = ? AND item_id = ? AND type IN ('course_banner', 'online_banner')) as `exists!: i64`",
             user_id,
             banner
         )
@@ -1809,7 +1809,7 @@ impl UserService {
 
             // Check if mutual friendship exists
             let is_mutual = sqlx::query!(
-                "SELECT EXISTS(SELECT 1 FROM friend WHERE user_id_me = ? AND user_id_other = ?) as `exists`",
+                "SELECT EXISTS(SELECT 1 FROM friend WHERE user_id_me = ? AND user_id_other = ?) as `exists!: i64`",
                 friend_id,
                 user_id
             )
