@@ -177,15 +177,24 @@ impl BundleService {
 
     /// Initialize bundle parser by scanning bundle directory
     pub async fn initialize(&self) -> ArcResult<()> {
-        if let Some(storage) = self.s3_storage() {
-            storage.refresh_manifest().await?;
+        if self.s3_storage().is_some() {
+            return self.refresh_s3_cache().await;
         }
 
-        let new_cache = if let Some(storage) = self.s3_storage() {
-            self.parse_s3_bundles(&storage).await?
-        } else {
-            self.parse_bundles()?
+        let new_cache = self.parse_bundles()?;
+        let mut cache = self.cache.write().await;
+        *cache = new_cache;
+        Ok(())
+    }
+
+    /// Refresh bundle cache from the current S3 manifest.
+    pub async fn refresh_s3_cache(&self) -> ArcResult<()> {
+        let Some(storage) = self.s3_storage() else {
+            return Ok(());
         };
+
+        storage.refresh_manifest().await?;
+        let new_cache = self.parse_s3_bundles(&storage).await?;
         let mut cache = self.cache.write().await;
         *cache = new_cache;
         Ok(())

@@ -9,6 +9,7 @@ use rocket::{launch, Build, Rocket};
 
 use std::collections::HashSet;
 use std::env;
+use std::time::Duration;
 use Arcaea_server_rs::constants::GAME_API_PREFIX;
 use Arcaea_server_rs::error::{bad_request, forbidden, internal_error, not_found, unauthorized};
 use Arcaea_server_rs::route::download::serve_download_file;
@@ -23,6 +24,8 @@ use Arcaea_server_rs::service::{
 use Arcaea_server_rs::{config, Database, DbPool};
 
 use rocket_prometheus::PrometheusMetrics;
+
+const DEFAULT_S3_METADATA_SYNC_INTERVAL_SECONDS: u64 = 180;
 
 /// Initialize application services with database connection
 async fn init_services(
@@ -119,6 +122,10 @@ async fn init_services(
     }
     log::info!("Bundle service initialized successfully");
 
+    if storage_service.is_some() {
+        spawn_s3_metadata_sync(bundle_service.clone(), s3_metadata_sync_interval());
+    }
+
     let character_service = CharacterService::new(pool.clone());
     let asset_init_service = AssetInitService::new(pool.clone());
 
@@ -186,6 +193,33 @@ async fn init_services(
         operation_manager,
         multiplayer_service,
     )
+}
+
+fn s3_metadata_sync_interval() -> Duration {
+    let seconds = env::var("S3_METADATA_SYNC_INTERVAL_SECONDS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|seconds| *seconds > 0)
+        .unwrap_or(DEFAULT_S3_METADATA_SYNC_INTERVAL_SECONDS);
+
+    Duration::from_secs(seconds)
+}
+
+fn spawn_s3_metadata_sync(bundle_service: BundleService, interval: Duration) {
+    log::info!(
+        "S3 metadata sync loop enabled, interval: {} seconds",
+        interval.as_secs()
+    );
+
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(interval).await;
+            match bundle_service.refresh_s3_cache().await {
+                Ok(()) => log::info!("S3 metadata sync completed"),
+                Err(e) => log::error!("S3 metadata sync failed: {e}"),
+            }
+        }
+    });
 }
 
 /// Configure the Rocket application
