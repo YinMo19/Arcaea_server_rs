@@ -172,6 +172,33 @@ async fn init_services(
 /// Configure the Rocket application
 async fn configure_rocket() -> Rocket<Build> {
     let prometheus = PrometheusMetrics::new();
+    let pool = match Database::connect().await {
+        Ok(pool) => {
+            log::info!("Database connection established");
+            pool
+        }
+        Err(e) => {
+            log::error!("Failed to connect to database: {e}");
+            std::process::exit(1);
+        }
+    };
+    let (
+        user_service,
+        download_service,
+        score_service,
+        notification_service,
+        bundle_service,
+        character_service,
+        present_service,
+        world_service,
+        purchase_service,
+        item_service,
+        asset_manager,
+        operation_manager,
+        multiplayer_service,
+    ) = init_services(pool.clone()).await;
+    log::info!("Services initialized");
+
     let figment = rocket::Config::figment()
         .merge(("cli_colors", false))
         .merge((
@@ -208,52 +235,20 @@ async fn configure_rocket() -> Rocket<Build> {
                 })
             },
         ))
-        .attach(AdHoc::on_ignite("Database", |rocket| async {
-            match Database::connect().await {
-                Ok(pool) => {
-                    log::info!("Database connection established");
-                    rocket.manage(pool)
-                }
-                Err(e) => {
-                    log::error!("Failed to connect to database: {e}");
-                    std::process::exit(1);
-                }
-            }
-        }))
-        .attach(AdHoc::on_ignite("Services", |rocket| async {
-            let pool = rocket.state::<DbPool>().unwrap().clone();
-            let (
-                user_service,
-                download_service,
-                score_service,
-                notification_service,
-                bundle_service,
-                character_service,
-                present_service,
-                world_service,
-                purchase_service,
-                item_service,
-                asset_manager,
-                operation_manager,
-                multiplayer_service,
-            ) = init_services(pool).await;
-
-            log::info!("Services initialized");
-            rocket
-                .manage(user_service)
-                .manage(download_service)
-                .manage(score_service)
-                .manage(notification_service)
-                .manage(bundle_service)
-                .manage(character_service)
-                .manage(present_service)
-                .manage(world_service)
-                .manage(purchase_service)
-                .manage(item_service)
-                .manage(asset_manager)
-                .manage(operation_manager)
-                .manage(multiplayer_service)
-        }))
+        .manage(pool)
+        .manage(user_service)
+        .manage(download_service)
+        .manage(score_service)
+        .manage(notification_service)
+        .manage(bundle_service)
+        .manage(character_service)
+        .manage(present_service)
+        .manage(world_service)
+        .manage(purchase_service)
+        .manage(item_service)
+        .manage(asset_manager)
+        .manage(operation_manager)
+        .manage(multiplayer_service)
         // for prometheus telemetry
         .attach(prometheus.clone())
         .mount("/metrics", prometheus)
