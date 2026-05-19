@@ -32,7 +32,7 @@ cp .env.example .env
 cp Rocket.toml.example Rocket.toml
 
 # 用 cargo 装一个管理数据库的工具
-cargo install sqlx
+cargo install sqlx-cli
 
 # 完成这步之前必须确认你的数据库已经好了
 source .env && sqlx database create && sqlx migrate run
