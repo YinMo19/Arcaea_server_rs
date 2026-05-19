@@ -68,7 +68,11 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="edge-routes-bundle" edge="1" parent="1" source="routes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#44546A;strokeWidth=2;endArrow=block;endFill=1" target="bundle" value="">
-          <mxGeometry relative="1" as="geometry" />
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="713" y="300" />
+            </Array>
+          </mxGeometry>
         </mxCell>
         <mxCell id="edge-download-asset" edge="1" parent="1" source="download" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontFamily=Comic Sans MS;fontSize=11;fontColor=#44546A;strokeColor=#44546A;strokeWidth=2;endArrow=block;endFill=1" target="asset" value="song files">
           <mxGeometry relative="1" as="geometry" />
