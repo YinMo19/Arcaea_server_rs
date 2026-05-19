@@ -1,4 +1,6 @@
 /target
+.DS_Store
+tmp/
 
 database/songs/
 database/*.db

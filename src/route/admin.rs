@@ -9,12 +9,38 @@ use rocket::{get, post, routes, Route, State};
 use sha2::{Digest, Sha256};
 use sqlx::FromRow;
 use std::collections::HashMap;
+use std::env;
+use std::sync::{OnceLock, RwLock};
 
 use crate::config::CONFIG;
 use crate::service::OperationManager;
 use crate::DbPool;
 
 const ADMIN_COOKIE: &str = "arcaea_admin_session";
+
+#[derive(Debug, Clone)]
+pub struct AdminConfig {
+    pub username: String,
+    pub password: String,
+}
+
+impl Default for AdminConfig {
+    fn default() -> Self {
+        Self {
+            username: CONFIG.username.clone(),
+            password: CONFIG.password.clone(),
+        }
+    }
+}
+
+static ADMIN_CONFIG: OnceLock<RwLock<AdminConfig>> = OnceLock::new();
+
+pub fn set_admin_config(config: AdminConfig) {
+    let lock = ADMIN_CONFIG.get_or_init(|| RwLock::new(AdminConfig::default()));
+    if let Ok(mut guard) = lock.write() {
+        *guard = config;
+    }
+}
 
 #[derive(Debug, Clone)]
 struct RecentOpView {
@@ -551,9 +577,30 @@ struct CollectionItemDbRow {
 }
 
 fn expected_admin_cookie_value() -> String {
-    let inner = format!("{:x}", Sha256::digest(CONFIG.password.as_bytes()));
-    let joined = format!("{}{}", CONFIG.username, inner);
+    let (username, password) = admin_credentials();
+    let inner = format!("{:x}", Sha256::digest(password.as_bytes()));
+    let joined = format!("{}{}", username, inner);
     format!("{:x}", Sha256::digest(joined.as_bytes()))
+}
+
+fn admin_credentials() -> (String, String) {
+    let configured = ADMIN_CONFIG
+        .get_or_init(|| RwLock::new(AdminConfig::default()))
+        .read()
+        .ok()
+        .map(|guard| guard.clone())
+        .unwrap_or_default();
+
+    let username = env::var("ADMIN_USERNAME")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(configured.username);
+    let password = env::var("ADMIN_PASSWORD")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .unwrap_or(configured.password);
+
+    (username, password)
 }
 
 fn is_admin_logged_in(cookies: &CookieJar<'_>) -> bool {
@@ -831,7 +878,8 @@ pub fn admin_login_get(
 
 #[post("/login", data = "<form>")]
 pub fn admin_login_post(form: Form<AdminLoginForm>, cookies: &CookieJar<'_>) -> Flash<Redirect> {
-    if form.username == CONFIG.username && form.password == CONFIG.password {
+    let (username, password) = admin_credentials();
+    if form.username == username && form.password == password {
         set_admin_cookie(cookies);
         Flash::success(Redirect::to("/web"), "登录成功")
     } else {

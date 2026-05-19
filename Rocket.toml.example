@@ -1,5 +1,8 @@
 [default]
 port = 8090
+game_api_prefixes = ["/", "/yinmo/30"]
+admin_username = "admin"
+admin_password = "admin"
 
 [default.limits]
 form = "16MiB"

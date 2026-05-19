@@ -12,6 +12,7 @@ use std::env;
 use std::time::Duration;
 use Arcaea_server_rs::constants::GAME_API_PREFIX;
 use Arcaea_server_rs::error::{bad_request, forbidden, internal_error, not_found, unauthorized};
+use Arcaea_server_rs::route::admin::{set_admin_config, AdminConfig};
 use Arcaea_server_rs::route::download::serve_download_file;
 use Arcaea_server_rs::route::others::bundle_download;
 use Arcaea_server_rs::route::CORS;
@@ -26,6 +27,7 @@ use Arcaea_server_rs::{config, Database, DbPool};
 use rocket_prometheus::PrometheusMetrics;
 
 const DEFAULT_S3_METADATA_SYNC_INTERVAL_SECONDS: u64 = 180;
+const DEFAULT_GAME_API_PREFIXES: &[&str] = &["/", GAME_API_PREFIX];
 
 /// Initialize application services with database connection
 async fn init_services(
@@ -260,24 +262,21 @@ async fn configure_rocket() -> Rocket<Build> {
                 .limit("form", 16.mebibytes())
                 .limit("data-form", 16.mebibytes()),
         ));
-    let game_user_prefix = format!("{GAME_API_PREFIX}/user");
-    let game_account_prefix = format!("{GAME_API_PREFIX}/account");
-    let game_auth_prefix = format!("{GAME_API_PREFIX}/auth");
+    let game_api_prefixes = game_api_prefixes(&figment);
+    let trailing_slash_paths = multiplayer_trailing_slash_paths(&game_api_prefixes);
+    set_admin_config(admin_config(&figment));
+    log::info!("Game API prefixes: {}", game_api_prefixes.join(", "));
 
     let mut rocket = rocket::custom(figment)
         .attach(CORS)
         .attach(AdHoc::on_request(
             "Normalize Python client trailing slashes",
-            |request, _| {
+            move |request, _| {
+                let trailing_slash_paths = trailing_slash_paths.clone();
                 Box::pin(async move {
                     let path = request.uri().path().as_str();
-                    let trailing_slash_path = [
-                        format!("{GAME_API_PREFIX}/multiplayer/me/matchmaking/join/"),
-                        format!("{GAME_API_PREFIX}/multiplayer/me/matchmaking/status/"),
-                        format!("{GAME_API_PREFIX}/multiplayer/me/matchmaking/leave/"),
-                    ];
 
-                    if trailing_slash_path.iter().any(|target| target == path) {
+                    if trailing_slash_paths.contains(path) {
                         if let Some(uri) = request
                             .uri()
                             .map_path(|p| p.as_str().trim_end_matches('/').to_string())
@@ -305,59 +304,8 @@ async fn configure_rocket() -> Rocket<Build> {
         // for prometheus telemetry
         .attach(prometheus.clone())
         .mount("/metrics", prometheus)
-        .mount("/user", Arcaea_server_rs::route::user::routes())
-        .mount(game_user_prefix, Arcaea_server_rs::route::user::routes())
-        .mount(
-            "/account",
-            rocket::routes![
-                Arcaea_server_rs::route::user::register,
-                Arcaea_server_rs::route::user::user_delete,
-                Arcaea_server_rs::route::user::email_resend_verify,
-                Arcaea_server_rs::route::user::email_verify
-            ],
-        )
-        .mount(
-            game_account_prefix,
-            rocket::routes![
-                Arcaea_server_rs::route::user::register,
-                Arcaea_server_rs::route::user::user_delete,
-                Arcaea_server_rs::route::user::email_resend_verify,
-                Arcaea_server_rs::route::user::email_verify
-            ],
-        )
         .mount("/web", Arcaea_server_rs::route::admin::routes())
-        .mount("/auth", Arcaea_server_rs::route::auth::routes())
-        .mount(game_auth_prefix, Arcaea_server_rs::route::auth::routes())
         .mount("/", rocket::routes![bundle_download, serve_download_file])
-        .mount("/", Arcaea_server_rs::route::others::game_routes())
-        .mount("/", Arcaea_server_rs::route::course::routes())
-        .mount("/", Arcaea_server_rs::route::mission::routes())
-        .mount("/", Arcaea_server_rs::route::friend::routes())
-        .mount("/", Arcaea_server_rs::route::download::game_routes())
-        .mount("/", Arcaea_server_rs::route::score::routes())
-        .mount("/", Arcaea_server_rs::route::multiplayer::routes())
-        .mount("/", Arcaea_server_rs::route::present::routes())
-        .mount("/", Arcaea_server_rs::route::world::routes())
-        .mount("/", Arcaea_server_rs::route::purchase::routes())
-        .mount(
-            GAME_API_PREFIX,
-            Arcaea_server_rs::route::others::game_routes(),
-        )
-        .mount(GAME_API_PREFIX, Arcaea_server_rs::route::course::routes())
-        .mount(GAME_API_PREFIX, Arcaea_server_rs::route::mission::routes())
-        .mount(GAME_API_PREFIX, Arcaea_server_rs::route::friend::routes())
-        .mount(
-            GAME_API_PREFIX,
-            Arcaea_server_rs::route::download::game_routes(),
-        )
-        .mount(GAME_API_PREFIX, Arcaea_server_rs::route::score::routes())
-        .mount(
-            GAME_API_PREFIX,
-            Arcaea_server_rs::route::multiplayer::routes(),
-        )
-        .mount(GAME_API_PREFIX, Arcaea_server_rs::route::present::routes())
-        .mount(GAME_API_PREFIX, Arcaea_server_rs::route::world::routes())
-        .mount(GAME_API_PREFIX, Arcaea_server_rs::route::purchase::routes())
         .register(
             "/",
             rocket::catchers![
@@ -368,6 +316,10 @@ async fn configure_rocket() -> Rocket<Build> {
                 forbidden,
             ],
         );
+
+    for prefix in &game_api_prefixes {
+        rocket = mount_game_api_routes(rocket, prefix);
+    }
 
     let mut seen_old_prefixes = HashSet::new();
     for prefix in Arcaea_server_rs::constants::OLD_GAME_API_PREFIX {
@@ -391,11 +343,201 @@ fn normalize_prefix(prefix: &str) -> String {
     if trimmed.is_empty() {
         return String::new();
     }
-    if trimmed.starts_with('/') {
+
+    normalize_game_prefix(trimmed)
+}
+
+fn game_api_prefixes(figment: &rocket::figment::Figment) -> Vec<String> {
+    let configured = env::var("GAME_API_PREFIXES")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| parse_prefix_list(&value))
+        .or_else(|| {
+            figment
+                .extract_inner::<Vec<String>>("game_api_prefixes")
+                .ok()
+        })
+        .or_else(|| figment.extract_inner::<Vec<String>>("game_api_prefix").ok())
+        .or_else(|| {
+            figment
+                .extract_inner::<String>("game_api_prefix")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .map(|value| parse_prefix_list(&value))
+        })
+        .or_else(|| {
+            env::var("GAME_API_PREFIX")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .map(|value| parse_prefix_list(&value))
+        })
+        .unwrap_or_else(|| {
+            DEFAULT_GAME_API_PREFIXES
+                .iter()
+                .map(|p| p.to_string())
+                .collect()
+        });
+
+    let prefixes = normalize_prefixes(configured);
+    if prefixes.is_empty() {
+        DEFAULT_GAME_API_PREFIXES
+            .iter()
+            .map(|p| normalize_game_prefix(p))
+            .collect()
+    } else {
+        prefixes
+    }
+}
+
+fn admin_config(figment: &rocket::figment::Figment) -> AdminConfig {
+    let default_config = AdminConfig::default();
+    let username = env::var("ADMIN_USERNAME")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            figment
+                .extract_inner::<String>("admin_username")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        })
+        .unwrap_or(default_config.username);
+
+    let password = env::var("ADMIN_PASSWORD")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            figment
+                .extract_inner::<String>("admin_password")
+                .ok()
+                .filter(|value| !value.is_empty())
+        })
+        .unwrap_or(default_config.password);
+
+    AdminConfig { username, password }
+}
+
+fn parse_prefix_list(value: &str) -> Vec<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+
+    if let Ok(prefixes) = serde_json::from_str::<Vec<String>>(trimmed) {
+        return prefixes;
+    }
+
+    if let Ok(prefix) = serde_json::from_str::<String>(trimmed) {
+        return vec![prefix];
+    }
+
+    let trimmed = trimmed.trim_start_matches('[').trim_end_matches(']');
+    trimmed
+        .split(',')
+        .map(|part| part.trim().trim_matches('"').trim_matches('\'').to_string())
+        .filter(|part| !part.is_empty())
+        .collect()
+}
+
+fn normalize_prefixes(prefixes: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    prefixes
+        .into_iter()
+        .map(|prefix| normalize_game_prefix(&prefix))
+        .filter(|prefix| seen.insert(prefix.clone()))
+        .collect()
+}
+
+fn normalize_game_prefix(prefix: &str) -> String {
+    let trimmed = prefix.trim();
+    if trimmed.is_empty() || trimmed == "/" {
+        return "/".to_string();
+    }
+
+    let prefixed = if trimmed.starts_with('/') {
         trimmed.to_string()
     } else {
         format!("/{trimmed}")
+    };
+
+    let normalized = prefixed.trim_end_matches('/');
+    if normalized.is_empty() {
+        "/".to_string()
+    } else {
+        normalized.to_string()
     }
+}
+
+fn prefix_path(prefix: &str, path: &str) -> String {
+    let path = path.trim_start_matches('/');
+    if path.is_empty() {
+        return normalize_game_prefix(prefix);
+    }
+
+    let prefix = normalize_game_prefix(prefix);
+    if prefix == "/" {
+        format!("/{path}")
+    } else {
+        format!("{prefix}/{path}")
+    }
+}
+
+fn multiplayer_trailing_slash_paths(prefixes: &[String]) -> HashSet<String> {
+    let mut paths = HashSet::new();
+    for prefix in prefixes {
+        for path in [
+            "multiplayer/me/matchmaking/join/",
+            "multiplayer/me/matchmaking/status/",
+            "multiplayer/me/matchmaking/leave/",
+        ] {
+            paths.insert(prefix_path(prefix, path));
+        }
+    }
+    paths
+}
+
+fn account_routes() -> Vec<rocket::Route> {
+    rocket::routes![
+        Arcaea_server_rs::route::user::register,
+        Arcaea_server_rs::route::user::user_delete,
+        Arcaea_server_rs::route::user::email_resend_verify,
+        Arcaea_server_rs::route::user::email_verify
+    ]
+}
+
+fn mount_game_api_routes(mut rocket: Rocket<Build>, prefix: &str) -> Rocket<Build> {
+    let prefix = normalize_game_prefix(prefix);
+
+    rocket = rocket
+        .mount(
+            prefix_path(&prefix, "user"),
+            Arcaea_server_rs::route::user::routes(),
+        )
+        .mount(prefix_path(&prefix, "account"), account_routes())
+        .mount(
+            prefix_path(&prefix, "auth"),
+            Arcaea_server_rs::route::auth::routes(),
+        )
+        .mount(
+            prefix.clone(),
+            Arcaea_server_rs::route::others::game_routes(),
+        )
+        .mount(prefix.clone(), Arcaea_server_rs::route::course::routes())
+        .mount(prefix.clone(), Arcaea_server_rs::route::mission::routes())
+        .mount(prefix.clone(), Arcaea_server_rs::route::friend::routes())
+        .mount(
+            prefix.clone(),
+            Arcaea_server_rs::route::download::game_routes(),
+        )
+        .mount(prefix.clone(), Arcaea_server_rs::route::score::routes())
+        .mount(
+            prefix.clone(),
+            Arcaea_server_rs::route::multiplayer::routes(),
+        )
+        .mount(prefix.clone(), Arcaea_server_rs::route::present::routes())
+        .mount(prefix.clone(), Arcaea_server_rs::route::world::routes())
+        .mount(prefix, Arcaea_server_rs::route::purchase::routes());
+
+    rocket
 }
 
 /// Application entry point
