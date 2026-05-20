@@ -1,8 +1,79 @@
 [default]
 port = 8090
+host = "0.0.0.0"
 game_api_prefixes = ["/", "/yinmo/30"]
 admin_username = "admin"
 admin_password = "admin"
+
+# Game API settings
+game_api_prefix = "/coldwind/35"
+old_game_api_prefix = []
+allow_appversion = []
+
+# Bundle settings
+bundle_strict_mode = true
+
+# World settings
+world_rank_max = 200
+available_map = []
+
+# Authentication
+username = "admin"
+password = "admin"
+secret_key = "1145141919810"
+api_token = ""
+
+# Download settings
+download_link_prefix = ""
+bundle_download_link_prefix = "https://arc.yinmo.site/bundle_download/"
+download_use_nginx_x_accel_redirect = false
+nginx_x_accel_redirect_prefix = "/nginx_download/"
+bundle_nginx_x_accel_redirect_prefix = "/nginx_bundle_download/"
+
+# Rate limiting
+download_times_limit = 3000
+download_time_gap_limit = 1000
+download_forbid_when_no_item = false
+bundle_download_times_limit = "100/60 minutes"
+bundle_download_time_gap_limit = 3000
+game_register_ip_rate_limit = "5/minute"
+game_register_device_rate_limit = "5/minute"
+game_login_rate_limit = "10/minute"
+
+# Login settings
+login_device_number_limit = 1
+allow_login_same_device = false
+allow_ban_multidevice_user_auto = true
+
+# Game settings
+allow_score_with_no_song = true
+default_memories = 0
+update_with_new_character_data = true
+character_full_unlock = true
+world_song_full_unlock = true
+world_scenery_full_unlock = true
+save_full_unlock = false
+allow_self_account_delete = false
+
+# PTT calculation weights
+best30_weight = 0.025
+recent10_weight = 0.025
+invasion_start_weight = 0.1
+invasion_hard_weight = 0.1
+
+# Social settings
+max_friend_count = 50
+
+# Logging
+allow_info_log = false
+allow_warning_log = false
+
+# File paths
+world_map_folder_path = "./database/map/"
+song_file_folder_path = "./database/songs/"
+songlist_file_path = "./database/songs/songlist"
+content_bundle_folder_path = "./database/bundle/"
+database_init_path = "./database/init/"
 
 [default.limits]
 form = "16MiB"

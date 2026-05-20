@@ -1,5 +1,38 @@
 use lazy_static::lazy_static;
+use rocket::figment::{
+    providers::{Format, Toml},
+    Figment, Profile,
+};
 use std::collections::HashMap;
+use std::env;
+use std::str::FromStr;
+
+macro_rules! set_from_figment {
+    ($config:expr, $figment:expr, $field:ident, $key:expr, $ty:ty) => {
+        if let Ok(value) = $figment.extract_inner::<$ty>($key) {
+            $config.$field = value;
+        }
+    };
+}
+
+macro_rules! set_from_env {
+    ($config:expr, $field:ident, $ty:ty) => {
+        set_from_env_key!(
+            $config,
+            $field,
+            stringify!($field).to_ascii_uppercase(),
+            $ty
+        );
+    };
+}
+
+macro_rules! set_from_env_key {
+    ($config:expr, $field:ident, $key:expr, $ty:ty) => {
+        if let Some(value) = env_config_value::<$ty>($key.as_ref()) {
+            $config.$field = value;
+        }
+    };
+}
 
 /// Game server configuration constants
 #[derive(Debug, Clone)]
@@ -141,6 +174,299 @@ impl Default for Config {
     }
 }
 
+impl Config {
+    /// Load configuration using the precedence: environment/.env > Rocket.toml > defaults.
+    pub fn load() -> Self {
+        dotenv::dotenv().ok();
+
+        let mut config = Self::default();
+        let figment = rocket_toml_figment();
+
+        config.apply_rocket_toml(&figment);
+        config.apply_env();
+
+        config
+    }
+
+    fn apply_rocket_toml(&mut self, figment: &Figment) {
+        // Standard Rocket key aliases.
+        set_from_figment!(self, figment, host, "address", String);
+
+        set_from_figment!(self, figment, host, "host", String);
+        set_from_figment!(self, figment, port, "port", u16);
+        set_from_figment!(self, figment, game_api_prefix, "game_api_prefix", String);
+        set_from_figment!(
+            self,
+            figment,
+            old_game_api_prefix,
+            "old_game_api_prefix",
+            Vec<String>
+        );
+        set_from_figment!(
+            self,
+            figment,
+            allow_appversion,
+            "allow_appversion",
+            Vec<String>
+        );
+        set_from_figment!(
+            self,
+            figment,
+            bundle_strict_mode,
+            "bundle_strict_mode",
+            bool
+        );
+        set_from_figment!(self, figment, world_rank_max, "world_rank_max", i32);
+        set_from_figment!(self, figment, available_map, "available_map", Vec<String>);
+        set_from_figment!(self, figment, username, "username", String);
+        set_from_figment!(self, figment, password, "password", String);
+        set_from_figment!(self, figment, secret_key, "secret_key", String);
+        set_from_figment!(self, figment, api_token, "api_token", String);
+        set_from_figment!(
+            self,
+            figment,
+            download_link_prefix,
+            "download_link_prefix",
+            String
+        );
+        set_from_figment!(
+            self,
+            figment,
+            bundle_download_link_prefix,
+            "bundle_download_link_prefix",
+            Option<String>
+        );
+        set_from_figment!(
+            self,
+            figment,
+            download_use_nginx_x_accel_redirect,
+            "download_use_nginx_x_accel_redirect",
+            bool
+        );
+        set_from_figment!(
+            self,
+            figment,
+            nginx_x_accel_redirect_prefix,
+            "nginx_x_accel_redirect_prefix",
+            String
+        );
+        set_from_figment!(
+            self,
+            figment,
+            bundle_nginx_x_accel_redirect_prefix,
+            "bundle_nginx_x_accel_redirect_prefix",
+            String
+        );
+        set_from_figment!(
+            self,
+            figment,
+            download_times_limit,
+            "download_times_limit",
+            i32
+        );
+        set_from_figment!(
+            self,
+            figment,
+            download_time_gap_limit,
+            "download_time_gap_limit",
+            i64
+        );
+        set_from_figment!(
+            self,
+            figment,
+            download_forbid_when_no_item,
+            "download_forbid_when_no_item",
+            bool
+        );
+        set_from_figment!(
+            self,
+            figment,
+            bundle_download_times_limit,
+            "bundle_download_times_limit",
+            String
+        );
+        set_from_figment!(
+            self,
+            figment,
+            bundle_download_time_gap_limit,
+            "bundle_download_time_gap_limit",
+            i64
+        );
+        set_from_figment!(
+            self,
+            figment,
+            login_device_number_limit,
+            "login_device_number_limit",
+            i32
+        );
+        set_from_figment!(
+            self,
+            figment,
+            allow_login_same_device,
+            "allow_login_same_device",
+            bool
+        );
+        set_from_figment!(
+            self,
+            figment,
+            allow_ban_multidevice_user_auto,
+            "allow_ban_multidevice_user_auto",
+            bool
+        );
+        set_from_figment!(
+            self,
+            figment,
+            allow_score_with_no_song,
+            "allow_score_with_no_song",
+            bool
+        );
+        set_from_figment!(self, figment, default_memories, "default_memories", i32);
+        set_from_figment!(
+            self,
+            figment,
+            update_with_new_character_data,
+            "update_with_new_character_data",
+            bool
+        );
+        set_from_figment!(
+            self,
+            figment,
+            character_full_unlock,
+            "character_full_unlock",
+            bool
+        );
+        set_from_figment!(
+            self,
+            figment,
+            world_song_full_unlock,
+            "world_song_full_unlock",
+            bool
+        );
+        set_from_figment!(
+            self,
+            figment,
+            world_scenery_full_unlock,
+            "world_scenery_full_unlock",
+            bool
+        );
+        set_from_figment!(self, figment, save_full_unlock, "save_full_unlock", bool);
+        set_from_figment!(
+            self,
+            figment,
+            allow_self_account_delete,
+            "allow_self_account_delete",
+            bool
+        );
+        set_from_figment!(self, figment, best30_weight, "best30_weight", f64);
+        set_from_figment!(self, figment, recent10_weight, "recent10_weight", f64);
+        set_from_figment!(
+            self,
+            figment,
+            invasion_start_weight,
+            "invasion_start_weight",
+            f64
+        );
+        set_from_figment!(
+            self,
+            figment,
+            invasion_hard_weight,
+            "invasion_hard_weight",
+            f64
+        );
+        set_from_figment!(self, figment, max_friend_count, "max_friend_count", i32);
+        set_from_figment!(self, figment, allow_info_log, "allow_info_log", bool);
+        set_from_figment!(self, figment, allow_warning_log, "allow_warning_log", bool);
+        set_from_figment!(
+            self,
+            figment,
+            world_map_folder_path,
+            "world_map_folder_path",
+            String
+        );
+        set_from_figment!(
+            self,
+            figment,
+            song_file_folder_path,
+            "song_file_folder_path",
+            String
+        );
+        set_from_figment!(
+            self,
+            figment,
+            songlist_file_path,
+            "songlist_file_path",
+            String
+        );
+        set_from_figment!(
+            self,
+            figment,
+            content_bundle_folder_path,
+            "content_bundle_folder_path",
+            String
+        );
+        set_from_figment!(
+            self,
+            figment,
+            database_init_path,
+            "database_init_path",
+            String
+        );
+    }
+
+    fn apply_env(&mut self) {
+        // Standard Rocket key aliases. Field-specific variables below take precedence.
+        set_from_env_key!(self, host, "ROCKET_ADDRESS", String);
+        set_from_env_key!(self, host, "ADDRESS", String);
+        set_from_env_key!(self, port, "ROCKET_PORT", u16);
+
+        set_from_env!(self, host, String);
+        set_from_env!(self, port, u16);
+        set_from_env!(self, game_api_prefix, String);
+        set_from_env!(self, old_game_api_prefix, Vec<String>);
+        set_from_env!(self, allow_appversion, Vec<String>);
+        set_from_env!(self, bundle_strict_mode, bool);
+        set_from_env!(self, world_rank_max, i32);
+        set_from_env!(self, available_map, Vec<String>);
+        set_from_env!(self, username, String);
+        set_from_env!(self, password, String);
+        set_from_env!(self, secret_key, String);
+        set_from_env!(self, api_token, String);
+        set_from_env!(self, download_link_prefix, String);
+        set_from_env!(self, bundle_download_link_prefix, Option<String>);
+        set_from_env!(self, download_use_nginx_x_accel_redirect, bool);
+        set_from_env!(self, nginx_x_accel_redirect_prefix, String);
+        set_from_env!(self, bundle_nginx_x_accel_redirect_prefix, String);
+        set_from_env!(self, download_times_limit, i32);
+        set_from_env!(self, download_time_gap_limit, i64);
+        set_from_env!(self, download_forbid_when_no_item, bool);
+        set_from_env!(self, bundle_download_times_limit, String);
+        set_from_env!(self, bundle_download_time_gap_limit, i64);
+        set_from_env!(self, login_device_number_limit, i32);
+        set_from_env!(self, allow_login_same_device, bool);
+        set_from_env!(self, allow_ban_multidevice_user_auto, bool);
+        set_from_env!(self, allow_score_with_no_song, bool);
+        set_from_env!(self, default_memories, i32);
+        set_from_env!(self, update_with_new_character_data, bool);
+        set_from_env!(self, character_full_unlock, bool);
+        set_from_env!(self, world_song_full_unlock, bool);
+        set_from_env!(self, world_scenery_full_unlock, bool);
+        set_from_env!(self, save_full_unlock, bool);
+        set_from_env!(self, allow_self_account_delete, bool);
+        set_from_env!(self, best30_weight, f64);
+        set_from_env!(self, recent10_weight, f64);
+        set_from_env!(self, invasion_start_weight, f64);
+        set_from_env!(self, invasion_hard_weight, f64);
+        set_from_env!(self, max_friend_count, i32);
+        set_from_env!(self, allow_info_log, bool);
+        set_from_env!(self, allow_warning_log, bool);
+        set_from_env!(self, world_map_folder_path, String);
+        set_from_env!(self, song_file_folder_path, String);
+        set_from_env!(self, songlist_file_path, String);
+        set_from_env!(self, content_bundle_folder_path, String);
+        set_from_env!(self, database_init_path, String);
+    }
+}
+
 /// Game constants
 pub struct Constants;
 
@@ -239,11 +565,7 @@ impl Constants {
 
 lazy_static! {
     /// Global configuration instance
-    pub static ref CONFIG: Config = {
-        // Load from environment variables or configuration file
-        // For now, use default values
-        Config::default()
-    };
+    pub static ref CONFIG: Config = Config::load();
 
     /// Character level experience steps
     pub static ref LEVEL_STEPS: HashMap<i32, i32> = Constants::get_level_steps();
@@ -272,7 +594,148 @@ impl Default for RateLimitConfig {
     }
 }
 
+impl RateLimitConfig {
+    /// Load rate-limit configuration using the precedence: environment/.env > Rocket.toml > defaults.
+    pub fn load() -> Self {
+        dotenv::dotenv().ok();
+
+        let mut config = Self::default();
+        let figment = rocket_toml_figment();
+
+        config.apply_rocket_toml(&figment);
+        config.apply_env();
+
+        config
+    }
+
+    fn apply_rocket_toml(&mut self, figment: &Figment) {
+        set_from_figment!(
+            self,
+            figment,
+            game_register_ip_rate_limit,
+            "game_register_ip_rate_limit",
+            String
+        );
+        set_from_figment!(
+            self,
+            figment,
+            game_register_device_rate_limit,
+            "game_register_device_rate_limit",
+            String
+        );
+        set_from_figment!(
+            self,
+            figment,
+            game_login_rate_limit,
+            "game_login_rate_limit",
+            String
+        );
+    }
+
+    fn apply_env(&mut self) {
+        set_from_env!(self, game_register_ip_rate_limit, String);
+        set_from_env!(self, game_register_device_rate_limit, String);
+        set_from_env!(self, game_login_rate_limit, String);
+    }
+}
+
+fn rocket_toml_figment() -> Figment {
+    let config_file = env::var("ROCKET_CONFIG").unwrap_or_else(|_| "Rocket.toml".to_string());
+    let default_profile = if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    };
+    let profile = Profile::from_env_or("ROCKET_PROFILE", default_profile);
+
+    Figment::from(Toml::file(config_file).nested()).select(profile)
+}
+
+trait EnvConfigValue: Sized {
+    fn parse_env(key: &str, value: &str) -> Option<Self>;
+}
+
+impl EnvConfigValue for String {
+    fn parse_env(_key: &str, value: &str) -> Option<Self> {
+        Some(value.to_string())
+    }
+}
+
+impl EnvConfigValue for bool {
+    fn parse_env(key: &str, value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "true" | "1" | "yes" | "y" | "on" => Some(true),
+            "false" | "0" | "no" | "n" | "off" => Some(false),
+            _ => {
+                log::warn!("Ignoring invalid boolean config env {key}={value:?}");
+                None
+            }
+        }
+    }
+}
+
+impl EnvConfigValue for Vec<String> {
+    fn parse_env(key: &str, value: &str) -> Option<Self> {
+        let trimmed = value.trim();
+        if let Ok(values) = serde_json::from_str::<Vec<String>>(trimmed) {
+            return Some(values);
+        }
+
+        let list = trimmed.trim_start_matches('[').trim_end_matches(']');
+        let values = list
+            .split(',')
+            .map(|part| part.trim().trim_matches('"').trim_matches('\'').to_string())
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>();
+
+        if values.is_empty() && trimmed.starts_with('[') {
+            log::warn!("Ignoring invalid string-list config env {key}={value:?}");
+            None
+        } else {
+            Some(values)
+        }
+    }
+}
+
+impl EnvConfigValue for Option<String> {
+    fn parse_env(_key: &str, value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "none" | "null" => Some(None),
+            _ => Some(Some(value.to_string())),
+        }
+    }
+}
+
+macro_rules! impl_from_str_env_value {
+    ($($ty:ty),* $(,)?) => {
+        $(
+            impl EnvConfigValue for $ty {
+                fn parse_env(key: &str, value: &str) -> Option<Self> {
+                    match <$ty>::from_str(value.trim()) {
+                        Ok(value) => Some(value),
+                        Err(_) => {
+                            log::warn!("Ignoring invalid config env {key}={value:?}");
+                            None
+                        }
+                    }
+                }
+            }
+        )*
+    };
+}
+
+impl_from_str_env_value!(u16, i32, i64, f64);
+
+fn env_config_value<T: EnvConfigValue>(key: &str) -> Option<T> {
+    let value = env::var(key).ok()?;
+    if value.trim().is_empty() {
+        return None;
+    }
+
+    T::parse_env(key, &value)
+}
+
 lazy_static! {
     /// Global rate limiting configuration
-    pub static ref RATE_LIMIT_CONFIG: RateLimitConfig = RateLimitConfig::default();
+    pub static ref RATE_LIMIT_CONFIG: RateLimitConfig = RateLimitConfig::load();
 }

@@ -353,6 +353,12 @@ fn game_api_prefixes(figment: &rocket::figment::Figment) -> Vec<String> {
         .filter(|value| !value.trim().is_empty())
         .map(|value| parse_prefix_list(&value))
         .or_else(|| {
+            env::var("GAME_API_PREFIX")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .map(|value| parse_prefix_list(&value))
+        })
+        .or_else(|| {
             figment
                 .extract_inner::<Vec<String>>("game_api_prefixes")
                 .ok()
@@ -361,12 +367,6 @@ fn game_api_prefixes(figment: &rocket::figment::Figment) -> Vec<String> {
         .or_else(|| {
             figment
                 .extract_inner::<String>("game_api_prefix")
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-                .map(|value| parse_prefix_list(&value))
-        })
-        .or_else(|| {
-            env::var("GAME_API_PREFIX")
                 .ok()
                 .filter(|value| !value.trim().is_empty())
                 .map(|value| parse_prefix_list(&value))
