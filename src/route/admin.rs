@@ -13,7 +13,7 @@ use std::env;
 use std::sync::{OnceLock, RwLock};
 
 use crate::config::CONFIG;
-use crate::service::OperationManager;
+use crate::service::{OperationManager, ScoreService, UserService};
 use crate::DbPool;
 
 const ADMIN_COOKIE: &str = "arcaea_admin_session";
@@ -842,12 +842,18 @@ fn clean_query_value(value: Option<&str>) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-fn require_admin(cookies: &CookieJar<'_>) -> Result<(), Redirect> {
-    if is_admin_logged_in(cookies) {
-        Ok(())
-    } else {
-        Err(Redirect::to("/web/login"))
+struct AdminRequired;
+
+impl From<AdminRequired> for Redirect {
+    fn from(_: AdminRequired) -> Self {
+        Redirect::to("/web/login")
     }
+}
+
+fn require_admin(cookies: &CookieJar<'_>) -> Result<(), AdminRequired> {
+    is_admin_logged_in(cookies)
+        .then_some(())
+        .ok_or(AdminRequired)
 }
 
 #[get("/static/admin.css")]
@@ -2933,11 +2939,25 @@ pub async fn admin_user_ticket_post(
 pub async fn admin_user_ban_post(
     user_id: i32,
     pool: &State<DbPool>,
+    user_service: &State<UserService>,
     cookies: &CookieJar<'_>,
 ) -> Flash<Redirect> {
     if !is_admin_logged_in(cookies) {
         return Flash::error(Redirect::to("/web/login"), "请先登录");
     }
+
+    let old_tokens = match sqlx::query!("SELECT access_token FROM login WHERE user_id = ?", user_id)
+        .fetch_all(pool.inner())
+        .await
+    {
+        Ok(rows) => rows,
+        Err(err) => {
+            return Flash::error(
+                Redirect::to(format!("/web/users/{user_id}")),
+                format!("封禁失败: {err}"),
+            )
+        }
+    };
 
     let mut tx = match pool.begin().await {
         Ok(tx) => tx,
@@ -2977,6 +2997,11 @@ pub async fn admin_user_ban_post(
         );
     }
 
+    user_service
+        .invalidate_auth_tokens(old_tokens.into_iter().map(|row| row.access_token))
+        .await;
+    user_service.invalidate_user_info_cache(user_id).await;
+
     Flash::success(Redirect::to(format!("/web/users/{user_id}")), "封禁成功")
 }
 
@@ -2984,11 +3009,31 @@ pub async fn admin_user_ban_post(
 pub async fn admin_user_scores_delete_post(
     user_id: i32,
     pool: &State<DbPool>,
+    score_service: &State<ScoreService>,
     cookies: &CookieJar<'_>,
 ) -> Flash<Redirect> {
     if !is_admin_logged_in(cookies) {
         return Flash::error(Redirect::to("/web/login"), "请先登录");
     }
+
+    let score_keys = match sqlx::query!(
+        "SELECT song_id, difficulty FROM best_score WHERE user_id = ?",
+        user_id
+    )
+    .fetch_all(pool.inner())
+    .await
+    {
+        Ok(rows) => rows
+            .into_iter()
+            .map(|row| (row.song_id, row.difficulty))
+            .collect::<Vec<_>>(),
+        Err(err) => {
+            return Flash::error(
+                Redirect::to(format!("/web/users/{user_id}")),
+                format!("读取成绩缓存键失败: {err}"),
+            )
+        }
+    };
 
     let mut tx = match pool.begin().await {
         Ok(tx) => tx,
@@ -3048,10 +3093,34 @@ pub async fn admin_user_scores_delete_post(
         );
     }
 
+    if let Err(err) = sqlx::query!(
+        r#"DELETE FROM user_kvdata
+           WHERE user_id = ? AND class = 'score' AND `key` = 'world_rank_score_raw' AND idx = 0"#,
+        user_id
+    )
+    .execute(&mut *tx)
+    .await
+    {
+        return Flash::error(
+            Redirect::to(format!("/web/users/{user_id}")),
+            format!("删除 world_rank_score_raw 失败: {err}"),
+        );
+    }
+
     if let Err(err) = tx.commit().await {
         return Flash::error(
             Redirect::to(format!("/web/users/{user_id}")),
             format!("提交失败: {err}"),
+        );
+    }
+
+    if let Err(err) = score_service
+        .reset_user_score_caches_for_scores(user_id, score_keys)
+        .await
+    {
+        return Flash::error(
+            Redirect::to(format!("/web/users/{user_id}")),
+            format!("清理成绩缓存失败: {err}"),
         );
     }
 

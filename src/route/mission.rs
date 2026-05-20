@@ -15,6 +15,7 @@ use std::collections::HashMap;
 #[post("/mission/me/clear", data = "<request_form>")]
 pub async fn mission_clear(
     pool: &State<DbPool>,
+    user_service: &State<UserService>,
     auth: AuthGuard,
     request_form: Form<HashMap<String, String>>,
 ) -> RouteResult<Value> {
@@ -29,6 +30,10 @@ pub async fn mission_clear(
         mission["request_id"] = json!((idx as i32) + 1);
         missions.push(mission);
     }
+
+    user_service
+        .invalidate_user_collection_cache(auth.user_id)
+        .await;
 
     Ok(success_return(json!({ "missions": missions })))
 }
@@ -55,6 +60,9 @@ pub async fn mission_claim(
         missions.push(mission);
     }
 
+    user_service
+        .invalidate_user_collection_cache(auth.user_id)
+        .await;
     let user = user_service.get_user_info(auth.user_id).await?;
     let user_json = serde_json::to_value(user).map_err(|e| ArcError::Json {
         message: e.to_string(),

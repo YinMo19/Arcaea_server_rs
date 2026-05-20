@@ -421,9 +421,16 @@ impl WorldService {
         format!("world:map:{user_id}:{map_id}")
     }
 
-    async fn invalidate_user_world_cache(&self, user_id: i32) {
+    pub async fn invalidate_user_world_cache(&self, user_id: i32) {
         if let Some(cache) = &self.cache {
             cache.del(&Self::world_all_cache_key(user_id)).await;
+        }
+    }
+
+    pub async fn invalidate_user_world_map_cache(&self, user_id: i32, map_id: &str) {
+        self.invalidate_user_world_cache(user_id).await;
+        if let Some(cache) = &self.cache {
+            cache.del(&Self::world_map_cache_key(user_id, map_id)).await;
         }
     }
 
@@ -650,10 +657,7 @@ impl WorldService {
         tx.commit().await.map_err(|e| ArcError::Database {
             message: format!("Failed to commit transaction: {e}"),
         })?;
-        self.invalidate_user_world_cache(user_id).await;
-        if let Some(cache) = &self.cache {
-            cache.del(&Self::world_map_cache_key(user_id, map_id)).await;
-        }
+        self.invalidate_user_world_map_cache(user_id, map_id).await;
 
         Ok(serde_json::json!({
             "map_id": map_id,

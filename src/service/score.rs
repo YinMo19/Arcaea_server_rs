@@ -16,12 +16,12 @@ use crate::service::cache::{env_ttl_seconds, CacheService};
 use crate::service::character::CharacterService;
 use crate::service::item::ItemService;
 use crate::service::user::UserService;
-use crate::service::world::{get_map_parser, StaminaImpl};
+use crate::service::world::{get_map_parser, StaminaImpl, WorldService};
 use base64::{engine::general_purpose, Engine as _};
 use md5;
 use rand::Rng;
 use serde_json::json;
-use sqlx::MySqlPool;
+use sqlx::{MySql, MySqlPool, QueryBuilder};
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -41,6 +41,10 @@ pub struct ScoreService {
     score_top_cache_ttl_seconds: u64,
     score_user_cache_ttl_seconds: u64,
     score_friend_cache_ttl_seconds: u64,
+    score_potential_cache_ttl_seconds: u64,
+    user_rating_cache_ttl_seconds: u64,
+    global_rank_cache_ttl_seconds: u64,
+    zset_cache_ttl_seconds: u64,
 }
 
 impl ScoreService {
@@ -52,6 +56,13 @@ impl ScoreService {
             score_top_cache_ttl_seconds: env_ttl_seconds("REDIS_SCORE_TOP_TTL_SECONDS", 3),
             score_user_cache_ttl_seconds: env_ttl_seconds("REDIS_SCORE_USER_TTL_SECONDS", 2),
             score_friend_cache_ttl_seconds: env_ttl_seconds("REDIS_SCORE_FRIEND_TTL_SECONDS", 2),
+            score_potential_cache_ttl_seconds: env_ttl_seconds(
+                "REDIS_SCORE_POTENTIAL_TTL_SECONDS",
+                5,
+            ),
+            user_rating_cache_ttl_seconds: env_ttl_seconds("REDIS_USER_RATING_TTL_SECONDS", 5),
+            global_rank_cache_ttl_seconds: env_ttl_seconds("REDIS_GLOBAL_RANK_TTL_SECONDS", 10),
+            zset_cache_ttl_seconds: env_ttl_seconds("REDIS_ZSET_RANK_TTL_SECONDS", 300),
         }
     }
 
@@ -72,9 +83,130 @@ impl ScoreService {
         format!("score:friend:{user_id}:{song_id}:{difficulty}")
     }
 
+    fn score_potential_cache_key(user_id: i32) -> String {
+        format!("score:potential:{user_id}")
+    }
+
+    fn user_rating_cache_key(user_id: i32) -> String {
+        format!("user:rating:{user_id}")
+    }
+
+    fn global_rank_cache_key(user_id: i32, world_rank_score: i32) -> String {
+        format!("rank:global:{user_id}:{world_rank_score}")
+    }
+
+    fn global_rank_zset_key() -> &'static str {
+        "rank:global:zset"
+    }
+
+    fn global_rank_zset_ready_key() -> &'static str {
+        "rank:global:zset:ready"
+    }
+
+    fn score_rank_zset_key(song_id: &str, difficulty: i32) -> String {
+        format!("score:rank:zset:{song_id}:{difficulty}")
+    }
+
+    fn score_rank_zset_ready_key(song_id: &str, difficulty: i32) -> String {
+        format!("score:rank:zset:{song_id}:{difficulty}:ready")
+    }
+
     async fn invalidate_user_info_cache(&self, user_id: i32) {
         let user_service = UserService::new(self.pool.clone()).with_cache(self.cache.clone());
         user_service.invalidate_user_info_cache(user_id).await;
+    }
+
+    async fn invalidate_user_collection_cache(&self, user_id: i32) {
+        let user_service = UserService::new(self.pool.clone()).with_cache(self.cache.clone());
+        user_service.invalidate_user_collection_cache(user_id).await;
+    }
+
+    pub async fn invalidate_user_score_summary_cache(&self, user_id: i32) {
+        self.invalidate_score_derived_caches(user_id).await;
+        if let Some(cache) = &self.cache {
+            cache
+                .zrem(Self::global_rank_zset_key(), &user_id.to_string())
+                .await;
+        }
+    }
+
+    pub async fn reset_user_score_caches(&self, user_id: i32) -> ArcResult<()> {
+        self.reset_user_score_caches_for_scores(user_id, Vec::new())
+            .await
+    }
+
+    pub async fn reset_user_score_caches_for_scores(
+        &self,
+        user_id: i32,
+        score_keys: Vec<(String, i32)>,
+    ) -> ArcResult<()> {
+        let affected_friend_user_ids = sqlx::query!(
+            "SELECT user_id_me FROM friend WHERE user_id_other = ?",
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .map(|row| row.user_id_me)
+        .collect::<Vec<_>>();
+
+        self.reset_user_score_caches_for_scores_and_friends(
+            user_id,
+            score_keys,
+            affected_friend_user_ids,
+        )
+        .await
+    }
+
+    pub async fn reset_user_score_caches_for_scores_and_friends(
+        &self,
+        user_id: i32,
+        score_keys: Vec<(String, i32)>,
+        mut affected_friend_user_ids: Vec<i32>,
+    ) -> ArcResult<()> {
+        self.invalidate_user_score_summary_cache(user_id).await;
+        affected_friend_user_ids.sort_unstable();
+        affected_friend_user_ids.dedup();
+        let user_service = UserService::new(self.pool.clone()).with_cache(self.cache.clone());
+        for (song_id, difficulty) in score_keys {
+            self.remove_score_rank_member(user_id, &song_id, difficulty)
+                .await;
+            self.invalidate_score_top_cache(&song_id, difficulty).await;
+            if let Some(cache) = &self.cache {
+                cache
+                    .del(&Self::score_user_cache_key(user_id, &song_id, difficulty))
+                    .await;
+                cache
+                    .del(&Self::score_friend_cache_key(user_id, &song_id, difficulty))
+                    .await;
+                for friend_user_id in &affected_friend_user_ids {
+                    cache
+                        .del(&Self::score_friend_cache_key(
+                            *friend_user_id,
+                            &song_id,
+                            difficulty,
+                        ))
+                        .await;
+                    user_service.invalidate_friend_cache(*friend_user_id).await;
+                    user_service
+                        .invalidate_user_info_cache(*friend_user_id)
+                        .await;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn invalidate_score_derived_caches(&self, user_id: i32) {
+        if let Some(cache) = &self.cache {
+            cache.del(&Self::score_potential_cache_key(user_id)).await;
+            cache.del(&Self::user_rating_cache_key(user_id)).await;
+        }
+
+        let user_service = UserService::new(self.pool.clone()).with_cache(self.cache.clone());
+        user_service
+            .invalidate_user_recent_score_cache(user_id)
+            .await;
     }
 
     /// Generate a simple score token (hardcoded for bypass)
@@ -220,6 +352,7 @@ impl ScoreService {
                     }
                 }
             }
+            self.invalidate_user_collection_cache(user_id).await;
         }
 
         // Generate token
@@ -486,7 +619,58 @@ impl ScoreService {
             }
         }
 
-        let scores = if CONFIG.character_full_unlock {
+        let scores = if self.warm_score_rank_zset(song_id, difficulty).await? {
+            let cache = self.cache.as_ref().expect("zset_ready requires cache");
+            let zset_key = Self::score_rank_zset_key(song_id, difficulty);
+            if let Some(user_ids) = cache.zrevrange(&zset_key, 0, 19).await {
+                let user_ids = user_ids
+                    .into_iter()
+                    .filter_map(|id| id.parse::<i32>().ok())
+                    .collect::<Vec<_>>();
+                let rows = self
+                    .get_song_score_rows_for_users(song_id, difficulty, &user_ids)
+                    .await?;
+                let mut rows_by_user = rows
+                    .into_iter()
+                    .map(|row| (row.user_id, row))
+                    .collect::<HashMap<_, _>>();
+                user_ids
+                    .into_iter()
+                    .filter_map(|user_id| rows_by_user.remove(&user_id))
+                    .collect::<Vec<_>>()
+            } else {
+                self.get_song_top_scores_from_db(song_id, difficulty)
+                    .await?
+            }
+        } else {
+            self.get_song_top_scores_from_db(song_id, difficulty)
+                .await?
+        };
+
+        let result = scores
+            .into_iter()
+            .enumerate()
+            .map(|(rank, row)| {
+                row.to_user_score_with_rank(Some((rank + 1) as i32))
+                    .to_dict(true)
+            })
+            .collect::<Vec<HashMap<String, serde_json::Value>>>();
+
+        if let Some(cache) = &self.cache {
+            cache
+                .set_json(&cache_key, &result, self.score_top_cache_ttl_seconds)
+                .await;
+        }
+
+        Ok(result)
+    }
+
+    async fn get_song_top_scores_from_db(
+        &self,
+        song_id: &str,
+        difficulty: i32,
+    ) -> ArcResult<Vec<RankingScoreRow>> {
+        if CONFIG.character_full_unlock {
             sqlx::query_as!(
                 RankingScoreRow,
                 r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
@@ -506,7 +690,8 @@ impl ScoreService {
                 difficulty
             )
             .fetch_all(&self.pool)
-            .await?
+            .await
+            .map_err(Into::into)
         } else {
             sqlx::query_as!(
                 RankingScoreRow,
@@ -527,25 +712,113 @@ impl ScoreService {
                 difficulty
             )
             .fetch_all(&self.pool)
-            .await?
-        };
+            .await
+            .map_err(Into::into)
+        }
+    }
 
-        let result = scores
-            .into_iter()
-            .enumerate()
-            .map(|(rank, row)| {
-                row.to_user_score_with_rank(Some((rank + 1) as i32))
-                    .to_dict(true)
-            })
-            .collect::<Vec<HashMap<String, serde_json::Value>>>();
-
-        if let Some(cache) = &self.cache {
-            cache
-                .set_json(&cache_key, &result, self.score_top_cache_ttl_seconds)
-                .await;
+    async fn get_song_score_rows_for_users(
+        &self,
+        song_id: &str,
+        difficulty: i32,
+        user_ids: &[i32],
+    ) -> ArcResult<Vec<RankingScoreRow>> {
+        if user_ids.is_empty() {
+            return Ok(Vec::new());
         }
 
-        Ok(result)
+        let mut builder = QueryBuilder::<MySql>::new(
+            r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
+                    bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
+                    bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
+                    u.name, u.character_id, u.is_char_uncapped, u.is_char_uncapped_override,
+                    u.favorite_character, u.is_skill_sealed,
+                    uc.is_uncapped as favorite_is_uncapped,
+                    uc.is_uncapped_override as favorite_is_uncapped_override
+                 FROM best_score bs
+                 JOIN user u ON bs.user_id = u.user_id
+                 "#,
+        );
+
+        if CONFIG.character_full_unlock {
+            builder.push(
+                "LEFT JOIN user_char_full uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character ",
+            );
+        } else {
+            builder.push(
+                "LEFT JOIN user_char uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character ",
+            );
+        }
+
+        builder.push("WHERE bs.song_id = ");
+        builder.push_bind(song_id);
+        builder.push(" AND bs.difficulty = ");
+        builder.push_bind(difficulty);
+        builder.push(" AND bs.user_id IN (");
+        let mut separated = builder.separated(", ");
+        for user_id in user_ids {
+            separated.push_bind(user_id);
+        }
+        separated.push_unseparated(")");
+
+        let rows = builder
+            .build_query_as::<RankingScoreRow>()
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(rows)
+    }
+
+    async fn get_song_score_rows_for_users_with_song_name(
+        &self,
+        song_id: &str,
+        difficulty: i32,
+        user_ids: &[i32],
+    ) -> ArcResult<Vec<RankingScoreRowComplete>> {
+        if user_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut builder = QueryBuilder::<MySql>::new(
+            r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
+                    bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
+                    bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
+                    u.name, u.character_id, u.is_char_uncapped, u.is_char_uncapped_override,
+                    u.favorite_character, u.is_skill_sealed,
+                    uc.is_uncapped as favorite_is_uncapped,
+                    uc.is_uncapped_override as favorite_is_uncapped_override,
+                    c.name as song_name
+                 FROM best_score bs
+                 JOIN user u ON bs.user_id = u.user_id
+                 "#,
+        );
+
+        if CONFIG.character_full_unlock {
+            builder.push(
+                "LEFT JOIN user_char_full uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character ",
+            );
+        } else {
+            builder.push(
+                "LEFT JOIN user_char uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character ",
+            );
+        }
+
+        builder.push("LEFT JOIN chart c ON bs.song_id = c.song_id ");
+        builder.push("WHERE bs.song_id = ");
+        builder.push_bind(song_id);
+        builder.push(" AND bs.difficulty = ");
+        builder.push_bind(difficulty);
+        builder.push(" AND bs.user_id IN (");
+        let mut separated = builder.separated(", ");
+        for user_id in user_ids {
+            separated.push_bind(user_id);
+        }
+        separated.push_unseparated(")");
+
+        let rows = builder
+            .build_query_as::<RankingScoreRowComplete>()
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(rows)
     }
 
     async fn invalidate_score_top_cache(&self, song_id: &str, difficulty: i32) {
@@ -594,6 +867,236 @@ impl ScoreService {
         }
     }
 
+    fn score_rank_zset_score(score: i32, time_played: i64) -> f64 {
+        score as f64 + (time_played as f64 / 1_000_000_000_000_000.0)
+    }
+
+    async fn sync_score_rank_zset(&self, user_id: i32, score: &Score) {
+        if let Some(cache) = &self.cache {
+            let key = Self::score_rank_zset_key(&score.song_id, score.difficulty);
+            let ready_key = Self::score_rank_zset_ready_key(&score.song_id, score.difficulty);
+            if cache.get_string(&ready_key).await.is_none() {
+                return;
+            }
+
+            cache
+                .zadd_f64(
+                    &key,
+                    &user_id.to_string(),
+                    Self::score_rank_zset_score(score.score, score.time_played),
+                )
+                .await;
+            cache.expire(&key, self.zset_cache_ttl_seconds).await;
+        }
+    }
+
+    async fn remove_score_rank_member(&self, user_id: i32, song_id: &str, difficulty: i32) {
+        if let Some(cache) = &self.cache {
+            let key = Self::score_rank_zset_key(song_id, difficulty);
+            let ready_key = Self::score_rank_zset_ready_key(song_id, difficulty);
+            if cache.get_string(&ready_key).await.is_some() {
+                cache.zrem(&key, &user_id.to_string()).await;
+            }
+        }
+    }
+
+    async fn sync_global_rank_zset(&self, user_id: i32, world_rank_score: i32) {
+        if let Some(cache) = &self.cache {
+            if cache
+                .get_string(Self::global_rank_zset_ready_key())
+                .await
+                .is_none()
+            {
+                return;
+            }
+
+            let member = user_id.to_string();
+            if world_rank_score > 0 {
+                cache
+                    .zadd_f64(
+                        Self::global_rank_zset_key(),
+                        &member,
+                        world_rank_score as f64,
+                    )
+                    .await;
+                cache
+                    .expire(Self::global_rank_zset_key(), self.zset_cache_ttl_seconds)
+                    .await;
+            } else {
+                cache.zrem(Self::global_rank_zset_key(), &member).await;
+            }
+        }
+    }
+
+    async fn counts_for_global_rank(&self, song_id: &str, difficulty: i32) -> ArcResult<bool> {
+        if !matches!(difficulty, 2..=4) {
+            return Ok(false);
+        }
+
+        Ok(self.get_chart_constant(song_id, difficulty).await? > 0.0)
+    }
+
+    async fn calculate_user_world_rank_score_raw(&self, user_id: i32) -> ArcResult<f64> {
+        let total_score = sqlx::query!(
+            r#"WITH user_scores AS (
+                SELECT song_id, difficulty, score_v2
+                FROM best_score
+                WHERE user_id = ?
+                AND difficulty IN (2, 3, 4)
+            )
+            SELECT SUM(cal_score) AS total FROM (
+                SELECT SUM(score_v2) AS cal_score
+                FROM user_scores
+                WHERE difficulty = 2
+                AND song_id IN (SELECT song_id FROM chart WHERE rating_ftr > 0)
+
+                UNION ALL
+
+                SELECT SUM(score_v2) AS cal_score
+                FROM user_scores
+                WHERE difficulty = 3
+                AND song_id IN (SELECT song_id FROM chart WHERE rating_byn > 0)
+
+                UNION ALL
+
+                SELECT SUM(score_v2) AS cal_score
+                FROM user_scores
+                WHERE difficulty = 4
+                AND song_id IN (SELECT song_id FROM chart WHERE rating_etr > 0)
+            ) AS subquery"#,
+            user_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(total_score.total.unwrap_or(0.0))
+    }
+
+    async fn load_world_rank_score_raw(&self, user_id: i32) -> ArcResult<Option<f64>> {
+        let raw = sqlx::query_scalar!(
+            r#"SELECT value FROM user_kvdata WHERE user_id = ? AND class = 'score' AND `key` = 'world_rank_score_raw' AND idx = 0"#,
+            user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .flatten()
+        .and_then(|value| value.parse::<f64>().ok());
+
+        Ok(raw)
+    }
+
+    async fn store_world_rank_score_raw(&self, user_id: i32, raw: f64) -> ArcResult<()> {
+        let raw = raw.max(0.0);
+        let raw_value = raw.to_string();
+        sqlx::query!(
+            r#"
+            INSERT INTO user_kvdata (user_id, class, `key`, idx, value)
+            VALUES (?, 'score', 'world_rank_score_raw', 0, ?)
+            ON DUPLICATE KEY UPDATE value = VALUES(value)
+            "#,
+            user_id,
+            raw_value
+        )
+        .execute(&self.pool)
+        .await?;
+
+        let world_rank_score = raw as i32;
+        sqlx::query!(
+            "UPDATE user SET world_rank_score = ? WHERE user_id = ?",
+            world_rank_score,
+            user_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        self.sync_global_rank_zset(user_id, world_rank_score).await;
+        self.invalidate_user_info_cache(user_id).await;
+
+        Ok(())
+    }
+
+    async fn warm_score_rank_zset(&self, song_id: &str, difficulty: i32) -> ArcResult<bool> {
+        let Some(cache) = &self.cache else {
+            return Ok(false);
+        };
+
+        let ready_key = Self::score_rank_zset_ready_key(song_id, difficulty);
+        if cache.get_string(&ready_key).await.is_some() {
+            return Ok(true);
+        }
+
+        let rows = sqlx::query!(
+            "SELECT user_id, score, time_played FROM best_score WHERE song_id = ? AND difficulty = ?",
+            song_id,
+            difficulty
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let key = Self::score_rank_zset_key(song_id, difficulty);
+        cache.del(&key).await;
+        for row in rows {
+            cache
+                .zadd_f64(
+                    &key,
+                    &row.user_id.to_string(),
+                    Self::score_rank_zset_score(
+                        row.score.unwrap_or(0),
+                        row.time_played.unwrap_or(0),
+                    ),
+                )
+                .await;
+        }
+        cache.expire(&key, self.zset_cache_ttl_seconds).await;
+        cache
+            .set_string(&ready_key, "1", self.zset_cache_ttl_seconds)
+            .await;
+
+        Ok(true)
+    }
+
+    async fn warm_global_rank_zset(&self) -> ArcResult<bool> {
+        let Some(cache) = &self.cache else {
+            return Ok(false);
+        };
+
+        if cache
+            .get_string(Self::global_rank_zset_ready_key())
+            .await
+            .is_some()
+        {
+            return Ok(true);
+        }
+
+        let rows =
+            sqlx::query!("SELECT user_id, world_rank_score FROM user WHERE world_rank_score > 0")
+                .fetch_all(&self.pool)
+                .await?;
+
+        cache.del(Self::global_rank_zset_key()).await;
+        for row in rows {
+            cache
+                .zadd_f64(
+                    Self::global_rank_zset_key(),
+                    &row.user_id.to_string(),
+                    row.world_rank_score.unwrap_or(0) as f64,
+                )
+                .await;
+        }
+        cache
+            .expire(Self::global_rank_zset_key(), self.zset_cache_ttl_seconds)
+            .await;
+        cache
+            .set_string(
+                Self::global_rank_zset_ready_key(),
+                "1",
+                self.zset_cache_ttl_seconds,
+            )
+            .await;
+
+        Ok(true)
+    }
+
     /// Get user's rank for a song
     pub async fn get_user_song_rank(
         &self,
@@ -609,7 +1112,107 @@ impl ScoreService {
         }
 
         // Get user's score and time_played
-        let user_score = sqlx::query!(
+        let user_score = self
+            .get_song_score_rows_for_users(song_id, difficulty, &[user_id])
+            .await?;
+
+        let result =
+            if !user_score.is_empty() {
+                // Calculate user's rank (considering both score and time_played for tie-breaking)
+                let rank_zset_key = Self::score_rank_zset_key(song_id, difficulty);
+                let zset_ready = self.warm_score_rank_zset(song_id, difficulty).await?;
+                if zset_ready {
+                    let cache = self.cache.as_ref().expect("zset_ready requires cache");
+                    let member = user_id.to_string();
+                    if let (Some(rank), Some(total)) = (
+                        cache.zrevrank(&rank_zset_key, &member).await,
+                        cache.zcard(&rank_zset_key).await,
+                    ) {
+                        let my_rank = rank as i32 + 1;
+                        let total_count = total as i32;
+                        const MAX_LOCAL_POSITION: i32 = 5;
+                        const MAX_GLOBAL_POSITION: i32 = 9999;
+                        const LIMIT: i32 = 20;
+
+                        let (limit, offset, need_myself) = self.get_my_rank_parameters(
+                            my_rank,
+                            total_count,
+                            LIMIT,
+                            MAX_LOCAL_POSITION,
+                            MAX_GLOBAL_POSITION,
+                        );
+                        if let Some(user_ids) = cache
+                            .zrevrange(
+                                &rank_zset_key,
+                                offset as isize,
+                                (offset + limit - 1) as isize,
+                            )
+                            .await
+                        {
+                            let mut user_ids = user_ids
+                                .into_iter()
+                                .filter_map(|id| id.parse::<i32>().ok())
+                                .collect::<Vec<_>>();
+                            if need_myself && !user_ids.contains(&user_id) {
+                                user_ids.push(user_id);
+                            }
+
+                            let rows = self
+                                .get_song_score_rows_for_users(song_id, difficulty, &user_ids)
+                                .await?;
+                            let mut rows_by_user = rows
+                                .into_iter()
+                                .map(|row| (row.user_id, row))
+                                .collect::<HashMap<_, _>>();
+                            let mut result = user_ids
+                                .iter()
+                                .take(limit as usize)
+                                .enumerate()
+                                .filter_map(|(i, user_id)| {
+                                    rows_by_user.remove(user_id).map(|row| {
+                                        row.to_user_score_with_rank(Some(offset + i as i32 + 1))
+                                            .to_dict(true)
+                                    })
+                                })
+                                .collect::<Vec<_>>();
+                            if need_myself {
+                                result.extend(rows_by_user.remove(&user_id).map(|row| {
+                                    row.to_user_score_with_rank(Some(-1)).to_dict(true)
+                                }));
+                            }
+                            result
+                        } else {
+                            self.get_user_song_rank_from_db(user_id, song_id, difficulty)
+                                .await?
+                        }
+                    } else {
+                        self.get_user_song_rank_from_db(user_id, song_id, difficulty)
+                            .await?
+                    }
+                } else {
+                    self.get_user_song_rank_from_db(user_id, song_id, difficulty)
+                        .await?
+                }
+            } else {
+                vec![]
+            };
+
+        if let Some(cache) = &self.cache {
+            cache
+                .set_json(&cache_key, &result, self.score_user_cache_ttl_seconds)
+                .await;
+        }
+
+        Ok(result)
+    }
+
+    async fn get_user_song_rank_from_db(
+        &self,
+        user_id: i32,
+        song_id: &str,
+        difficulty: i32,
+    ) -> ArcResult<Vec<HashMap<String, serde_json::Value>>> {
+        let user_row = sqlx::query!(
             "SELECT score, time_played FROM best_score WHERE user_id = ? AND song_id = ? AND difficulty = ?",
             user_id,
             song_id,
@@ -617,167 +1220,109 @@ impl ScoreService {
         )
         .fetch_optional(&self.pool)
         .await?;
-
-        let result = if let Some(user_row) = user_score {
-            // Calculate user's rank (considering both score and time_played for tie-breaking)
-            let rank_result = sqlx::query!(
-                "SELECT COUNT(*) as `rank_count!: i64` FROM best_score
-                 WHERE song_id = ? AND difficulty = ? AND
-                 (score > ? OR (score = ? AND time_played > ?))",
-                song_id,
-                difficulty,
-                user_row.score,
-                user_row.score,
-                user_row.time_played
-            )
-            .fetch_one(&self.pool)
-            .await?;
-            let my_rank = (rank_result.rank_count + 1) as i32;
-
-            // Get total count
-            let total_result = sqlx::query!(
-                "SELECT COUNT(*) as total FROM best_score WHERE song_id = ? AND difficulty = ?",
-                song_id,
-                difficulty
-            )
-            .fetch_one(&self.pool)
-            .await?;
-            let total_count = total_result.total as i32;
-
-            // Calculate ranking display parameters using Python logic
-            const MAX_LOCAL_POSITION: i32 = 5;
-            const MAX_GLOBAL_POSITION: i32 = 9999;
-            const LIMIT: i32 = 20;
-
-            let (sql_limit, sql_offset, need_myself) = self.get_my_rank_parameters(
-                my_rank,
-                total_count,
-                LIMIT,
-                MAX_LOCAL_POSITION,
-                MAX_GLOBAL_POSITION,
-            );
-
-            // Get scores with calculated offset and limit
-            let scores = if CONFIG.character_full_unlock {
-                sqlx::query_as!(
-                    RankingScoreRow,
-                    r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
-                        bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
-                        bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
-                        u.name, u.character_id, u.is_char_uncapped, u.is_char_uncapped_override,
-                        u.favorite_character, u.is_skill_sealed,
-                        uc.is_uncapped as favorite_is_uncapped,
-                        uc.is_uncapped_override as favorite_is_uncapped_override
-                     FROM best_score bs
-                     JOIN user u ON bs.user_id = u.user_id
-                     LEFT JOIN user_char_full uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character
-                     WHERE bs.song_id = ? AND bs.difficulty = ?
-                     ORDER BY bs.score DESC, bs.time_played DESC
-                     LIMIT ? OFFSET ?"#,
-                    song_id,
-                    difficulty,
-                    sql_limit,
-                    sql_offset
-                )
-                .fetch_all(&self.pool)
-                .await?
-            } else {
-                sqlx::query_as!(
-                    RankingScoreRow,
-                    r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
-                        bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
-                        bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
-                        u.name, u.character_id, u.is_char_uncapped, u.is_char_uncapped_override,
-                        u.favorite_character, u.is_skill_sealed,
-                        uc.is_uncapped as favorite_is_uncapped,
-                        uc.is_uncapped_override as favorite_is_uncapped_override
-                     FROM best_score bs
-                     JOIN user u ON bs.user_id = u.user_id
-                     LEFT JOIN user_char uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character
-                     WHERE bs.song_id = ? AND bs.difficulty = ?
-                     ORDER BY bs.score DESC, bs.time_played DESC
-                     LIMIT ? OFFSET ?"#,
-                    song_id,
-                    difficulty,
-                    sql_limit,
-                    sql_offset
-                )
-                .fetch_all(&self.pool)
-                .await?
-            };
-
-            let mut result = Vec::new();
-
-            for (i, row) in scores.iter().enumerate() {
-                let rank = if sql_offset > 0 {
-                    sql_offset + (i as i32) + 1
-                } else {
-                    (i as i32) + 1
-                };
-
-                result.push(row.to_user_score_with_rank(Some(rank)).to_dict(true));
-            }
-
-            // Add user's own score at the end if needed
-            if need_myself {
-                let user_own_score = if CONFIG.character_full_unlock {
-                    sqlx::query_as!(
-                        RankingScoreRow,
-                        r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
-                            bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
-                            bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
-                            u.name, u.character_id, u.is_char_uncapped, u.is_char_uncapped_override,
-                            u.favorite_character, u.is_skill_sealed,
-                            uc.is_uncapped as favorite_is_uncapped,
-                            uc.is_uncapped_override as favorite_is_uncapped_override
-                         FROM best_score bs
-                         JOIN user u ON bs.user_id = u.user_id
-                         LEFT JOIN user_char_full uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character
-                         WHERE bs.user_id = ? AND bs.song_id = ? AND bs.difficulty = ?"#,
-                        user_id,
-                        song_id,
-                        difficulty
-                    )
-                    .fetch_one(&self.pool)
-                    .await?
-                } else {
-                    sqlx::query_as!(
-                        RankingScoreRow,
-                        r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
-                            bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
-                            bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
-                            u.name, u.character_id, u.is_char_uncapped, u.is_char_uncapped_override,
-                            u.favorite_character, u.is_skill_sealed,
-                            uc.is_uncapped as favorite_is_uncapped,
-                            uc.is_uncapped_override as favorite_is_uncapped_override
-                         FROM best_score bs
-                         JOIN user u ON bs.user_id = u.user_id
-                         LEFT JOIN user_char uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character
-                         WHERE bs.user_id = ? AND bs.song_id = ? AND bs.difficulty = ?"#,
-                        user_id,
-                        song_id,
-                        difficulty
-                    )
-                    .fetch_one(&self.pool)
-                    .await?
-                };
-
-                result.push(
-                    user_own_score
-                        .to_user_score_with_rank(Some(-1))
-                        .to_dict(true),
-                );
-            }
-
-            result
-        } else {
-            vec![]
+        let Some(user_row) = user_row else {
+            return Ok(Vec::new());
         };
 
-        if let Some(cache) = &self.cache {
-            cache
-                .set_json(&cache_key, &result, self.score_user_cache_ttl_seconds)
-                .await;
+        let rank_result = sqlx::query!(
+            "SELECT COUNT(*) as `rank_count!: i64` FROM best_score
+             WHERE song_id = ? AND difficulty = ? AND
+             (score > ? OR (score = ? AND time_played > ?))",
+            song_id,
+            difficulty,
+            user_row.score,
+            user_row.score,
+            user_row.time_played
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        let my_rank = (rank_result.rank_count + 1) as i32;
+
+        let total_result = sqlx::query!(
+            "SELECT COUNT(*) as total FROM best_score WHERE song_id = ? AND difficulty = ?",
+            song_id,
+            difficulty
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        let total_count = total_result.total as i32;
+
+        const MAX_LOCAL_POSITION: i32 = 5;
+        const MAX_GLOBAL_POSITION: i32 = 9999;
+        const LIMIT: i32 = 20;
+
+        let (sql_limit, sql_offset, need_myself) = self.get_my_rank_parameters(
+            my_rank,
+            total_count,
+            LIMIT,
+            MAX_LOCAL_POSITION,
+            MAX_GLOBAL_POSITION,
+        );
+
+        let scores = if CONFIG.character_full_unlock {
+            sqlx::query_as!(
+                RankingScoreRow,
+                r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
+                    bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
+                    bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
+                    u.name, u.character_id, u.is_char_uncapped, u.is_char_uncapped_override,
+                    u.favorite_character, u.is_skill_sealed,
+                    uc.is_uncapped as favorite_is_uncapped,
+                    uc.is_uncapped_override as favorite_is_uncapped_override
+                 FROM best_score bs
+                 JOIN user u ON bs.user_id = u.user_id
+                 LEFT JOIN user_char_full uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character
+                 WHERE bs.song_id = ? AND bs.difficulty = ?
+                 ORDER BY bs.score DESC, bs.time_played DESC
+                 LIMIT ? OFFSET ?"#,
+                song_id,
+                difficulty,
+                sql_limit,
+                sql_offset
+            )
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as!(
+                RankingScoreRow,
+                r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
+                    bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
+                    bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
+                    u.name, u.character_id, u.is_char_uncapped, u.is_char_uncapped_override,
+                    u.favorite_character, u.is_skill_sealed,
+                    uc.is_uncapped as favorite_is_uncapped,
+                    uc.is_uncapped_override as favorite_is_uncapped_override
+                 FROM best_score bs
+                 JOIN user u ON bs.user_id = u.user_id
+                 LEFT JOIN user_char uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character
+                 WHERE bs.song_id = ? AND bs.difficulty = ?
+                 ORDER BY bs.score DESC, bs.time_played DESC
+                 LIMIT ? OFFSET ?"#,
+                song_id,
+                difficulty,
+                sql_limit,
+                sql_offset
+            )
+            .fetch_all(&self.pool)
+            .await?
+        };
+
+        let mut result = scores
+            .iter()
+            .enumerate()
+            .map(|(i, row)| {
+                row.to_user_score_with_rank(Some(sql_offset + i as i32 + 1))
+                    .to_dict(true)
+            })
+            .collect::<Vec<_>>();
+
+        if need_myself {
+            let user_own_score = self
+                .get_song_score_rows_for_users(song_id, difficulty, &[user_id])
+                .await?;
+            if let Some(row) = user_own_score.first() {
+                result.push(row.to_user_score_with_rank(Some(-1)).to_dict(true));
+            }
         }
 
         Ok(result)
@@ -838,7 +1383,97 @@ impl ScoreService {
             }
         }
 
-        // First get all friend scores using a JOIN instead of IN clause
+        let result = if self.warm_score_rank_zset(song_id, difficulty).await? {
+            self.get_friend_song_ranks_from_zset(user_id, song_id, difficulty)
+                .await?
+        } else {
+            self.get_friend_song_ranks_from_db(user_id, song_id, difficulty)
+                .await?
+        };
+
+        if let Some(cache) = &self.cache {
+            cache
+                .set_json(&cache_key, &result, self.score_friend_cache_ttl_seconds)
+                .await;
+        }
+
+        Ok(result)
+    }
+
+    async fn get_friend_song_ranks_from_zset(
+        &self,
+        user_id: i32,
+        song_id: &str,
+        difficulty: i32,
+    ) -> ArcResult<Vec<HashMap<String, serde_json::Value>>> {
+        let Some(cache) = &self.cache else {
+            return self
+                .get_friend_song_ranks_from_db(user_id, song_id, difficulty)
+                .await;
+        };
+
+        let friend_rows = sqlx::query!(
+            "SELECT user_id_other FROM friend WHERE user_id_me = ?",
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut allowed_user_ids = std::iter::once(user_id)
+            .chain(friend_rows.into_iter().map(|row| row.user_id_other))
+            .collect::<Vec<_>>();
+        allowed_user_ids.sort_unstable();
+        allowed_user_ids.dedup();
+
+        let zset_key = Self::score_rank_zset_key(song_id, difficulty);
+        let members = allowed_user_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        let Some(scores) = cache.zmscore_f64(&zset_key, &members).await else {
+            return self
+                .get_friend_song_ranks_from_db(user_id, song_id, difficulty)
+                .await;
+        };
+
+        const LIMIT: usize = 50;
+        let mut ranked_users = allowed_user_ids
+            .into_iter()
+            .zip(scores)
+            .filter_map(|(id, score)| score.map(|score| (id, score)))
+            .collect::<Vec<_>>();
+        ranked_users.sort_by(|(_, left), (_, right)| right.total_cmp(left));
+        let selected_user_ids = ranked_users
+            .into_iter()
+            .take(LIMIT)
+            .map(|(id, _)| id)
+            .collect::<Vec<_>>();
+
+        let rows = self
+            .get_song_score_rows_for_users_with_song_name(song_id, difficulty, &selected_user_ids)
+            .await?;
+        let mut rows_by_user = rows
+            .into_iter()
+            .map(|row| (row.user_id, row))
+            .collect::<HashMap<_, _>>();
+
+        Ok(selected_user_ids
+            .into_iter()
+            .filter_map(|id| rows_by_user.remove(&id))
+            .enumerate()
+            .map(|(rank, row)| {
+                row.to_user_score_with_rank_and_display(Some((rank + 1) as i32))
+                    .to_dict(true)
+            })
+            .collect())
+    }
+
+    async fn get_friend_song_ranks_from_db(
+        &self,
+        user_id: i32,
+        song_id: &str,
+        difficulty: i32,
+    ) -> ArcResult<Vec<HashMap<String, serde_json::Value>>> {
         let scores = if CONFIG.character_full_unlock {
             sqlx::query_as!(
                 RankingScoreRowComplete,
@@ -901,12 +1536,6 @@ impl ScoreService {
                     .to_dict(true)
             })
             .collect::<Vec<HashMap<String, serde_json::Value>>>();
-
-        if let Some(cache) = &self.cache {
-            cache
-                .set_json(&cache_key, &result, self.score_friend_cache_ttl_seconds)
-                .await;
-        }
 
         Ok(result)
     }
@@ -1167,6 +1796,7 @@ impl ScoreService {
             item_service
                 .claim_core_item(user_id, "core_course_skip_purchase", -1, false)
                 .await?;
+            self.invalidate_user_collection_cache(user_id).await;
         } else {
             let stamina_row = sqlx::query!(
                 "SELECT max_stamina_ts, stamina FROM user WHERE user_id = ?",
@@ -1317,6 +1947,8 @@ impl ScoreService {
             self.update_recent_30(user_play).await?;
         }
 
+        self.invalidate_score_derived_caches(user_id).await;
+
         // Update user rating
         self.update_user_rating(user_id).await?;
 
@@ -1336,7 +1968,7 @@ impl ScoreService {
         let score = &user_play.user_score.score;
 
         let existing = sqlx::query!(
-            "SELECT score, best_clear_type FROM best_score WHERE user_id = ? AND song_id = ? AND difficulty = ?",
+            "SELECT score, best_clear_type, score_v2 FROM best_score WHERE user_id = ? AND song_id = ? AND difficulty = ?",
             user_id,
             score.song_id,
             score.difficulty
@@ -1370,8 +2002,14 @@ impl ScoreService {
                 .execute(&self.pool)
                 .await?;
 
-                // update global rank.
-                self.update_user_global_rank(user_id).await?;
+                self.sync_score_rank_zset(user_id, score).await;
+                self.update_user_global_rank_delta(
+                    user_id,
+                    &score.song_id,
+                    score.difficulty,
+                    score.score_v2,
+                )
+                .await?;
             }
             Some(existing_score) => {
                 // Update best clear type if better
@@ -1415,7 +2053,14 @@ impl ScoreService {
                     .execute(&self.pool)
                     .await?;
 
-                    self.update_user_global_rank(user_id).await?;
+                    self.sync_score_rank_zset(user_id, score).await;
+                    self.update_user_global_rank_delta(
+                        user_id,
+                        &score.song_id,
+                        score.difficulty,
+                        score.score_v2 - existing_score.score_v2.unwrap_or(0.0),
+                    )
+                    .await?;
                 }
             }
         }
@@ -1653,10 +2298,27 @@ impl ScoreService {
         .execute(&self.pool)
         .await?;
 
+        if let Some(cache) = &self.cache {
+            cache
+                .set_i32(
+                    &Self::user_rating_cache_key(user_id),
+                    rating_ptt,
+                    self.user_rating_cache_ttl_seconds,
+                )
+                .await;
+        }
+
         Ok(())
     }
 
     async fn calculate_user_potential(&self, user_id: i32) -> ArcResult<Potential> {
+        let cache_key = Self::score_potential_cache_key(user_id);
+        if let Some(cache) = &self.cache {
+            if let Some(potential) = cache.get_json(&cache_key).await {
+                return Ok(potential);
+            }
+        }
+
         // Calculate best 30
         let best_30 = sqlx::query!(
             "SELECT rating FROM best_score WHERE user_id = ? ORDER BY rating DESC LIMIT 30",
@@ -1692,21 +2354,48 @@ impl ScoreService {
         recent_ratings.sort_by(|a, b| b.partial_cmp(a).unwrap());
         let recent_10_sum: f64 = recent_ratings.iter().take(10).sum();
 
-        Ok(Potential {
+        let potential = Potential {
             user_id,
             best_30_sum,
             recent_10_sum,
             r30_tuples: None,
             r30: None,
             b30: None,
-        })
+        };
+
+        if let Some(cache) = &self.cache {
+            cache
+                .set_json(
+                    &cache_key,
+                    &potential,
+                    self.score_potential_cache_ttl_seconds,
+                )
+                .await;
+        }
+
+        Ok(potential)
     }
 
     async fn get_user_rating_ptt(&self, user_id: i32) -> ArcResult<i32> {
+        let cache_key = Self::user_rating_cache_key(user_id);
+        if let Some(cache) = &self.cache {
+            if let Some(rating_ptt) = cache.get_i32(&cache_key).await {
+                return Ok(rating_ptt);
+            }
+        }
+
         let user = sqlx::query!("SELECT rating_ptt FROM user WHERE user_id = ?", user_id)
             .fetch_one(&self.pool)
             .await?;
-        Ok(user.rating_ptt.unwrap_or(0))
+        let rating_ptt = user.rating_ptt.unwrap_or(0);
+
+        if let Some(cache) = &self.cache {
+            cache
+                .set_i32(&cache_key, rating_ptt, self.user_rating_cache_ttl_seconds)
+                .await;
+        }
+
+        Ok(rating_ptt)
     }
 
     async fn get_user_global_rank(&self, user_id: i32) -> ArcResult<i32> {
@@ -1726,6 +2415,30 @@ impl ScoreService {
             return Ok(0);
         }
 
+        let cache_key = Self::global_rank_cache_key(user_id, world_rank_score);
+        if self.warm_global_rank_zset().await? {
+            let cache = self.cache.as_ref().expect("zset_ready requires cache");
+            if let Some(rank) = cache.get_i32(&cache_key).await {
+                return Ok(rank);
+            }
+
+            if let Some(higher_count) = cache
+                .zcount_greater_than_f64(Self::global_rank_zset_key(), world_rank_score as f64)
+                .await
+            {
+                let rank = higher_count as i32 + 1;
+                let rank = if rank <= CONFIG.world_rank_max {
+                    rank
+                } else {
+                    0
+                };
+                cache
+                    .set_i32(&cache_key, rank, self.global_rank_cache_ttl_seconds)
+                    .await;
+                return Ok(rank);
+            }
+        }
+
         let rank_result = sqlx::query!(
             "SELECT COUNT(*) as count FROM user WHERE world_rank_score > ?",
             world_rank_score
@@ -1734,11 +2447,19 @@ impl ScoreService {
         .await?;
 
         let rank = rank_result.count as i32 + 1;
-        if rank <= CONFIG.world_rank_max {
-            Ok(rank)
+        let rank = if rank <= CONFIG.world_rank_max {
+            rank
         } else {
-            Ok(0)
+            0
+        };
+
+        if let Some(cache) = &self.cache {
+            cache
+                .set_i32(&cache_key, rank, self.global_rank_cache_ttl_seconds)
+                .await;
         }
+
+        Ok(rank)
     }
 
     /// Record score to log database
@@ -2093,6 +2814,10 @@ impl ScoreService {
         user_service
             .update_user_world_complete_info(user_id)
             .await?;
+        let world_service = WorldService::new(self.pool.clone()).with_cache(self.cache.clone());
+        world_service
+            .invalidate_user_world_map_cache(user_id, &current_map)
+            .await;
         self.invalidate_user_info_cache(user_id).await;
 
         let (current_stamina, max_stamina_ts) = self.get_user_stamina_info(user_id).await?;
@@ -2311,6 +3036,7 @@ impl ScoreService {
                         "amount": amount
                     }));
                 }
+                self.invalidate_user_collection_cache(user_id).await;
             }
 
             if Score::get_song_state(course_clear_type) > Score::get_song_state(best_clear_type) {
@@ -2385,55 +3111,24 @@ impl ScoreService {
         Ok(map.stamina_cost.unwrap_or(1))
     }
 
-    /// Update user's global rank
-    async fn update_user_global_rank(&self, user_id: i32) -> ArcResult<()> {
-        // This would calculate and update the user's global ranking
-        // based on their score_v2 values
+    /// Incrementally update user's global rank score after a best_score score_v2 change.
+    async fn update_user_global_rank_delta(
+        &self,
+        user_id: i32,
+        song_id: &str,
+        difficulty: i32,
+        delta: f64,
+    ) -> ArcResult<()> {
+        if delta.abs() < f64::EPSILON || !self.counts_for_global_rank(song_id, difficulty).await? {
+            return Ok(());
+        }
 
-        // Calculate total score_v2
-        let total_score = sqlx::query!(
-            r#"WITH user_scores AS (
-                SELECT song_id, difficulty, score_v2
-                FROM best_score
-                WHERE user_id = ?
-                AND difficulty IN (2, 3, 4)
-            )
-            SELECT SUM(cal_score) AS total FROM (
-                SELECT SUM(score_v2) AS cal_score
-                FROM user_scores
-                WHERE difficulty = 2
-                AND song_id IN (SELECT song_id FROM chart WHERE rating_ftr > 0)
+        let raw = match self.load_world_rank_score_raw(user_id).await? {
+            Some(raw) => raw + delta,
+            None => self.calculate_user_world_rank_score_raw(user_id).await?,
+        };
 
-                UNION ALL
-
-                SELECT SUM(score_v2) AS cal_score
-                FROM user_scores
-                WHERE difficulty = 3
-                AND song_id IN (SELECT song_id FROM chart WHERE rating_byn > 0)
-
-                UNION ALL
-
-                SELECT SUM(score_v2) AS cal_score
-                FROM user_scores
-                WHERE difficulty = 4
-                AND song_id IN (SELECT song_id FROM chart WHERE rating_etr > 0)
-            ) AS subquery"#,
-            user_id
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        let world_rank_score = total_score.total.unwrap_or(0.0) as i32;
-
-        sqlx::query!(
-            "UPDATE user SET world_rank_score = ? WHERE user_id = ?",
-            world_rank_score,
-            user_id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
+        self.store_world_rank_score_raw(user_id, raw.max(0.0)).await
     }
 }
 

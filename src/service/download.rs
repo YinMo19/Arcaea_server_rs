@@ -273,6 +273,17 @@ impl DownloadService {
 
         let s3_storage = self.asset_manager.s3_storage();
         let cacheable = !include_urls || s3_storage.is_some();
+        let cache_ttl_seconds = if include_urls {
+            s3_storage
+                .as_ref()
+                .map(|storage| {
+                    self.download_list_cache_ttl_seconds
+                        .min(storage.presign_cache_ttl_seconds())
+                })
+                .unwrap_or(self.download_list_cache_ttl_seconds)
+        } else {
+            self.download_list_cache_ttl_seconds
+        };
         let cache_key = if cacheable {
             let cache_key = Self::download_list_cache_key(user, &target_song_ids, include_urls);
             if let Some(cache) = &self.cache {
@@ -347,11 +358,7 @@ impl DownloadService {
 
         if let (Some(cache), Some(cache_key)) = (&self.cache, cache_key) {
             cache
-                .set_json(
-                    &cache_key,
-                    &download_songs,
-                    self.download_list_cache_ttl_seconds,
-                )
+                .set_json(&cache_key, &download_songs, cache_ttl_seconds)
                 .await;
         }
 

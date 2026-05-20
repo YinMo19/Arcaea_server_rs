@@ -1,7 +1,7 @@
 use crate::route::common::{
     success_return, success_return_no_value, AuthGuard, EmptyResponse, RouteResult,
 };
-use crate::service::PresentService;
+use crate::service::{PresentService, UserService};
 use rocket::{get, post, routes, Route, State};
 use serde::{Deserialize, Serialize};
 
@@ -40,12 +40,16 @@ pub async fn present_info(
 #[post("/present/me/claim/<present_id>")]
 pub async fn claim_present(
     present_service: &State<PresentService>,
+    user_service: &State<UserService>,
     auth: AuthGuard,
     present_id: String,
 ) -> RouteResult<EmptyResponse> {
     present_service
         .claim_present(auth.user_id, &present_id)
         .await?;
+    user_service
+        .invalidate_user_collection_cache(auth.user_id)
+        .await;
 
     Ok(success_return_no_value())
 }

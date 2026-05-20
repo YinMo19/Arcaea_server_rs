@@ -369,7 +369,9 @@ impl PurchaseService {
         }
 
         self.invalidate_user_purchase_cache(user_id).await;
-        self.user_service.invalidate_user_info_cache(user_id).await;
+        self.user_service
+            .invalidate_user_collection_cache(user_id)
+            .await;
 
         // Get updated user info
         let user_info = self.user_service.get_user_info(user_id).await?;
@@ -419,7 +421,9 @@ impl PurchaseService {
         self.item_service
             .claim_item(user_id, item_id, item_id, 1)
             .await?;
-        self.user_service.invalidate_user_info_cache(user_id).await;
+        self.user_service
+            .invalidate_user_collection_cache(user_id)
+            .await;
 
         // Prepare response
         let mut response = json!({
@@ -484,7 +488,9 @@ impl PurchaseService {
         self.item_service
             .claim_item(user_id, "stamina6", "stamina6", 1)
             .await?;
-        self.user_service.invalidate_user_info_cache(user_id).await;
+        self.user_service
+            .invalidate_user_collection_cache(user_id)
+            .await;
 
         // Get updated user stamina info
         let stamina_info = sqlx::query!(
@@ -560,7 +566,9 @@ impl PurchaseService {
                 .claim_item(user_id, &item_id, &item_type, amount.unwrap_or(0))
                 .await?;
         }
-        self.user_service.invalidate_user_info_cache(user_id).await;
+        self.user_service
+            .invalidate_user_collection_cache(user_id)
+            .await;
 
         // Mark code as redeemed by user
         sqlx::query!(

@@ -183,6 +183,15 @@ impl StorageService {
         format!("download:presign:{song_id}:{file_name}")
     }
 
+    pub fn presign_cache_ttl_seconds(&self) -> u64 {
+        let Some(s3) = &self.s3 else {
+            return 0;
+        };
+
+        self.presign_cache_ttl_seconds
+            .min(s3.config.presign_expires_seconds.saturating_sub(60))
+    }
+
     pub fn is_s3(&self) -> bool {
         self.config.backend == StorageBackend::S3
     }
@@ -246,10 +255,9 @@ impl StorageService {
             Some(key) => {
                 let url = s3.presign_get(&key).await?;
                 if let Some(cache) = &self.cache {
-                    let ttl = self
-                        .presign_cache_ttl_seconds
-                        .min(s3.config.presign_expires_seconds.saturating_sub(60));
-                    cache.set_string(&cache_key, &url, ttl).await;
+                    cache
+                        .set_string(&cache_key, &url, self.presign_cache_ttl_seconds())
+                        .await;
                 }
                 Ok(Some(url))
             }

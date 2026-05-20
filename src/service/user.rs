@@ -6,6 +6,7 @@ use crate::model::{
     UserLoginDevice, UserLoginDto, UserRegisterDto,
 };
 use crate::service::cache::{env_ttl_seconds, CacheService};
+use crate::service::score::ScoreService;
 use crate::service::world::StaminaImpl;
 use crate::service::CharacterService;
 use base64::{engine::general_purpose, Engine as _};
@@ -24,6 +25,38 @@ pub struct UserService {
     auth_cache_ttl_seconds: u64,
     user_info_cache_ttl_seconds: u64,
     friend_cache_ttl_seconds: u64,
+    user_detail_cache_ttl_seconds: u64,
+    global_rank_cache_ttl_seconds: u64,
+    zset_cache_ttl_seconds: u64,
+}
+
+struct FriendListRow {
+    is_mutual: i64,
+    user_id: i32,
+    name: Option<String>,
+    join_date: Option<i64>,
+    rating_ptt: Option<i32>,
+    character_id: Option<i32>,
+    is_skill_sealed: Option<i8>,
+    is_hide_rating: Option<i8>,
+    song_id: Option<String>,
+    difficulty: Option<i32>,
+    score: Option<i32>,
+    shiny_perfect_count: Option<i32>,
+    perfect_count: Option<i32>,
+    near_count: Option<i32>,
+    miss_count: Option<i32>,
+    health: Option<i32>,
+    modifier: Option<i32>,
+    time_played: Option<i64>,
+    clear_type: Option<i32>,
+    rating: Option<f64>,
+    favorite_character: Option<i32>,
+    custom_banner: Option<String>,
+    is_profile_public: Option<i8>,
+    displayed_is_uncapped: Option<i8>,
+    displayed_is_uncapped_override: Option<i8>,
+    best_clear_type: Option<i32>,
 }
 
 impl UserService {
@@ -37,6 +70,9 @@ impl UserService {
             auth_cache_ttl_seconds: env_ttl_seconds("REDIS_AUTH_TTL_SECONDS", 86_400),
             user_info_cache_ttl_seconds: env_ttl_seconds("REDIS_USER_INFO_TTL_SECONDS", 2),
             friend_cache_ttl_seconds: env_ttl_seconds("REDIS_FRIEND_TTL_SECONDS", 5),
+            user_detail_cache_ttl_seconds: env_ttl_seconds("REDIS_USER_DETAIL_TTL_SECONDS", 15),
+            global_rank_cache_ttl_seconds: env_ttl_seconds("REDIS_GLOBAL_RANK_TTL_SECONDS", 10),
+            zset_cache_ttl_seconds: env_ttl_seconds("REDIS_ZSET_RANK_TTL_SECONDS", 300),
         }
     }
 
@@ -57,10 +93,164 @@ impl UserService {
         format!("friend:list:{user_id}")
     }
 
+    fn global_rank_cache_key(user_id: i32, world_rank_score: i32) -> String {
+        format!("rank:global:{user_id}:{world_rank_score}")
+    }
+
+    fn global_rank_zset_key() -> &'static str {
+        "rank:global:zset"
+    }
+
+    fn global_rank_zset_ready_key() -> &'static str {
+        "rank:global:zset:ready"
+    }
+
+    fn user_detail_cache_key(user_id: i32, detail: &str) -> String {
+        format!("user:detail:{user_id}:{detail}")
+    }
+
+    async fn sync_global_rank_zset(&self, user_id: i32, world_rank_score: i32) {
+        if let Some(cache) = &self.cache {
+            if cache
+                .get_string(Self::global_rank_zset_ready_key())
+                .await
+                .is_none()
+            {
+                return;
+            }
+
+            let member = user_id.to_string();
+            if world_rank_score > 0 {
+                cache
+                    .zadd_f64(
+                        Self::global_rank_zset_key(),
+                        &member,
+                        world_rank_score as f64,
+                    )
+                    .await;
+                cache
+                    .expire(Self::global_rank_zset_key(), self.zset_cache_ttl_seconds)
+                    .await;
+            } else {
+                cache.zrem(Self::global_rank_zset_key(), &member).await;
+            }
+        }
+    }
+
+    async fn warm_global_rank_zset(&self) -> ArcResult<bool> {
+        let Some(cache) = &self.cache else {
+            return Ok(false);
+        };
+
+        if cache
+            .get_string(Self::global_rank_zset_ready_key())
+            .await
+            .is_some()
+        {
+            return Ok(true);
+        }
+
+        let rows =
+            sqlx::query!("SELECT user_id, world_rank_score FROM user WHERE world_rank_score > 0")
+                .fetch_all(&self.pool)
+                .await?;
+
+        cache.del(Self::global_rank_zset_key()).await;
+        for row in rows {
+            cache
+                .zadd_f64(
+                    Self::global_rank_zset_key(),
+                    &row.user_id.to_string(),
+                    row.world_rank_score.unwrap_or(0) as f64,
+                )
+                .await;
+        }
+        cache
+            .expire(Self::global_rank_zset_key(), self.zset_cache_ttl_seconds)
+            .await;
+        cache
+            .set_string(
+                Self::global_rank_zset_ready_key(),
+                "1",
+                self.zset_cache_ttl_seconds,
+            )
+            .await;
+
+        Ok(true)
+    }
+
+    async fn store_world_rank_score_raw(&self, user_id: i32, raw: f64) -> ArcResult<()> {
+        let raw = raw.max(0.0);
+        let raw_value = raw.to_string();
+        sqlx::query!(
+            r#"
+            INSERT INTO user_kvdata (user_id, class, `key`, idx, value)
+            VALUES (?, 'score', 'world_rank_score_raw', 0, ?)
+            ON DUPLICATE KEY UPDATE value = VALUES(value)
+            "#,
+            user_id,
+            raw_value
+        )
+        .execute(&self.pool)
+        .await?;
+
+        let world_rank_score = raw as i32;
+        sqlx::query!(
+            "UPDATE user SET world_rank_score = ? WHERE user_id = ?",
+            world_rank_score,
+            user_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        self.sync_global_rank_zset(user_id, world_rank_score).await;
+        Ok(())
+    }
+
     pub async fn invalidate_user_info_cache(&self, user_id: i32) {
         if let Some(cache) = &self.cache {
             cache.del(&Self::user_info_cache_key(user_id)).await;
         }
+    }
+
+    async fn invalidate_user_detail_cache(&self, user_id: i32, detail: &str) {
+        if let Some(cache) = &self.cache {
+            cache
+                .del(&Self::user_detail_cache_key(user_id, detail))
+                .await;
+        }
+    }
+
+    async fn invalidate_user_character_cache(&self, user_id: i32) {
+        self.invalidate_user_detail_cache(user_id, "character_stats")
+            .await;
+        self.invalidate_user_detail_cache(user_id, "characters")
+            .await;
+    }
+
+    async fn invalidate_user_item_cache(&self, user_id: i32) {
+        self.invalidate_user_detail_cache(user_id, "cores").await;
+        self.invalidate_user_detail_cache(user_id, "packs").await;
+        self.invalidate_user_detail_cache(user_id, "singles").await;
+        self.invalidate_user_detail_cache(user_id, "world_songs")
+            .await;
+        self.invalidate_user_detail_cache(user_id, "world_unlocks")
+            .await;
+        self.invalidate_user_detail_cache(user_id, "course_banners")
+            .await;
+        self.invalidate_user_detail_cache(user_id, "missions").await;
+    }
+
+    pub async fn invalidate_user_collection_cache(&self, user_id: i32) {
+        self.invalidate_user_info_cache(user_id).await;
+        self.invalidate_user_item_cache(user_id).await;
+        self.invalidate_user_character_cache(user_id).await;
+    }
+
+    pub async fn invalidate_user_recent_score_cache(&self, user_id: i32) {
+        self.invalidate_user_info_cache(user_id).await;
+        self.invalidate_user_detail_cache(user_id, "recent_score")
+            .await;
     }
 
     pub async fn invalidate_friend_cache(&self, user_id: i32) {
@@ -69,9 +259,42 @@ impl UserService {
         }
     }
 
+    pub async fn invalidate_reverse_friend_caches(&self, user_id: i32) {
+        let rows = match sqlx::query!(
+            "SELECT user_id_me FROM friend WHERE user_id_other = ?",
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        {
+            Ok(rows) => rows,
+            Err(e) => {
+                log::debug!("Failed to load reverse friends for cache invalidation: {e}");
+                return;
+            }
+        };
+
+        for row in rows {
+            self.invalidate_friend_cache(row.user_id_me).await;
+            self.invalidate_user_info_cache(row.user_id_me).await;
+        }
+    }
+
+    async fn invalidate_profile_visibility_cache(&self, user_id: i32) {
+        self.invalidate_user_info_cache(user_id).await;
+        self.invalidate_reverse_friend_caches(user_id).await;
+    }
+
     async fn invalidate_social_cache(&self, user_id: i32) {
         self.invalidate_friend_cache(user_id).await;
         self.invalidate_user_info_cache(user_id).await;
+    }
+
+    pub async fn invalidate_auth_tokens<I>(&self, tokens: I)
+    where
+        I: IntoIterator<Item = String>,
+    {
+        self.invalidate_tokens(tokens).await;
     }
 
     /// Get current timestamp in milliseconds
@@ -663,14 +886,8 @@ impl UserService {
         let mut user_info = UserInfo::from(user);
 
         // Load character stats from character service
-        user_info.character_stats = self
-            .character_service
-            .get_user_character_stats(user_id)
-            .await?;
-        user_info.characters = self
-            .character_service
-            .get_user_character_ids(user_id)
-            .await?;
+        user_info.character_stats = self.get_user_character_stats_cached(user_id).await?;
+        user_info.characters = self.get_user_character_ids_cached(user_id).await?;
 
         // Load user cores
         user_info.cores = self.get_user_cores(user_id).await?;
@@ -725,6 +942,8 @@ impl UserService {
         column: &str,
         value: &str,
     ) -> ArcResult<()> {
+        let affects_friend_display = matches!(column, "favorite_character" | "is_hide_rating");
+
         match column {
             "favorite_character" => {
                 let favorite_character: i32 = value
@@ -757,7 +976,14 @@ impl UserService {
             }
         }
 
-        self.invalidate_user_info_cache(user_id).await;
+        if affects_friend_display {
+            self.invalidate_profile_visibility_cache(user_id).await;
+        } else {
+            self.invalidate_user_info_cache(user_id).await;
+        }
+        if column == "favorite_character" {
+            self.invalidate_user_character_cache(user_id).await;
+        }
         Ok(())
     }
 
@@ -775,7 +1001,8 @@ impl UserService {
         .execute(&self.pool)
         .await?;
 
-        self.invalidate_user_info_cache(user_id).await;
+        self.invalidate_profile_visibility_cache(user_id).await;
+        self.invalidate_user_character_cache(user_id).await;
         Ok(())
     }
 
@@ -789,7 +1016,8 @@ impl UserService {
         .execute(&self.pool)
         .await?;
 
-        self.invalidate_user_info_cache(user_id).await;
+        self.invalidate_profile_visibility_cache(user_id).await;
+        self.invalidate_user_character_cache(user_id).await;
         Ok(())
     }
 
@@ -804,7 +1032,8 @@ impl UserService {
         .execute(&self.pool)
         .await?;
 
-        self.invalidate_user_info_cache(user_id).await;
+        self.invalidate_profile_visibility_cache(user_id).await;
+        self.invalidate_user_character_cache(user_id).await;
         Ok(())
     }
 
@@ -894,7 +1123,8 @@ impl UserService {
         .execute(&self.pool)
         .await?;
 
-        self.invalidate_user_info_cache(user_id).await;
+        self.invalidate_profile_visibility_cache(user_id).await;
+        self.invalidate_user_character_cache(user_id).await;
         Ok(())
     }
 
@@ -911,7 +1141,8 @@ impl UserService {
             .toggle_character_uncap_override(user_id, character_id)
             .await?;
 
-        self.invalidate_user_info_cache(user_id).await;
+        self.invalidate_profile_visibility_cache(user_id).await;
+        self.invalidate_user_character_cache(user_id).await;
         Ok(serde_json::to_value(character_info.to_dict())?)
     }
 
@@ -928,7 +1159,9 @@ impl UserService {
             .character_uncap(user_id, character_id)
             .await?;
 
-        self.invalidate_user_info_cache(user_id).await;
+        self.invalidate_profile_visibility_cache(user_id).await;
+        self.invalidate_user_character_cache(user_id).await;
+        self.invalidate_user_detail_cache(user_id, "cores").await;
 
         // Get user cores after uncap
         let cores = self.get_user_cores_json(user_id).await?;
@@ -954,6 +1187,8 @@ impl UserService {
             .await?;
 
         self.invalidate_user_info_cache(user_id).await;
+        self.invalidate_user_character_cache(user_id).await;
+        self.invalidate_user_detail_cache(user_id, "cores").await;
 
         // Get user cores after upgrade
         let cores = self.get_user_cores_json(user_id).await?;
@@ -1044,7 +1279,61 @@ impl UserService {
     }
 
     /// Get user cores information
+    async fn get_cached_user_detail<T, F, Fut>(
+        &self,
+        user_id: i32,
+        detail: &str,
+        loader: F,
+    ) -> ArcResult<T>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned,
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = ArcResult<T>>,
+    {
+        let cache_key = Self::user_detail_cache_key(user_id, detail);
+        if let Some(cache) = &self.cache {
+            if let Some(value) = cache.get_json(&cache_key).await {
+                return Ok(value);
+            }
+        }
+
+        let value = loader().await?;
+        if let Some(cache) = &self.cache {
+            cache
+                .set_json(&cache_key, &value, self.user_detail_cache_ttl_seconds)
+                .await;
+        }
+        Ok(value)
+    }
+
+    async fn get_user_character_stats_cached(
+        &self,
+        user_id: i32,
+    ) -> ArcResult<Vec<serde_json::Value>> {
+        self.get_cached_user_detail(user_id, "character_stats", || async {
+            self.character_service
+                .get_user_character_stats(user_id)
+                .await
+        })
+        .await
+    }
+
+    async fn get_user_character_ids_cached(&self, user_id: i32) -> ArcResult<Vec<i32>> {
+        self.get_cached_user_detail(user_id, "characters", || async {
+            self.character_service.get_user_character_ids(user_id).await
+        })
+        .await
+    }
+
+    /// Get user cores information
     async fn get_user_cores(&self, user_id: i32) -> ArcResult<Vec<UserCoreInfo>> {
+        self.get_cached_user_detail(user_id, "cores", || async {
+            self.load_user_cores(user_id).await
+        })
+        .await
+    }
+
+    async fn load_user_cores(&self, user_id: i32) -> ArcResult<Vec<UserCoreInfo>> {
         let cores = sqlx::query!(
             r#"
             SELECT item_id, amount
@@ -1067,6 +1356,13 @@ impl UserService {
 
     /// Get user pack unlocks
     async fn get_user_packs(&self, user_id: i32) -> ArcResult<Vec<String>> {
+        self.get_cached_user_detail(user_id, "packs", || async {
+            self.load_user_packs(user_id).await
+        })
+        .await
+    }
+
+    async fn load_user_packs(&self, user_id: i32) -> ArcResult<Vec<String>> {
         let packs = sqlx::query_scalar!(
             "SELECT item_id FROM user_item WHERE user_id = ? AND type = 'pack'",
             user_id
@@ -1079,6 +1375,13 @@ impl UserService {
 
     /// Get user single song unlocks
     async fn get_user_singles(&self, user_id: i32) -> ArcResult<Vec<String>> {
+        self.get_cached_user_detail(user_id, "singles", || async {
+            self.load_user_singles(user_id).await
+        })
+        .await
+    }
+
+    async fn load_user_singles(&self, user_id: i32) -> ArcResult<Vec<String>> {
         let singles = sqlx::query_scalar!(
             "SELECT item_id FROM user_item WHERE user_id = ? AND type = 'single'",
             user_id
@@ -1091,6 +1394,13 @@ impl UserService {
 
     /// Get user world song unlocks
     async fn get_user_world_songs(&self, user_id: i32) -> ArcResult<Vec<String>> {
+        self.get_cached_user_detail(user_id, "world_songs", || async {
+            self.load_user_world_songs(user_id).await
+        })
+        .await
+    }
+
+    async fn load_user_world_songs(&self, user_id: i32) -> ArcResult<Vec<String>> {
         let world_songs = if CONFIG.world_song_full_unlock {
             sqlx::query_scalar!("SELECT item_id FROM item WHERE type = 'world_song'")
                 .fetch_all(&self.pool)
@@ -1109,6 +1419,13 @@ impl UserService {
 
     /// Get user world unlocks
     async fn get_user_world_unlocks(&self, user_id: i32) -> ArcResult<Vec<String>> {
+        self.get_cached_user_detail(user_id, "world_unlocks", || async {
+            self.load_user_world_unlocks(user_id).await
+        })
+        .await
+    }
+
+    async fn load_user_world_unlocks(&self, user_id: i32) -> ArcResult<Vec<String>> {
         let world_unlocks = if CONFIG.world_scenery_full_unlock {
             sqlx::query_scalar!("SELECT item_id FROM item WHERE type = 'world_unlock'",)
                 .fetch_all(&self.pool)
@@ -1127,6 +1444,13 @@ impl UserService {
 
     /// Get user course banners
     async fn get_user_course_banners(&self, user_id: i32) -> ArcResult<Vec<Value>> {
+        self.get_cached_user_detail(user_id, "course_banners", || async {
+            self.load_user_course_banners(user_id).await
+        })
+        .await
+    }
+
+    async fn load_user_course_banners(&self, user_id: i32) -> ArcResult<Vec<Value>> {
         let banners = sqlx::query_scalar!(
             "SELECT item_id FROM user_item WHERE user_id = ? AND type IN ('course_banner', 'online_banner') ORDER BY type, item_id",
             user_id
@@ -1139,6 +1463,13 @@ impl UserService {
 
     /// Get user mission statuses
     async fn get_user_missions(&self, user_id: i32) -> ArcResult<Vec<Value>> {
+        self.get_cached_user_detail(user_id, "missions", || async {
+            self.load_user_missions(user_id).await
+        })
+        .await
+    }
+
+    async fn load_user_missions(&self, user_id: i32) -> ArcResult<Vec<Value>> {
         let missions = sqlx::query!(
             "SELECT mission_id, status FROM user_mission WHERE user_id = ? ORDER BY mission_id",
             user_id
@@ -1159,6 +1490,13 @@ impl UserService {
 
     /// Get user recent scores
     async fn get_user_recent_scores(&self, user_id: i32) -> ArcResult<Vec<UserRecentScore>> {
+        self.get_cached_user_detail(user_id, "recent_score", || async {
+            self.load_user_recent_scores(user_id).await
+        })
+        .await
+    }
+
+    async fn load_user_recent_scores(&self, user_id: i32) -> ArcResult<Vec<UserRecentScore>> {
         let user = sqlx::query!(
             r#"
             SELECT song_id, difficulty, score, shiny_perfect_count, perfect_count,
@@ -1436,7 +1774,14 @@ impl UserService {
             _ => return Err(ArcError::input("Invalid setting argument")),
         }
 
-        self.invalidate_user_info_cache(user_id).await;
+        if matches!(set_arg, "favorite_character" | "is_hide_rating") {
+            self.invalidate_profile_visibility_cache(user_id).await;
+        } else {
+            self.invalidate_user_info_cache(user_id).await;
+        }
+        if set_arg == "favorite_character" {
+            self.invalidate_user_character_cache(user_id).await;
+        }
         self.get_user_info(user_id).await
     }
 
@@ -1482,7 +1827,7 @@ impl UserService {
             banner = next_banner.to_string();
         }
 
-        self.invalidate_user_info_cache(user_id).await;
+        self.invalidate_profile_visibility_cache(user_id).await;
         Ok(serde_json::json!({
             "is_profile_public": profile_public,
             "showcase_characters": [-1, -1, -1],
@@ -1503,6 +1848,26 @@ impl UserService {
                 404,
             ));
         }
+
+        let friend_rows = sqlx::query!(
+            "SELECT user_id_me, user_id_other FROM friend WHERE user_id_me = ? OR user_id_other = ?",
+            user_id,
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        let score_keys = sqlx::query!(
+            "SELECT song_id, difficulty FROM best_score WHERE user_id = ?",
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .map(|row| (row.song_id, row.difficulty))
+        .collect::<Vec<_>>();
+        let old_tokens = sqlx::query!("SELECT access_token FROM login WHERE user_id = ?", user_id)
+            .fetch_all(&self.pool)
+            .await?;
 
         // Start a transaction for atomic deletion
         let mut transaction = self.pool.begin().await?;
@@ -1587,7 +1952,29 @@ impl UserService {
 
         transaction.commit().await?;
 
+        self.invalidate_tokens(old_tokens.into_iter().map(|row| row.access_token))
+            .await;
         self.invalidate_user_info_cache(user_id).await;
+        let score_service = ScoreService::new(self.pool.clone()).with_cache(self.cache.clone());
+        score_service
+            .reset_user_score_caches_for_scores_and_friends(
+                user_id,
+                score_keys,
+                friend_rows
+                    .iter()
+                    .filter_map(|row| (row.user_id_other == user_id).then_some(row.user_id_me))
+                    .collect(),
+            )
+            .await?;
+        self.invalidate_friend_cache(user_id).await;
+        for row in friend_rows {
+            let other_user_id = if row.user_id_me == user_id {
+                row.user_id_other
+            } else {
+                row.user_id_me
+            };
+            self.invalidate_social_cache(other_user_id).await;
+        }
         Ok(())
     }
 
@@ -1647,7 +2034,8 @@ impl UserService {
             }
         }
 
-        self.invalidate_user_info_cache(user_id).await;
+        self.invalidate_profile_visibility_cache(user_id).await;
+        self.invalidate_user_character_cache(user_id).await;
         Ok(())
     }
 
@@ -1689,6 +2077,7 @@ impl UserService {
         }
 
         self.invalidate_user_info_cache(user_id).await;
+        self.invalidate_user_character_cache(user_id).await;
         Ok(())
     }
 
@@ -1799,6 +2188,33 @@ impl UserService {
                     return Ok(0);
                 }
 
+                let cache_key = Self::global_rank_cache_key(user_id, world_rank_score);
+                if self.warm_global_rank_zset().await? {
+                    let cache = self.cache.as_ref().expect("zset_ready requires cache");
+                    if let Some(rank) = cache.get_i32(&cache_key).await {
+                        return Ok(rank);
+                    }
+
+                    if let Some(higher_count) = cache
+                        .zcount_greater_than_f64(
+                            Self::global_rank_zset_key(),
+                            world_rank_score as f64,
+                        )
+                        .await
+                    {
+                        let rank = higher_count as i32 + 1;
+                        let rank = if rank <= CONFIG.world_rank_max {
+                            rank
+                        } else {
+                            0
+                        };
+                        cache
+                            .set_i32(&cache_key, rank, self.global_rank_cache_ttl_seconds)
+                            .await;
+                        return Ok(rank);
+                    }
+                }
+
                 // Count how many users have higher scores
                 let rank_result = sqlx::query!(
                     "SELECT COUNT(*) as count FROM user WHERE world_rank_score > ?",
@@ -1808,11 +2224,19 @@ impl UserService {
                 .await?;
 
                 let rank = rank_result.count as i32 + 1;
-                if rank <= CONFIG.world_rank_max {
-                    Ok(rank)
+                let rank = if rank <= CONFIG.world_rank_max {
+                    rank
                 } else {
-                    Ok(0)
+                    0
+                };
+
+                if let Some(cache) = &self.cache {
+                    cache
+                        .set_i32(&cache_key, rank, self.global_rank_cache_ttl_seconds)
+                        .await;
                 }
+
+                Ok(rank)
             }
             None => Ok(0),
         }
@@ -1835,12 +2259,12 @@ impl UserService {
                 FROM user_scores
                 WHERE difficulty = 2
                 AND song_id IN (SELECT song_id FROM chart WHERE rating_ftr > 0)
-                UNION
+                UNION ALL
                 SELECT SUM(score_v2) as a
                 FROM user_scores
                 WHERE difficulty = 3
                 AND song_id IN (SELECT song_id FROM chart WHERE rating_byn > 0)
-                UNION
+                UNION ALL
                 SELECT SUM(score_v2) as a
                 FROM user_scores
                 WHERE difficulty = 4
@@ -1852,17 +2276,11 @@ impl UserService {
         .fetch_one(&self.pool)
         .await?;
 
-        if let Some(total_score) = score_result.total_score {
-            sqlx::query!(
-                "UPDATE user SET world_rank_score = ? WHERE user_id = ?",
-                total_score,
-                user_id
-            )
-            .execute(&self.pool)
+        self.store_world_rank_score_raw(user_id, score_result.total_score.unwrap_or(0.0))
             .await?;
-        }
 
         self.invalidate_user_info_cache(user_id).await;
+        self.invalidate_user_character_cache(user_id).await;
         Ok(())
     }
 
@@ -1896,6 +2314,7 @@ impl UserService {
         .await?;
 
         self.invalidate_user_info_cache(user_id).await;
+        self.invalidate_user_character_cache(user_id).await;
         Ok(())
     }
 
@@ -1915,7 +2334,7 @@ impl UserService {
         .execute(&self.pool)
         .await?;
 
-        self.invalidate_user_info_cache(user_id).await;
+        self.invalidate_profile_visibility_cache(user_id).await;
         Ok(())
     }
 
@@ -1950,113 +2369,173 @@ impl UserService {
             }
         }
 
-        let friend_ids = sqlx::query!(
-            "SELECT user_id_other FROM friend WHERE user_id_me = ?",
-            user_id
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut friends = Vec::new();
-
-        for friend_row in friend_ids {
-            let friend_id = friend_row.user_id_other;
-
-            // Check if mutual friendship exists
-            let is_mutual = sqlx::query!(
-                "SELECT EXISTS(SELECT 1 FROM friend WHERE user_id_me = ? AND user_id_other = ?) as `exists!: i64`",
-                friend_id,
+        let friends_rows = if CONFIG.character_full_unlock {
+            sqlx::query_as!(
+                FriendListRow,
+                r#"
+                SELECT
+                    CASE WHEN fm.user_id_me IS NULL THEN 0 ELSE 1 END AS `is_mutual!: i64`,
+                    u.user_id,
+                    u.name,
+                    u.join_date,
+                    u.rating_ptt,
+                    u.character_id,
+                    u.is_skill_sealed,
+                    u.is_hide_rating,
+                    u.song_id,
+                    u.difficulty,
+                    u.score,
+                    u.shiny_perfect_count,
+                    u.perfect_count,
+                    u.near_count,
+                    u.miss_count,
+                    u.health,
+                    u.modifier,
+                    u.time_played,
+                    u.clear_type,
+                    u.rating,
+                    u.favorite_character,
+                    u.custom_banner,
+                    u.is_profile_public,
+                    uc.is_uncapped AS displayed_is_uncapped,
+                    uc.is_uncapped_override AS displayed_is_uncapped_override,
+                    bs.best_clear_type
+                FROM friend f
+                JOIN user u ON u.user_id = f.user_id_other
+                LEFT JOIN friend fm
+                    ON fm.user_id_me = f.user_id_other AND fm.user_id_other = ?
+                LEFT JOIN user_char_full uc
+                    ON uc.user_id = u.user_id
+                    AND uc.character_id = CASE
+                        WHEN COALESCE(u.favorite_character, -1) = -1
+                        THEN COALESCE(u.character_id, 0)
+                        ELSE u.favorite_character
+                    END
+                LEFT JOIN best_score bs
+                    ON bs.user_id = u.user_id
+                    AND bs.song_id = u.song_id
+                    AND bs.difficulty = u.difficulty
+                WHERE f.user_id_me = ?
+                "#,
+                user_id,
                 user_id
             )
-            .fetch_one(&self.pool)
+            .fetch_all(&self.pool)
             .await?
-            .exists != 0;
-
-            // Get friend's basic info
-            let friend_info = sqlx::query!(
+        } else {
+            sqlx::query_as!(
+                FriendListRow,
                 r#"
-                SELECT * FROM user WHERE user_id = ?
+                SELECT
+                    CASE WHEN fm.user_id_me IS NULL THEN 0 ELSE 1 END AS `is_mutual!: i64`,
+                    u.user_id,
+                    u.name,
+                    u.join_date,
+                    u.rating_ptt,
+                    u.character_id,
+                    u.is_skill_sealed,
+                    u.is_hide_rating,
+                    u.song_id,
+                    u.difficulty,
+                    u.score,
+                    u.shiny_perfect_count,
+                    u.perfect_count,
+                    u.near_count,
+                    u.miss_count,
+                    u.health,
+                    u.modifier,
+                    u.time_played,
+                    u.clear_type,
+                    u.rating,
+                    u.favorite_character,
+                    u.custom_banner,
+                    u.is_profile_public,
+                    uc.is_uncapped AS displayed_is_uncapped,
+                    uc.is_uncapped_override AS displayed_is_uncapped_override,
+                    bs.best_clear_type
+                FROM friend f
+                JOIN user u ON u.user_id = f.user_id_other
+                LEFT JOIN friend fm
+                    ON fm.user_id_me = f.user_id_other AND fm.user_id_other = ?
+                LEFT JOIN user_char uc
+                    ON uc.user_id = u.user_id
+                    AND uc.character_id = CASE
+                        WHEN COALESCE(u.favorite_character, -1) = -1
+                        THEN COALESCE(u.character_id, 0)
+                        ELSE u.favorite_character
+                    END
+                LEFT JOIN best_score bs
+                    ON bs.user_id = u.user_id
+                    AND bs.song_id = u.song_id
+                    AND bs.difficulty = u.difficulty
+                WHERE f.user_id_me = ?
                 "#,
-                friend_id
+                user_id,
+                user_id
             )
-            .fetch_optional(&self.pool)
-            .await?;
+            .fetch_all(&self.pool)
+            .await?
+        };
 
-            if let Some(friend) = friend_info {
-                // Python baseline: if `favorite_character == -1` then use current character,
-                // otherwise display favorite_character.
-                let favorite_character_id = friend.favorite_character.unwrap_or(-1);
-                let character_id = if favorite_character_id == -1 {
-                    friend.character_id.unwrap_or(0)
-                } else {
-                    favorite_character_id
-                };
+        let mut friends = Vec::with_capacity(friends_rows.len());
 
-                // The uncap flags should match the displayed character, not necessarily the
-                // user's current character.
-                let (is_char_uncapped, is_char_uncapped_override) = self
-                    .character_service
-                    .get_user_character_uncap_condition(friend_id, character_id)
-                    .await?;
+        for friend in friends_rows {
+            let favorite_character_id = friend.favorite_character.unwrap_or(-1);
+            let character_id = if favorite_character_id == -1 {
+                friend.character_id.unwrap_or(0)
+            } else {
+                favorite_character_id
+            };
 
-                // Get best clear type for recent score if exists
-                let best_clear_type = if let Some(ref song_id) = friend.song_id {
-                    let best_clear = sqlx::query!(
-                        "SELECT best_clear_type FROM best_score WHERE user_id = ? AND song_id = ? AND difficulty = ?",
-                        friend_id,
-                        song_id,
-                        friend.difficulty
-                    )
-                    .fetch_optional(&self.pool)
-                    .await?;
-                    best_clear
-                        .and_then(|bc| bc.best_clear_type)
-                        .unwrap_or(friend.clear_type.unwrap_or(0))
-                } else {
-                    friend.clear_type.unwrap_or(0)
-                };
+            let best_clear_type = if friend.song_id.is_some() {
+                friend
+                    .best_clear_type
+                    .unwrap_or(friend.clear_type.unwrap_or(0))
+            } else {
+                friend.clear_type.unwrap_or(0)
+            };
 
-                let recent_score = if friend.song_id.is_some() {
-                    vec![serde_json::json!({
-                        "song_id": friend.song_id,
-                        "difficulty": friend.difficulty,
-                        "score": friend.score,
-                        "shiny_perfect_count": friend.shiny_perfect_count,
-                        "perfect_count": friend.perfect_count,
-                        "near_count": friend.near_count,
-                        "miss_count": friend.miss_count,
-                        "health": friend.health,
-                        "modifier": friend.modifier,
-                        "time_played": friend.time_played,
-                        "clear_type": friend.clear_type,
-                        "rating": friend.rating,
-                        "best_clear_type": best_clear_type
-                    })]
-                } else {
-                    Vec::new()
-                };
+            let recent_score = if friend.song_id.is_some() {
+                vec![serde_json::json!({
+                    "song_id": friend.song_id,
+                    "difficulty": friend.difficulty,
+                    "score": friend.score,
+                    "shiny_perfect_count": friend.shiny_perfect_count,
+                    "perfect_count": friend.perfect_count,
+                    "near_count": friend.near_count,
+                    "miss_count": friend.miss_count,
+                    "health": friend.health,
+                    "modifier": friend.modifier,
+                    "time_played": friend.time_played,
+                    "clear_type": friend.clear_type,
+                    "rating": friend.rating,
+                    "best_clear_type": best_clear_type
+                })]
+            } else {
+                Vec::new()
+            };
 
-                let mut friend_json = serde_json::json!({
-                    "is_mutual": is_mutual,
-                    "is_char_uncapped_override": is_char_uncapped_override,
-                    "is_char_uncapped": is_char_uncapped,
-                    "is_skill_sealed": friend.is_skill_sealed.unwrap_or(0) != 0,
-                    "rating": if friend.is_hide_rating.unwrap_or(0) != 0 { -1 } else { friend.rating_ptt.unwrap_or(0) },
-                    "join_date": friend.join_date,
-                    "character": character_id,
-                    "recent_score": recent_score,
-                    "name": friend.name,
-                    "user_id": friend.user_id,
-                    "is_profile_public": friend.is_profile_public.unwrap_or(0) != 0
-                });
+            let is_profile_public = friend.is_profile_public.unwrap_or(0) != 0;
+            let mut friend_json = serde_json::json!({
+                "is_mutual": friend.is_mutual != 0,
+                "is_char_uncapped_override": friend.displayed_is_uncapped_override.unwrap_or(0) != 0,
+                "is_char_uncapped": friend.displayed_is_uncapped.unwrap_or(0) != 0,
+                "is_skill_sealed": friend.is_skill_sealed.unwrap_or(0) != 0,
+                "rating": if friend.is_hide_rating.unwrap_or(0) != 0 { -1 } else { friend.rating_ptt.unwrap_or(0) },
+                "join_date": friend.join_date,
+                "character": character_id,
+                "recent_score": recent_score,
+                "name": friend.name,
+                "user_id": friend.user_id,
+                "is_profile_public": is_profile_public
+            });
 
-                if friend.is_profile_public.unwrap_or(0) != 0 {
-                    friend_json["custom_banner"] =
-                        Value::String(friend.custom_banner.unwrap_or_default());
-                }
-
-                friends.push(friend_json);
+            if is_profile_public {
+                friend_json["custom_banner"] =
+                    Value::String(friend.custom_banner.unwrap_or_default());
             }
+
+            friends.push(friend_json);
         }
 
         // Sort by recent score time_played (most recent first)

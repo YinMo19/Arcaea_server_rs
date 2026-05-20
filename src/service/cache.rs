@@ -122,6 +122,117 @@ impl CacheService {
         }
     }
 
+    pub async fn expire(&self, key: &str, ttl_seconds: u64) {
+        if ttl_seconds == 0 {
+            return;
+        }
+
+        let mut conn = self.manager.clone();
+        let result: redis::RedisResult<()> = conn.expire(self.key(key), ttl_seconds as i64).await;
+        if let Err(e) = result {
+            log::debug!("Redis EXPIRE failed for `{key}`: {e}");
+        }
+    }
+
+    pub async fn zadd_f64(&self, key: &str, member: &str, score: f64) {
+        let mut conn = self.manager.clone();
+        let result: redis::RedisResult<usize> = conn.zadd(self.key(key), member, score).await;
+        if let Err(e) = result {
+            log::debug!("Redis ZADD failed for `{key}`: {e}");
+        }
+    }
+
+    pub async fn zrem(&self, key: &str, member: &str) {
+        let mut conn = self.manager.clone();
+        let result: redis::RedisResult<usize> = conn.zrem(self.key(key), member).await;
+        if let Err(e) = result {
+            log::debug!("Redis ZREM failed for `{key}`: {e}");
+        }
+    }
+
+    pub async fn zscore_f64(&self, key: &str, member: &str) -> Option<f64> {
+        let mut conn = self.manager.clone();
+        match conn.zscore(self.key(key), member).await {
+            Ok(value) => value,
+            Err(e) => {
+                log::debug!("Redis ZSCORE failed for `{key}`: {e}");
+                None
+            }
+        }
+    }
+
+    pub async fn zcount_greater_than_f64(&self, key: &str, score: f64) -> Option<usize> {
+        let mut conn = self.manager.clone();
+        let result: redis::RedisResult<usize> = redis::cmd("ZCOUNT")
+            .arg(self.key(key))
+            .arg(format!("({score}"))
+            .arg("+inf")
+            .query_async(&mut conn)
+            .await;
+        match result {
+            Ok(value) => Some(value),
+            Err(e) => {
+                log::debug!("Redis ZCOUNT failed for `{key}`: {e}");
+                None
+            }
+        }
+    }
+
+    pub async fn zmscore_f64(&self, key: &str, members: &[String]) -> Option<Vec<Option<f64>>> {
+        if members.is_empty() {
+            return Some(Vec::new());
+        }
+
+        let mut conn = self.manager.clone();
+        let mut cmd = redis::cmd("ZMSCORE");
+        cmd.arg(self.key(key));
+        for member in members {
+            cmd.arg(member);
+        }
+
+        let result: redis::RedisResult<Vec<Option<f64>>> = cmd.query_async(&mut conn).await;
+        match result {
+            Ok(value) => Some(value),
+            Err(e) => {
+                log::debug!("Redis ZMSCORE failed for `{key}`: {e}");
+                None
+            }
+        }
+    }
+
+    pub async fn zrevrank(&self, key: &str, member: &str) -> Option<usize> {
+        let mut conn = self.manager.clone();
+        match conn.zrevrank(self.key(key), member).await {
+            Ok(value) => value,
+            Err(e) => {
+                log::debug!("Redis ZREVRANK failed for `{key}`: {e}");
+                None
+            }
+        }
+    }
+
+    pub async fn zrevrange(&self, key: &str, start: isize, stop: isize) -> Option<Vec<String>> {
+        let mut conn = self.manager.clone();
+        match conn.zrevrange(self.key(key), start, stop).await {
+            Ok(value) => Some(value),
+            Err(e) => {
+                log::debug!("Redis ZREVRANGE failed for `{key}`: {e}");
+                None
+            }
+        }
+    }
+
+    pub async fn zcard(&self, key: &str) -> Option<usize> {
+        let mut conn = self.manager.clone();
+        match conn.zcard(self.key(key)).await {
+            Ok(value) => Some(value),
+            Err(e) => {
+                log::debug!("Redis ZCARD failed for `{key}`: {e}");
+                None
+            }
+        }
+    }
+
     fn key(&self, key: &str) -> String {
         format!("{}:{key}", self.key_prefix)
     }

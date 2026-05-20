@@ -416,7 +416,7 @@ async fn prepare_users(args: &Args, client: &Client, target: &ApiTarget) -> Resu
                 }
 
                 let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
-                if finished == users || finished % 50 == 0 {
+                if finished == users || finished.is_multiple_of(50) {
                     eprintln!("prepare progress: {finished}/{users}");
                 }
             }
@@ -592,6 +592,7 @@ async fn run_load(
     Ok(metrics)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn execute_operation(
     op: Operation,
     client: &Client,
