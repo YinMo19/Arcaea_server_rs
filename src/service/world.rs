@@ -1,5 +1,6 @@
 use crate::config::Constants;
 use crate::error::ArcError;
+use crate::service::cache::{env_ttl_seconds, CacheService};
 use crate::service::runtime_assets::asset_path;
 
 use crate::model::world::*;
@@ -393,12 +394,37 @@ impl StaminaImpl {
 /// World service for handling world map system
 pub struct WorldService {
     pool: MySqlPool,
+    cache: Option<CacheService>,
+    world_cache_ttl_seconds: u64,
 }
 
 impl WorldService {
     /// Create a new world service instance
     pub fn new(pool: MySqlPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            cache: None,
+            world_cache_ttl_seconds: env_ttl_seconds("REDIS_WORLD_TTL_SECONDS", 2),
+        }
+    }
+
+    pub fn with_cache(mut self, cache: Option<CacheService>) -> Self {
+        self.cache = cache;
+        self
+    }
+
+    fn world_all_cache_key(user_id: i32) -> String {
+        format!("world:all:{user_id}")
+    }
+
+    fn world_map_cache_key(user_id: i32, map_id: &str) -> String {
+        format!("world:map:{user_id}:{map_id}")
+    }
+
+    async fn invalidate_user_world_cache(&self, user_id: i32) {
+        if let Some(cache) = &self.cache {
+            cache.del(&Self::world_all_cache_key(user_id)).await;
+        }
     }
 
     /// Get all world maps for a user
@@ -406,14 +432,29 @@ impl WorldService {
     /// Returns comprehensive world map information including user progress,
     /// map details, and reward information for all available maps.
     pub async fn get_user_world_all(&self, user_id: i32) -> Result<serde_json::Value, ArcError> {
+        let cache_key = Self::world_all_cache_key(user_id);
+        if let Some(cache) = &self.cache {
+            if let Some(world_data) = cache.get_json(&cache_key).await {
+                return Ok(world_data);
+            }
+        }
+
         let current_map = self.get_user_current_map(user_id).await?;
         let maps = self.get_all_user_maps(user_id).await?;
 
-        Ok(serde_json::json!({
+        let world_data = serde_json::json!({
             "current_map": current_map,
             "user_id": user_id,
             "maps": maps
-        }))
+        });
+
+        if let Some(cache) = &self.cache {
+            cache
+                .set_json(&cache_key, &world_data, self.world_cache_ttl_seconds)
+                .await;
+        }
+
+        Ok(world_data)
     }
 
     /// Get user's current map
@@ -483,7 +524,7 @@ impl WorldService {
         } else {
             // Initialize new entry
             sqlx::query!(
-                "INSERT INTO user_world (user_id, map_id, curr_position, curr_capture, is_locked) VALUES (?, ?, 0, 0, 1)",
+                "INSERT IGNORE INTO user_world (user_id, map_id, curr_position, curr_capture, is_locked) VALUES (?, ?, 0, 0, 1)",
                 user_id,
                 map_id
             )
@@ -518,6 +559,14 @@ impl WorldService {
     ) -> Result<serde_json::Value, ArcError> {
         // Set user's current map to this map
         self.set_user_current_map(user_id, map_id).await?;
+        self.invalidate_user_world_cache(user_id).await;
+
+        let cache_key = Self::world_map_cache_key(user_id, map_id);
+        if let Some(cache) = &self.cache {
+            if let Some(world_data) = cache.get_json(&cache_key).await {
+                return Ok(world_data);
+            }
+        }
 
         // Load user map data
         let user_map = self.load_user_map(user_id, map_id).await?;
@@ -531,11 +580,19 @@ impl WorldService {
             prev_capture: user_map.prev_capture,
         };
 
-        Ok(serde_json::json!({
+        let world_data = serde_json::json!({
             "user_id": user_id,
             "current_map": map_id,
             "maps": [user_map_impl.to_dict(true, true, true)]
-        }))
+        });
+
+        if let Some(cache) = &self.cache {
+            cache
+                .set_json(&cache_key, &world_data, self.world_cache_ttl_seconds)
+                .await;
+        }
+
+        Ok(world_data)
     }
 
     /// Set user's current map
@@ -593,6 +650,10 @@ impl WorldService {
         tx.commit().await.map_err(|e| ArcError::Database {
             message: format!("Failed to commit transaction: {e}"),
         })?;
+        self.invalidate_user_world_cache(user_id).await;
+        if let Some(cache) = &self.cache {
+            cache.del(&Self::world_map_cache_key(user_id, map_id)).await;
+        }
 
         Ok(serde_json::json!({
             "map_id": map_id,

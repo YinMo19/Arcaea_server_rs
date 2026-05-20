@@ -18,9 +18,9 @@ use Arcaea_server_rs::route::others::bundle_download;
 use Arcaea_server_rs::route::CORS;
 use Arcaea_server_rs::service::{
     arc_data::arc_data_file_path_from_env, AssetInitService, AssetManager, BundleService,
-    CharacterService, DownloadService, ItemService, MultiplayerService, NotificationService,
-    OperationManager, PresentService, PurchaseService, ScoreService, StorageService, UserService,
-    WorldService,
+    CacheService, CharacterService, DownloadService, ItemService, MultiplayerService,
+    NotificationService, OperationManager, PresentService, PurchaseService, ScoreService,
+    StorageService, UserService, WorldService,
 };
 use Arcaea_server_rs::{config, Database, DbPool};
 
@@ -47,8 +47,10 @@ async fn init_services(
     OperationManager,
     MultiplayerService,
 ) {
+    let cache_service = CacheService::from_env().await;
     let storage_service = match StorageService::from_env().await {
         Ok(storage) => {
+            let storage = storage.with_cache(cache_service.clone());
             if storage.is_s3() {
                 log::info!("Using S3 asset storage backend");
                 Some(std::sync::Arc::new(storage))
@@ -98,15 +100,16 @@ async fn init_services(
     }
     log::info!("Asset cache initialized successfully");
 
-    let user_service = UserService::new(pool.clone());
+    let user_service = UserService::new(pool.clone()).with_cache(cache_service.clone());
     let download_service = DownloadService::new(
         pool.clone(),
         asset_manager.clone(),
         download_link_prefix,
         3600, // download_time_gap_limit (1 hour)
         100,  // download_times_limit
-    );
-    let score_service = ScoreService::new(pool.clone());
+    )
+    .with_cache(cache_service.clone());
+    let score_service = ScoreService::new(pool.clone()).with_cache(cache_service.clone());
     let notification_service = NotificationService::new(pool.clone());
     let item_service = ItemService::new(pool.clone());
     let bundle_service = BundleService::new(
@@ -171,8 +174,8 @@ async fn init_services(
     }
 
     let present_service = PresentService::new(pool.clone());
-    let world_service = WorldService::new(pool.clone());
-    let purchase_service = PurchaseService::new(pool.clone());
+    let world_service = WorldService::new(pool.clone()).with_cache(cache_service.clone());
+    let purchase_service = PurchaseService::new(pool.clone()).with_cache(cache_service);
     let multiplayer_service = MultiplayerService::new(pool.clone());
     let operation_manager = OperationManager::new(
         asset_manager.clone(),

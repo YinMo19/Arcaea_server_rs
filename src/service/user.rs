@@ -5,6 +5,7 @@ use crate::model::{
     UpdateCharacter, User, UserAuth, UserCodeMapping, UserCredentials, UserExists, UserInfo,
     UserLoginDevice, UserLoginDto, UserRegisterDto,
 };
+use crate::service::cache::{env_ttl_seconds, CacheService};
 use crate::service::world::StaminaImpl;
 use crate::service::CharacterService;
 use base64::{engine::general_purpose, Engine as _};
@@ -19,6 +20,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct UserService {
     pool: Pool<MySql>,
     character_service: CharacterService,
+    cache: Option<CacheService>,
+    auth_cache_ttl_seconds: u64,
+    user_info_cache_ttl_seconds: u64,
+    friend_cache_ttl_seconds: u64,
 }
 
 impl UserService {
@@ -28,7 +33,45 @@ impl UserService {
         Self {
             pool,
             character_service,
+            cache: None,
+            auth_cache_ttl_seconds: env_ttl_seconds("REDIS_AUTH_TTL_SECONDS", 86_400),
+            user_info_cache_ttl_seconds: env_ttl_seconds("REDIS_USER_INFO_TTL_SECONDS", 2),
+            friend_cache_ttl_seconds: env_ttl_seconds("REDIS_FRIEND_TTL_SECONDS", 5),
         }
+    }
+
+    pub fn with_cache(mut self, cache: Option<CacheService>) -> Self {
+        self.cache = cache;
+        self
+    }
+
+    fn auth_token_key(token: &str) -> String {
+        format!("auth:token:{token}")
+    }
+
+    fn user_info_cache_key(user_id: i32) -> String {
+        format!("user:info:{user_id}")
+    }
+
+    fn friend_cache_key(user_id: i32) -> String {
+        format!("friend:list:{user_id}")
+    }
+
+    pub async fn invalidate_user_info_cache(&self, user_id: i32) {
+        if let Some(cache) = &self.cache {
+            cache.del(&Self::user_info_cache_key(user_id)).await;
+        }
+    }
+
+    pub async fn invalidate_friend_cache(&self, user_id: i32) {
+        if let Some(cache) = &self.cache {
+            cache.del(&Self::friend_cache_key(user_id)).await;
+        }
+    }
+
+    async fn invalidate_social_cache(&self, user_id: i32) {
+        self.invalidate_friend_cache(user_id).await;
+        self.invalidate_user_info_cache(user_id).await;
     }
 
     /// Get current timestamp in milliseconds
@@ -301,6 +344,14 @@ impl UserService {
 
         if !CONFIG.allow_login_same_device && device_list.contains(&device_id.to_string()) {
             // Delete existing sessions for the same device
+            let old_tokens = sqlx::query!(
+                "SELECT access_token FROM login WHERE login_device = ? AND user_id = ?",
+                device_id,
+                user_id
+            )
+            .fetch_all(&self.pool)
+            .await?;
+
             sqlx::query!(
                 "DELETE FROM login WHERE login_device = ? AND user_id = ?",
                 device_id,
@@ -308,6 +359,9 @@ impl UserService {
             )
             .execute(&self.pool)
             .await?;
+
+            self.invalidate_tokens(old_tokens.into_iter().map(|row| row.access_token))
+                .await;
 
             should_delete_num = device_list.len() as i32 + 1
                 - device_list.iter().filter(|&d| d == device_id).count() as i32
@@ -340,6 +394,14 @@ impl UserService {
                 }
             }
 
+            let old_tokens = sqlx::query!(
+                "SELECT access_token FROM login WHERE user_id = ? ORDER BY login_time ASC LIMIT ?",
+                user_id,
+                should_delete_num
+            )
+            .fetch_all(&self.pool)
+            .await?;
+
             // Delete excess tokens (MariaDB compatible approach)
             sqlx::query!(
                 "DELETE FROM login WHERE user_id = ? ORDER BY login_time ASC LIMIT ?",
@@ -348,17 +410,39 @@ impl UserService {
             )
             .execute(&self.pool)
             .await?;
+
+            self.invalidate_tokens(old_tokens.into_iter().map(|row| row.access_token))
+                .await;
         }
 
         Ok(())
     }
 
+    async fn invalidate_tokens<I>(&self, tokens: I)
+    where
+        I: IntoIterator<Item = String>,
+    {
+        let Some(cache) = &self.cache else {
+            return;
+        };
+
+        for token in tokens {
+            cache.del(&Self::auth_token_key(&token)).await;
+        }
+    }
+
     /// Apply auto-ban to user for multi-device violation
     async fn auto_ban_user(&self, user_id: i32, current_time: i64) -> ArcResult<i64> {
+        let old_tokens = sqlx::query!("SELECT access_token FROM login WHERE user_id = ?", user_id)
+            .fetch_all(&self.pool)
+            .await?;
+
         // Delete all login sessions
         sqlx::query!("DELETE FROM login WHERE user_id = ?", user_id)
             .execute(&self.pool)
             .await?;
+        self.invalidate_tokens(old_tokens.into_iter().map(|row| row.access_token))
+            .await;
 
         // Get current ban flag
         let user = sqlx::query!("SELECT ban_flag FROM user WHERE user_id = ?", user_id)
@@ -506,6 +590,16 @@ impl UserService {
         .execute(&self.pool)
         .await?;
 
+        if let Some(cache) = &self.cache {
+            cache
+                .set_i32(
+                    &Self::auth_token_key(&token),
+                    user.user_id,
+                    self.auth_cache_ttl_seconds,
+                )
+                .await;
+        }
+
         Ok(UserAuth {
             user_id: user.user_id,
             token,
@@ -517,6 +611,12 @@ impl UserService {
     /// Validates the access token and returns the associated user ID.
     pub async fn authenticate_token(&self, token: &str) -> ArcResult<i32> {
         log::debug!("Authenticating token: {token}");
+        if let Some(cache) = &self.cache {
+            if let Some(user_id) = cache.get_i32(&Self::auth_token_key(token)).await {
+                return Ok(user_id);
+            }
+        }
+
         let result = sqlx::query_as!(
             UserCodeMapping,
             "SELECT user_id FROM login WHERE access_token = ?",
@@ -525,15 +625,34 @@ impl UserService {
         .fetch_optional(&self.pool)
         .await?;
 
-        result
+        let user_id = result
             .map(|r| r.user_id)
-            .ok_or_else(|| ArcError::no_access("Wrong token.", -4))
+            .ok_or_else(|| ArcError::no_access("Wrong token.", -4))?;
+
+        if let Some(cache) = &self.cache {
+            cache
+                .set_i32(
+                    &Self::auth_token_key(token),
+                    user_id,
+                    self.auth_cache_ttl_seconds,
+                )
+                .await;
+        }
+
+        Ok(user_id)
     }
 
     /// Get user information by user ID
     ///
     /// Retrieves complete user information for API responses.
     pub async fn get_user_info(&self, user_id: i32) -> ArcResult<UserInfo> {
+        let cache_key = Self::user_info_cache_key(user_id);
+        if let Some(cache) = &self.cache {
+            if let Some(user_info) = cache.get_json(&cache_key).await {
+                return Ok(user_info);
+            }
+        }
+
         let user = sqlx::query_as!(User, "SELECT * FROM user WHERE user_id = ?", user_id)
             .fetch_optional(&self.pool)
             .await?;
@@ -570,6 +689,12 @@ impl UserService {
         // Load recent score
         user_info.recent_score = self.get_user_recent_scores(user_id).await?;
         user_info.global_rank = Some(self.get_global_rank(user_id).await?);
+
+        if let Some(cache) = &self.cache {
+            cache
+                .set_json(&cache_key, &user_info, self.user_info_cache_ttl_seconds)
+                .await;
+        }
 
         Ok(user_info)
     }
@@ -632,6 +757,7 @@ impl UserService {
             }
         }
 
+        self.invalidate_user_info_cache(user_id).await;
         Ok(())
     }
 
@@ -649,6 +775,7 @@ impl UserService {
         .execute(&self.pool)
         .await?;
 
+        self.invalidate_user_info_cache(user_id).await;
         Ok(())
     }
 
@@ -662,6 +789,7 @@ impl UserService {
         .execute(&self.pool)
         .await?;
 
+        self.invalidate_user_info_cache(user_id).await;
         Ok(())
     }
 
@@ -676,6 +804,7 @@ impl UserService {
         .execute(&self.pool)
         .await?;
 
+        self.invalidate_user_info_cache(user_id).await;
         Ok(())
     }
 
@@ -706,6 +835,7 @@ impl UserService {
         .execute(&self.pool)
         .await?;
 
+        self.invalidate_user_info_cache(user_id).await;
         self.get_user_info(user_id).await
     }
 
@@ -764,6 +894,7 @@ impl UserService {
         .execute(&self.pool)
         .await?;
 
+        self.invalidate_user_info_cache(user_id).await;
         Ok(())
     }
 
@@ -780,6 +911,7 @@ impl UserService {
             .toggle_character_uncap_override(user_id, character_id)
             .await?;
 
+        self.invalidate_user_info_cache(user_id).await;
         Ok(serde_json::to_value(character_info.to_dict())?)
     }
 
@@ -795,6 +927,8 @@ impl UserService {
             .character_service
             .character_uncap(user_id, character_id)
             .await?;
+
+        self.invalidate_user_info_cache(user_id).await;
 
         // Get user cores after uncap
         let cores = self.get_user_cores_json(user_id).await?;
@@ -818,6 +952,8 @@ impl UserService {
             .character_service
             .upgrade_character_by_core(user_id, character_id, -amount)
             .await?;
+
+        self.invalidate_user_info_cache(user_id).await;
 
         // Get user cores after upgrade
         let cores = self.get_user_cores_json(user_id).await?;
@@ -1300,6 +1436,7 @@ impl UserService {
             _ => return Err(ArcError::input("Invalid setting argument")),
         }
 
+        self.invalidate_user_info_cache(user_id).await;
         self.get_user_info(user_id).await
     }
 
@@ -1345,6 +1482,7 @@ impl UserService {
             banner = next_banner.to_string();
         }
 
+        self.invalidate_user_info_cache(user_id).await;
         Ok(serde_json::json!({
             "is_profile_public": profile_public,
             "showcase_characters": [-1, -1, -1],
@@ -1449,6 +1587,7 @@ impl UserService {
 
         transaction.commit().await?;
 
+        self.invalidate_user_info_cache(user_id).await;
         Ok(())
     }
 
@@ -1508,6 +1647,7 @@ impl UserService {
             }
         }
 
+        self.invalidate_user_info_cache(user_id).await;
         Ok(())
     }
 
@@ -1548,6 +1688,7 @@ impl UserService {
             }
         }
 
+        self.invalidate_user_info_cache(user_id).await;
         Ok(())
     }
 
@@ -1598,6 +1739,8 @@ impl UserService {
         .execute(&self.pool)
         .await?;
 
+        self.invalidate_social_cache(user_id).await;
+        self.invalidate_social_cache(friend_id).await;
         Ok(())
     }
 
@@ -1631,6 +1774,8 @@ impl UserService {
         .execute(&self.pool)
         .await?;
 
+        self.invalidate_social_cache(user_id).await;
+        self.invalidate_social_cache(friend_id).await;
         Ok(())
     }
 
@@ -1717,6 +1862,7 @@ impl UserService {
             .await?;
         }
 
+        self.invalidate_user_info_cache(user_id).await;
         Ok(())
     }
 
@@ -1749,6 +1895,7 @@ impl UserService {
         .execute(&self.pool)
         .await?;
 
+        self.invalidate_user_info_cache(user_id).await;
         Ok(())
     }
 
@@ -1768,6 +1915,7 @@ impl UserService {
         .execute(&self.pool)
         .await?;
 
+        self.invalidate_user_info_cache(user_id).await;
         Ok(())
     }
 
@@ -1795,6 +1943,13 @@ impl UserService {
     ///
     /// Returns a list of friends with their characters and recent scores.
     pub async fn get_user_friends(&self, user_id: i32) -> ArcResult<Vec<serde_json::Value>> {
+        let cache_key = Self::friend_cache_key(user_id);
+        if let Some(cache) = &self.cache {
+            if let Some(friends) = cache.get_json(&cache_key).await {
+                return Ok(friends);
+            }
+        }
+
         let friend_ids = sqlx::query!(
             "SELECT user_id_other FROM friend WHERE user_id_me = ?",
             user_id
@@ -1918,6 +2073,12 @@ impl UserService {
                 .unwrap_or(0);
             time_b.cmp(&time_a)
         });
+
+        if let Some(cache) = &self.cache {
+            cache
+                .set_json(&cache_key, &friends, self.friend_cache_ttl_seconds)
+                .await;
+        }
 
         Ok(friends)
     }

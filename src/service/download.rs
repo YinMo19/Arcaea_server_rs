@@ -7,6 +7,7 @@ use crate::error::{ArcError, ArcResult};
 use crate::model::download::{DownloadAudio, DownloadFile, DownloadSong};
 use crate::model::user::UserInfo;
 use crate::service::asset_manager::AssetManager;
+use crate::service::cache::{env_ttl_seconds, CacheService};
 use base64::Engine as _;
 use sqlx::MySqlPool;
 use std::collections::HashMap;
@@ -20,6 +21,8 @@ pub struct DownloadService {
     download_link_prefix: Option<String>,
     download_time_gap_limit: i64,
     download_times_limit: i32,
+    cache: Option<CacheService>,
+    download_list_cache_ttl_seconds: u64,
 }
 
 impl DownloadService {
@@ -37,7 +40,41 @@ impl DownloadService {
             download_link_prefix,
             download_time_gap_limit,
             download_times_limit,
+            cache: None,
+            download_list_cache_ttl_seconds: env_ttl_seconds("REDIS_DOWNLOAD_LIST_TTL_SECONDS", 30),
         }
+    }
+
+    pub fn with_cache(mut self, cache: Option<CacheService>) -> Self {
+        self.cache = cache;
+        self
+    }
+
+    fn download_list_cache_key(user: &UserInfo, song_ids: &[String], include_urls: bool) -> String {
+        let mut packs = user.packs.clone();
+        packs.sort_unstable();
+        let mut singles = user.singles.clone();
+        singles.sort_unstable();
+        let mut world_songs = user.world_songs.clone();
+        world_songs.sort_unstable();
+        let mut world_unlocks = user.world_unlocks.clone();
+        world_unlocks.sort_unstable();
+
+        let mut requested_songs = song_ids.to_vec();
+        requested_songs.sort_unstable();
+
+        let raw_key = format!(
+            "{}|{}|{}|{}|{}|{}|{}",
+            user.user_id,
+            include_urls,
+            requested_songs.join(","),
+            packs.join(","),
+            singles.join(","),
+            world_songs.join(","),
+            world_unlocks.join(",")
+        );
+
+        format!("download:list:{:x}", md5::compute(raw_key.as_bytes()))
     }
 
     /// Calculate MD5 hash of a song file using asset manager cache
@@ -234,9 +271,22 @@ impl DownloadService {
             }
         };
 
+        let s3_storage = self.asset_manager.s3_storage();
+        let cacheable = !include_urls || s3_storage.is_some();
+        let cache_key = if cacheable {
+            let cache_key = Self::download_list_cache_key(user, &target_song_ids, include_urls);
+            if let Some(cache) = &self.cache {
+                if let Some(result) = cache.get_json(&cache_key).await {
+                    return Ok(result);
+                }
+            }
+            Some(cache_key)
+        } else {
+            None
+        };
+
         let mut download_songs = HashMap::new();
         let mut download_tokens = Vec::new();
-        let s3_storage = self.asset_manager.s3_storage();
 
         // Clear expired tokens before generating new ones
         if include_urls && s3_storage.is_none() {
@@ -293,6 +343,16 @@ impl DownloadService {
                 self.insert_download_token(user_id, &song_id, &file_name, &token)
                     .await?;
             }
+        }
+
+        if let (Some(cache), Some(cache_key)) = (&self.cache, cache_key) {
+            cache
+                .set_json(
+                    &cache_key,
+                    &download_songs,
+                    self.download_list_cache_ttl_seconds,
+                )
+                .await;
         }
 
         Ok(download_songs)

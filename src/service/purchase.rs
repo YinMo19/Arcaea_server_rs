@@ -1,6 +1,7 @@
 use crate::config::Constants;
 use crate::error::{ArcError, ArcResult};
 use crate::model::item::ItemTypes;
+use crate::service::cache::{env_ttl_seconds, CacheService};
 use crate::service::{ItemService, UserService};
 use serde_json::{json, Value};
 use sqlx::{MySql, Pool};
@@ -11,6 +12,8 @@ pub struct PurchaseService {
     pool: Pool<MySql>,
     item_service: ItemService,
     user_service: UserService,
+    cache: Option<CacheService>,
+    purchase_cache_ttl_seconds: u64,
 }
 
 impl PurchaseService {
@@ -22,7 +25,19 @@ impl PurchaseService {
             pool,
             item_service,
             user_service,
+            cache: None,
+            purchase_cache_ttl_seconds: env_ttl_seconds("REDIS_PURCHASE_TTL_SECONDS", 10),
         }
+    }
+
+    pub fn with_cache(mut self, cache: Option<CacheService>) -> Self {
+        self.cache = cache.clone();
+        self.user_service = self.user_service.with_cache(cache);
+        self
+    }
+
+    fn purchase_cache_key(user_id: i32, item_type: &str) -> String {
+        format!("purchase:{item_type}:{user_id}")
     }
 
     /// Get current timestamp in milliseconds
@@ -37,19 +52,49 @@ impl PurchaseService {
     ///
     /// Returns available pack purchases with pricing and discount information.
     pub async fn get_pack_purchases(&self, user_id: i32) -> ArcResult<Vec<Value>> {
-        self.get_purchases_by_type(user_id, "pack").await
+        self.get_cached_purchases_by_type(user_id, "pack").await
     }
 
     /// Get single song purchase information for user
     ///
     /// Returns available single song purchases with pricing and discount information.
     pub async fn get_single_purchases(&self, user_id: i32) -> ArcResult<Vec<Value>> {
-        self.get_purchases_by_type(user_id, "single").await
+        self.get_cached_purchases_by_type(user_id, "single").await
     }
 
     /// Get bundle purchases (always returns empty as per Python implementation)
     pub async fn get_bundle_purchases(&self) -> ArcResult<Vec<Value>> {
         Ok(vec![])
+    }
+
+    async fn get_cached_purchases_by_type(
+        &self,
+        user_id: i32,
+        item_type: &str,
+    ) -> ArcResult<Vec<Value>> {
+        let cache_key = Self::purchase_cache_key(user_id, item_type);
+        if let Some(cache) = &self.cache {
+            if let Some(purchases) = cache.get_json(&cache_key).await {
+                return Ok(purchases);
+            }
+        }
+
+        let purchases = self.get_purchases_by_type(user_id, item_type).await?;
+        if let Some(cache) = &self.cache {
+            cache
+                .set_json(&cache_key, &purchases, self.purchase_cache_ttl_seconds)
+                .await;
+        }
+        Ok(purchases)
+    }
+
+    async fn invalidate_user_purchase_cache(&self, user_id: i32) {
+        if let Some(cache) = &self.cache {
+            cache.del(&Self::purchase_cache_key(user_id, "pack")).await;
+            cache
+                .del(&Self::purchase_cache_key(user_id, "single"))
+                .await;
+        }
     }
 
     /// Get purchases by type with discount calculation
@@ -323,6 +368,9 @@ impl PurchaseService {
             }
         }
 
+        self.invalidate_user_purchase_cache(user_id).await;
+        self.user_service.invalidate_user_info_cache(user_id).await;
+
         // Get updated user info
         let user_info = self.user_service.get_user_info(user_id).await?;
 
@@ -371,6 +419,7 @@ impl PurchaseService {
         self.item_service
             .claim_item(user_id, item_id, item_id, 1)
             .await?;
+        self.user_service.invalidate_user_info_cache(user_id).await;
 
         // Prepare response
         let mut response = json!({
@@ -435,6 +484,7 @@ impl PurchaseService {
         self.item_service
             .claim_item(user_id, "stamina6", "stamina6", 1)
             .await?;
+        self.user_service.invalidate_user_info_cache(user_id).await;
 
         // Get updated user stamina info
         let stamina_info = sqlx::query!(
@@ -510,6 +560,7 @@ impl PurchaseService {
                 .claim_item(user_id, &item_id, &item_type, amount.unwrap_or(0))
                 .await?;
         }
+        self.user_service.invalidate_user_info_cache(user_id).await;
 
         // Mark code as redeemed by user
         sqlx::query!(

@@ -1,4 +1,5 @@
 use crate::error::{ArcError, ArcResult};
+use crate::service::cache::{env_ttl_seconds, CacheService};
 use aws_config::{BehaviorVersion, Region};
 use aws_credential_types::Credentials;
 use aws_sdk_s3::presigning::PresigningConfig;
@@ -69,6 +70,8 @@ pub struct BundleFileMeta {
 pub struct StorageService {
     config: StorageConfig,
     s3: Option<S3Storage>,
+    cache: Option<CacheService>,
+    presign_cache_ttl_seconds: u64,
 }
 
 impl std::fmt::Debug for StorageService {
@@ -76,6 +79,7 @@ impl std::fmt::Debug for StorageService {
         f.debug_struct("StorageService")
             .field("backend", &self.config.backend)
             .field("has_s3", &self.s3.is_some())
+            .field("has_cache", &self.cache.is_some())
             .finish()
     }
 }
@@ -162,7 +166,21 @@ impl StorageService {
             None => None,
         };
 
-        Ok(Self { config, s3 })
+        Ok(Self {
+            config,
+            s3,
+            cache: None,
+            presign_cache_ttl_seconds: env_ttl_seconds("REDIS_PRESIGN_TTL_SECONDS", 300),
+        })
+    }
+
+    pub fn with_cache(mut self, cache: Option<CacheService>) -> Self {
+        self.cache = cache;
+        self
+    }
+
+    fn presign_song_cache_key(song_id: &str, file_name: &str) -> String {
+        format!("download:presign:{song_id}:{file_name}")
     }
 
     pub fn is_s3(&self) -> bool {
@@ -208,6 +226,13 @@ impl StorageService {
             return Ok(None);
         };
 
+        let cache_key = Self::presign_song_cache_key(song_id, file_name);
+        if let Some(cache) = &self.cache {
+            if let Some(url) = cache.get_string(&cache_key).await {
+                return Ok(Some(url));
+            }
+        }
+
         let key = {
             let manifest = s3.manifest.read().unwrap();
             manifest
@@ -218,7 +243,16 @@ impl StorageService {
         };
 
         match key {
-            Some(key) => Ok(Some(s3.presign_get(&key).await?)),
+            Some(key) => {
+                let url = s3.presign_get(&key).await?;
+                if let Some(cache) = &self.cache {
+                    let ttl = self
+                        .presign_cache_ttl_seconds
+                        .min(s3.config.presign_expires_seconds.saturating_sub(60));
+                    cache.set_string(&cache_key, &url, ttl).await;
+                }
+                Ok(Some(url))
+            }
             None => Ok(None),
         }
     }

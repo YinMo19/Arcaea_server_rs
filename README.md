@@ -48,6 +48,10 @@ cargo run
 # LINKPLAY_DISPLAY_HOST=arc.yinmo.site
 # LINKPLAY_DISPLAY_PORT=10900
 
+# 如果要开启 Redis 缓存，在 .env 设置 REDIS_URL。
+# Redis 不开启时服务仍然可以正常运行，只是所有热点数据会直接查数据库。
+# REDIS_URL=redis://127.0.0.1:6379/0
+
 # 如果你要单独跑 linkplay 服务（UDP + TCP）
 cargo run --bin linkplayd
 ```
@@ -56,6 +60,65 @@ cargo run --bin linkplayd
 cargo build --release
 ```
 之后去 `target/release/<binary>`找到对应二进制 scp 到服务器上，数据库，配置文件，乐曲数据，热更新包等等都放到对应位置了，用你喜欢的方式持久化运行这个二进制就行了。
+
+### Redis 缓存
+Redis 是可选依赖，用于降低热点接口对 MySQL 的压力。当前缓存覆盖：
+
+- 登录 token 鉴权结果
+- `user/me` 用户信息聚合结果
+- `friend/me` 好友列表
+- `score/song` 总榜、`score/song/me` 个人榜、`score/song/friend` 好友榜
+- 购买列表、world map 列表/单图
+- S3 presigned URL 和可缓存的歌曲下载列表
+
+相关配置都在 `.env.example` 的 Redis 段里。默认 TTL 比较短，是为了减少排行榜、好友列表、用户状态这类数据的陈旧窗口。生产环境可以根据实际读写比例调大，例如排行榜和购买列表通常可以比用户状态缓存得更久。
+
+如果使用 macOS 本地测试，可以用：
+
+```sh
+brew install redis
+brew services start redis
+redis-cli ping
+```
+
+### S3/R2 存储
+歌曲和 bundle 资源支持本地文件，也支持 S3 兼容存储。开启 S3 时在 `.env` 设置：
+
+```sh
+STORAGE_BACKEND=s3
+S3_ENDPOINT=...
+S3_REGION=...
+S3_BUCKET=...
+S3_ACCESS_KEY_ID=...
+S3_SECRET_ACCESS_KEY=...
+S3_FORCE_PATH_STYLE=true
+S3_MANIFEST_KEY=manifest.json
+```
+
+服务启动时会读取 manifest，并按 `S3_METADATA_SYNC_INTERVAL_SECONDS` 周期刷新元数据。下载接口会返回 presigned URL；如果同时开启 Redis，presign 结果会短时间缓存以减少重复签名开销。
+
+### 本地压测
+仓库里带了一个 Rust 异步压测工具 `perf_load`，用于模拟不同用户并发执行不同合法操作。它会先准备测试用户，然后按权重随机请求 `user/me`、排行榜、提交成绩、购买、下载、world、好友列表等接口。
+
+```sh
+cargo build --release --bin Arcaea_server_rs --bin perf_load
+
+# 启动服务，按机器和数据库情况调整连接池
+REDIS_URL=redis://127.0.0.1:6379/0 \
+DB_MAX_CONNECTIONS=100 \
+ROCKET_PORT=8090 \
+./target/release/Arcaea_server_rs
+
+# 另一个终端跑压测
+./target/release/perf_load \
+  --users 200 \
+  --concurrency 200 \
+  --duration-secs 20 \
+  --prepare-concurrency 4 \
+  --download-url
+```
+
+本机一次参考结果：开启 Redis、S3/R2、`DB_MAX_CONNECTIONS=100`，200 用户、200 并发、20 秒混合操作约 `940 QPS`，错误为 0。这个数字只代表当时本机、数据库和网络环境，部署到服务器后应重新压测。
 
 ### Link Play 独立进程配置
 `linkplayd` 通过环境变量读取配置，推荐直接在 `.env` 里配置。关键项如下：

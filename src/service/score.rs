@@ -12,6 +12,7 @@ use crate::model::score::{
 };
 use crate::model::user::User;
 use crate::model::world::WorldStep;
+use crate::service::cache::{env_ttl_seconds, CacheService};
 use crate::service::character::CharacterService;
 use crate::service::item::ItemService;
 use crate::service::user::UserService;
@@ -36,12 +37,44 @@ type JsonMap = HashMap<String, Value>;
 /// Score service for handling score submission, validation, and calculations
 pub struct ScoreService {
     pool: MySqlPool,
+    cache: Option<CacheService>,
+    score_top_cache_ttl_seconds: u64,
+    score_user_cache_ttl_seconds: u64,
+    score_friend_cache_ttl_seconds: u64,
 }
 
 impl ScoreService {
     /// Create a new score service instance
     pub fn new(pool: MySqlPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            cache: None,
+            score_top_cache_ttl_seconds: env_ttl_seconds("REDIS_SCORE_TOP_TTL_SECONDS", 3),
+            score_user_cache_ttl_seconds: env_ttl_seconds("REDIS_SCORE_USER_TTL_SECONDS", 2),
+            score_friend_cache_ttl_seconds: env_ttl_seconds("REDIS_SCORE_FRIEND_TTL_SECONDS", 2),
+        }
+    }
+
+    pub fn with_cache(mut self, cache: Option<CacheService>) -> Self {
+        self.cache = cache;
+        self
+    }
+
+    fn score_top_cache_key(song_id: &str, difficulty: i32) -> String {
+        format!("score:top:{song_id}:{difficulty}")
+    }
+
+    fn score_user_cache_key(user_id: i32, song_id: &str, difficulty: i32) -> String {
+        format!("score:user:{user_id}:{song_id}:{difficulty}")
+    }
+
+    fn score_friend_cache_key(user_id: i32, song_id: &str, difficulty: i32) -> String {
+        format!("score:friend:{user_id}:{song_id}:{difficulty}")
+    }
+
+    async fn invalidate_user_info_cache(&self, user_id: i32) {
+        let user_service = UserService::new(self.pool.clone()).with_cache(self.cache.clone());
+        user_service.invalidate_user_info_cache(user_id).await;
     }
 
     /// Generate a simple score token (hardcoded for bypass)
@@ -126,6 +159,7 @@ impl ScoreService {
             )
             .execute(&self.pool)
             .await?;
+            self.invalidate_user_info_cache(user_id).await;
         }
         let current_stamina = stamina.get_current_stamina();
 
@@ -224,6 +258,7 @@ impl ScoreService {
         )
         .execute(&self.pool)
         .await?;
+        self.invalidate_user_info_cache(user_id).await;
 
         // Build play parameters
         let mut play_parameters = HashMap::new();
@@ -412,6 +447,9 @@ impl ScoreService {
 
         // Upload score (which handles rating calculation internally)
         let mut result = self.upload_score(&mut user_play).await?;
+        self.invalidate_score_caches(user_id, &submission.song_id, submission.difficulty)
+            .await;
+        self.invalidate_user_info_cache(user_id).await;
 
         // Python baseline response: (world/course payload) + common fields
         let potential = self.calculate_user_potential(user_id).await?;
@@ -441,6 +479,13 @@ impl ScoreService {
         song_id: &str,
         difficulty: i32,
     ) -> ArcResult<Vec<HashMap<String, serde_json::Value>>> {
+        let cache_key = Self::score_top_cache_key(song_id, difficulty);
+        if let Some(cache) = &self.cache {
+            if let Some(result) = cache.get_json(&cache_key).await {
+                return Ok(result);
+            }
+        }
+
         let scores = if CONFIG.character_full_unlock {
             sqlx::query_as!(
                 RankingScoreRow,
@@ -492,9 +537,61 @@ impl ScoreService {
                 row.to_user_score_with_rank(Some((rank + 1) as i32))
                     .to_dict(true)
             })
-            .collect();
+            .collect::<Vec<HashMap<String, serde_json::Value>>>();
+
+        if let Some(cache) = &self.cache {
+            cache
+                .set_json(&cache_key, &result, self.score_top_cache_ttl_seconds)
+                .await;
+        }
 
         Ok(result)
+    }
+
+    async fn invalidate_score_top_cache(&self, song_id: &str, difficulty: i32) {
+        if let Some(cache) = &self.cache {
+            cache
+                .del(&Self::score_top_cache_key(song_id, difficulty))
+                .await;
+        }
+    }
+
+    async fn invalidate_score_caches(&self, user_id: i32, song_id: &str, difficulty: i32) {
+        self.invalidate_score_top_cache(song_id, difficulty).await;
+
+        if let Some(cache) = &self.cache {
+            cache
+                .del(&Self::score_user_cache_key(user_id, song_id, difficulty))
+                .await;
+            cache
+                .del(&Self::score_friend_cache_key(user_id, song_id, difficulty))
+                .await;
+
+            if let Ok(friend_rows) = sqlx::query!(
+                "SELECT user_id_me FROM friend WHERE user_id_other = ?",
+                user_id
+            )
+            .fetch_all(&self.pool)
+            .await
+            {
+                let user_service =
+                    UserService::new(self.pool.clone()).with_cache(self.cache.clone());
+                for row in friend_rows {
+                    let friend_user_id = row.user_id_me;
+                    cache
+                        .del(&Self::score_friend_cache_key(
+                            friend_user_id,
+                            song_id,
+                            difficulty,
+                        ))
+                        .await;
+                    user_service.invalidate_friend_cache(friend_user_id).await;
+                    user_service
+                        .invalidate_user_info_cache(friend_user_id)
+                        .await;
+                }
+            }
+        }
     }
 
     /// Get user's rank for a song
@@ -504,6 +601,13 @@ impl ScoreService {
         song_id: &str,
         difficulty: i32,
     ) -> ArcResult<Vec<HashMap<String, serde_json::Value>>> {
+        let cache_key = Self::score_user_cache_key(user_id, song_id, difficulty);
+        if let Some(cache) = &self.cache {
+            if let Some(result) = cache.get_json(&cache_key).await {
+                return Ok(result);
+            }
+        }
+
         // Get user's score and time_played
         let user_score = sqlx::query!(
             "SELECT score, time_played FROM best_score WHERE user_id = ? AND song_id = ? AND difficulty = ?",
@@ -514,7 +618,7 @@ impl ScoreService {
         .fetch_optional(&self.pool)
         .await?;
 
-        if let Some(user_row) = user_score {
+        let result = if let Some(user_row) = user_score {
             // Calculate user's rank (considering both score and time_played for tie-breaking)
             let rank_result = sqlx::query!(
                 "SELECT COUNT(*) as `rank_count!: i64` FROM best_score
@@ -665,10 +769,18 @@ impl ScoreService {
                 );
             }
 
-            Ok(result)
+            result
         } else {
-            Ok(vec![])
+            vec![]
+        };
+
+        if let Some(cache) = &self.cache {
+            cache
+                .set_json(&cache_key, &result, self.score_user_cache_ttl_seconds)
+                .await;
         }
+
+        Ok(result)
     }
 
     /// Get friend rankings for a song
@@ -719,6 +831,13 @@ impl ScoreService {
         song_id: &str,
         difficulty: i32,
     ) -> ArcResult<Vec<HashMap<String, serde_json::Value>>> {
+        let cache_key = Self::score_friend_cache_key(user_id, song_id, difficulty);
+        if let Some(cache) = &self.cache {
+            if let Some(result) = cache.get_json(&cache_key).await {
+                return Ok(result);
+            }
+        }
+
         // First get all friend scores using a JOIN instead of IN clause
         let scores = if CONFIG.character_full_unlock {
             sqlx::query_as!(
@@ -781,7 +900,13 @@ impl ScoreService {
                 row.to_user_score_with_rank_and_display(Some((rank + 1) as i32))
                     .to_dict(true)
             })
-            .collect();
+            .collect::<Vec<HashMap<String, serde_json::Value>>>();
+
+        if let Some(cache) = &self.cache {
+            cache
+                .set_json(&cache_key, &result, self.score_friend_cache_ttl_seconds)
+                .await;
+        }
 
         Ok(result)
     }
@@ -882,6 +1007,7 @@ impl ScoreService {
             )
             .execute(&self.pool)
             .await?;
+            self.invalidate_user_info_cache(user_id).await;
         }
 
         Ok(())
@@ -1967,6 +2093,7 @@ impl ScoreService {
         user_service
             .update_user_world_complete_info(user_id)
             .await?;
+        self.invalidate_user_info_cache(user_id).await;
 
         let (current_stamina, max_stamina_ts) = self.get_user_stamina_info(user_id).await?;
         let steps_for_response = steps_for_climbing(&map.steps, prev_position, curr_position);
