@@ -2363,7 +2363,18 @@
     "xxium",
     "tabootears",
     "undefined",
-    "mask"
+    "mask",
+    "omajinai",
+    "shinoukyoseki",
+    "eccentrictale3",
+    "smallcloud3",
+    "kyogenkigo3",
+    "saintorsinner3",
+    "heavenlycaress3",
+    "bethere3",
+    "axiumcrisis3",
+    "vallista",
+    "thirdavenue"
   ],
   "world_unlocks": [
     "scenery_chap1",
@@ -2387,6 +2398,31 @@
     "course_banner_8",
     "course_banner_9",
     "course_banner_10",
-    "course_banner_11"
+    "course_banner_11",
+    "course_banner_12"
+  ],
+  "online_banners": [
+    "online_banner_2024_06",
+    "online_banner_2024_07",
+    "online_banner_2024_08",
+    "online_banner_2024_09",
+    "online_banner_2024_10",
+    "online_banner_2024_11",
+    "online_banner_2024_12",
+    "online_banner_2025_01",
+    "online_banner_2025_02",
+    "online_banner_2025_03",
+    "online_banner_2025_04",
+    "online_banner_2025_05",
+    "online_banner_2025_06",
+    "online_banner_2025_07",
+    "online_banner_2025_08",
+    "online_banner_2025_09",
+    "online_banner_2025_10",
+    "online_banner_2025_11",
+    "online_banner_2025_12",
+    "online_banner_2026_01",
+    "online_banner_2026_02",
+    "online_banner_2026_03"
   ]
 }

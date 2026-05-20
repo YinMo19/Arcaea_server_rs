@@ -3,7 +3,7 @@
 //! This binary initializes the database with all required game data including
 //! characters, items, courses, roles, and a default admin account.
 
-use std::{io, process};
+use std::process;
 use Arcaea_server_rs::service::AssetInitService;
 use Arcaea_server_rs::Database;
 
@@ -46,21 +46,9 @@ async fn main() {
         };
 
     if character_count > 0 {
-        log::warn!("Database appears to already contain data ({character_count} characters found)");
-        log::warn!("This will add duplicate data or may cause errors.");
-        print!("Continue anyway? (y/N): ");
-
-        let mut input = String::new();
-        if io::stdin().read_line(&mut input).is_ok() {
-            let input = input.trim().to_lowercase();
-            if input != "y" && input != "yes" {
-                log::info!("Initialization cancelled by user");
-                process::exit(0);
-            }
-        } else {
-            log::error!("Failed to read user input");
-            process::exit(1);
-        }
+        log::info!(
+            "Database already contains data ({character_count} characters found); applying idempotent asset initialization"
+        );
     }
 
     // Initialize asset service

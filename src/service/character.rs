@@ -171,6 +171,19 @@ impl CharacterService {
             .await?;
         }
 
+        for item_id in &config.online_banners {
+            sqlx::query!(
+                r#"
+                INSERT INTO item (item_id, type, is_available)
+                VALUES (?, 'online_banner', 1)
+                ON DUPLICATE KEY UPDATE is_available = VALUES(is_available)
+                "#,
+                item_id
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
         tx.commit().await?;
         Ok((config.characters.len(), config.character_cores.len()))
     }

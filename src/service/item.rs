@@ -404,6 +404,7 @@ impl ItemService {
             ItemTypes::WORLD_SONG
             | ItemTypes::WORLD_UNLOCK
             | ItemTypes::COURSE_BANNER
+            | ItemTypes::ONLINE_BANNER
             | ItemTypes::SINGLE
             | ItemTypes::PACK => self.claim_normal_item(user_id, item_id, item_type).await,
             ItemTypes::PROG_BOOST_300 => self.claim_prog_boost_item(user_id).await,
@@ -480,6 +481,13 @@ impl ItemService {
             Ok(Item::new(
                 Some(s.to_string()),
                 ItemTypes::COURSE_BANNER.to_string(),
+                Some(1),
+                Some(true),
+            ))
+        } else if s.starts_with("online_banner") {
+            Ok(Item::new(
+                Some(s.to_string()),
+                ItemTypes::ONLINE_BANNER.to_string(),
                 Some(1),
                 Some(true),
             ))
@@ -680,6 +688,7 @@ impl ItemFactory {
             ItemTypes::STAMINA6 => (1, true),
             ItemTypes::STAMINA => (1, true),
             ItemTypes::COURSE_BANNER => (1, true),
+            ItemTypes::ONLINE_BANNER => (1, true),
             _ => {
                 return Err(ArcError::input(format!(
                     "The item type `{item_type}` is invalid."

@@ -308,6 +308,7 @@ impl PurchaseService {
                 ItemTypes::WORLD_SONG
                 | ItemTypes::WORLD_UNLOCK
                 | ItemTypes::COURSE_BANNER
+                | ItemTypes::ONLINE_BANNER
                 | ItemTypes::SINGLE
                 | ItemTypes::PACK => {
                     self.item_service

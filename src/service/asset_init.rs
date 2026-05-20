@@ -4,13 +4,14 @@
 //! items, courses, roles, and default admin account. It replicates the
 //! functionality of the Python DatabaseInit class.
 
+use crate::config::ARCAEA_DATABASE_VERSION;
 use crate::error::{ArcError, ArcResult};
 use crate::service::arc_data::{arc_data_file_path_from_env, load_arc_data_from_file, ArcData};
 use crate::service::runtime_assets::asset_path;
 use crate::utils::current_timestamp_ms;
 use crate::DbPool;
 use serde::{Deserialize, Serialize};
-use sqlx::query;
+use sqlx::{query, query_scalar};
 
 /// Asset initialization service
 pub struct AssetInitService {
@@ -18,7 +19,7 @@ pub struct AssetInitService {
 }
 
 /// Purchase item data structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PurchaseItem {
     pub name: String,
     pub price: i32,
@@ -30,7 +31,7 @@ pub struct PurchaseItem {
 }
 
 /// Purchase item detail
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PurchaseItemDetail {
     pub id: String,
     #[serde(rename = "type")]
@@ -45,7 +46,7 @@ fn default_amount() -> Option<i32> {
 }
 
 /// Course data structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CourseData {
     pub course_id: String,
     pub course_name: String,
@@ -64,14 +65,14 @@ pub struct CourseData {
 }
 
 /// requirements
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Requirements {
     pub value: String,
     pub r#type: String,
 }
 
 /// Course song data
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CourseSong {
     pub id: String,
     pub difficulty: i32,
@@ -92,6 +93,7 @@ impl AssetInitService {
         let arc_data = load_arc_data_from_file(&arc_data_path)?;
 
         // Initialize in order of dependencies
+        self.initialize_config().await?;
         self.initialize_characters(&arc_data).await?;
         self.initialize_character_cores(&arc_data).await?;
         self.initialize_items(&arc_data).await?;
@@ -130,6 +132,23 @@ impl AssetInitService {
             .map_err(|e| ArcError::input(format!("Failed to parse {file_name}: {e}")))
     }
 
+    /// Initialize configuration values.
+    async fn initialize_config(&self) -> ArcResult<()> {
+        query!(
+            r#"
+            INSERT INTO config (id, value)
+            VALUES ('version', ?)
+            ON DUPLICATE KEY UPDATE value = VALUES(value)
+            "#,
+            ARCAEA_DATABASE_VERSION
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ArcError::input(format!("Failed to initialize config: {e}")))?;
+
+        Ok(())
+    }
+
     /// Initialize character data
     async fn initialize_characters(&self, arc_data: &ArcData) -> ArcResult<()> {
         log::info!("Initializing characters...");
@@ -143,6 +162,24 @@ impl AssetInitService {
                     skill_id, skill_unlock_level, skill_requires_uncap,
                     skill_id_uncap, char_type, is_uncapped
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    name = VALUES(name),
+                    max_level = VALUES(max_level),
+                    frag1 = VALUES(frag1),
+                    prog1 = VALUES(prog1),
+                    overdrive1 = VALUES(overdrive1),
+                    frag20 = VALUES(frag20),
+                    prog20 = VALUES(prog20),
+                    overdrive20 = VALUES(overdrive20),
+                    frag30 = VALUES(frag30),
+                    prog30 = VALUES(prog30),
+                    overdrive30 = VALUES(overdrive30),
+                    skill_id = VALUES(skill_id),
+                    skill_unlock_level = VALUES(skill_unlock_level),
+                    skill_requires_uncap = VALUES(skill_requires_uncap),
+                    skill_id_uncap = VALUES(skill_id_uncap),
+                    char_type = VALUES(char_type),
+                    is_uncapped = VALUES(is_uncapped)
                 "#,
                 character.character_id,
                 character.name,
@@ -183,7 +220,11 @@ impl AssetInitService {
 
         for core in &arc_data.character_cores {
             query!(
-                "INSERT INTO char_item (character_id, item_id, type, amount) VALUES (?, ?, ?, ?)",
+                r#"
+                INSERT INTO char_item (character_id, item_id, type, amount)
+                VALUES (?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE amount = VALUES(amount)
+                "#,
                 core.character_id,
                 core.item_id,
                 core.item_type,
@@ -205,7 +246,11 @@ impl AssetInitService {
         // Initialize cores
         for core in &arc_data.cores {
             query!(
-                "INSERT INTO item (item_id, type, is_available) VALUES (?, 'core', 1)",
+                r#"
+                INSERT INTO item (item_id, type, is_available)
+                VALUES (?, 'core', 1)
+                ON DUPLICATE KEY UPDATE is_available = VALUES(is_available)
+                "#,
                 core
             )
             .execute(&self.pool)
@@ -216,7 +261,11 @@ impl AssetInitService {
         // Initialize world songs
         for song in &arc_data.world_songs {
             query!(
-                "INSERT INTO item (item_id, type, is_available) VALUES (?, 'world_song', 1)",
+                r#"
+                INSERT INTO item (item_id, type, is_available)
+                VALUES (?, 'world_song', 1)
+                ON DUPLICATE KEY UPDATE is_available = VALUES(is_available)
+                "#,
                 song
             )
             .execute(&self.pool)
@@ -227,7 +276,11 @@ impl AssetInitService {
         // Initialize world unlocks
         for unlock in &arc_data.world_unlocks {
             query!(
-                "INSERT INTO item (item_id, type, is_available) VALUES (?, 'world_unlock', 1)",
+                r#"
+                INSERT INTO item (item_id, type, is_available)
+                VALUES (?, 'world_unlock', 1)
+                ON DUPLICATE KEY UPDATE is_available = VALUES(is_available)
+                "#,
                 unlock
             )
             .execute(&self.pool)
@@ -238,12 +291,31 @@ impl AssetInitService {
         // Initialize course banners
         for banner in &arc_data.course_banners {
             query!(
-                "INSERT INTO item (item_id, type, is_available) VALUES (?, 'course_banner', 1)",
+                r#"
+                INSERT INTO item (item_id, type, is_available)
+                VALUES (?, 'course_banner', 1)
+                ON DUPLICATE KEY UPDATE is_available = VALUES(is_available)
+                "#,
                 banner
             )
             .execute(&self.pool)
             .await
             .map_err(|e| ArcError::input(format!("Failed to insert course banner: {e}")))?;
+        }
+
+        // Initialize online banners
+        for banner in &arc_data.online_banners {
+            query!(
+                r#"
+                INSERT INTO item (item_id, type, is_available)
+                VALUES (?, 'online_banner', 1)
+                ON DUPLICATE KEY UPDATE is_available = VALUES(is_available)
+                "#,
+                banner
+            )
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ArcError::input(format!("Failed to insert online banner: {e}")))?;
         }
 
         // Initialize basic items
@@ -257,7 +329,11 @@ impl AssetInitService {
 
         for (item_id, item_type) in basic_items {
             query!(
-                "INSERT INTO item (item_id, type, is_available) VALUES (?, ?, 1)",
+                r#"
+                INSERT INTO item (item_id, type, is_available)
+                VALUES (?, ?, 1)
+                ON DUPLICATE KEY UPDATE is_available = VALUES(is_available)
+                "#,
                 item_id,
                 item_type
             )
@@ -328,7 +404,11 @@ impl AssetInitService {
         // Insert roles
         for (role_id, caption) in roles {
             query!(
-                "INSERT INTO role (role_id, caption) VALUES (?, ?)",
+                r#"
+                INSERT INTO role (role_id, caption)
+                VALUES (?, ?)
+                ON DUPLICATE KEY UPDATE caption = VALUES(caption)
+                "#,
                 role_id,
                 caption
             )
@@ -340,7 +420,11 @@ impl AssetInitService {
         // Insert powers
         for (power_id, caption) in powers {
             query!(
-                "INSERT INTO power (power_id, caption) VALUES (?, ?)",
+                r#"
+                INSERT INTO power (power_id, caption)
+                VALUES (?, ?)
+                ON DUPLICATE KEY UPDATE caption = VALUES(caption)
+                "#,
                 power_id,
                 caption
             )
@@ -353,7 +437,7 @@ impl AssetInitService {
         for (role_id, power_list) in role_powers {
             for power_id in power_list {
                 query!(
-                    "INSERT INTO role_power (role_id, power_id) VALUES (?, ?)",
+                    "INSERT IGNORE INTO role_power (role_id, power_id) VALUES (?, ?)",
                     role_id,
                     power_id
                 )
@@ -379,10 +463,11 @@ impl AssetInitService {
         let now = current_timestamp_ms();
         let memories = 114514i32;
 
-        // Insert admin user
+        // Insert admin user if it does not already exist. Existing admin credentials
+        // are intentionally not reset by repeated asset initialization.
         query!(
             r#"
-            INSERT INTO user (
+            INSERT IGNORE INTO user (
                 user_id, name, password, join_date, user_code, rating_ptt,
                 character_id, is_skill_sealed, is_char_uncapped, is_char_uncapped_override,
                 is_hide_rating, favorite_character, max_stamina_notification_enabled,
@@ -401,25 +486,72 @@ impl AssetInitService {
         .await
         .map_err(|e| ArcError::input(format!("Failed to insert admin user: {e}")))?;
 
-        // Insert user characters for admin
-        for character in &arc_data.characters {
+        let admin_user_id = query_scalar!(
+            r#"
+            SELECT user_id as `user_id!: i32`
+            FROM user
+            WHERE name = ?
+            LIMIT 1
+            "#,
+            name
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ArcError::input(format!("Failed to load admin user: {e}")))?;
+
+        // Python parity: regular character ownership starts with Hikari/Tairitsu.
+        for character_id in [0, 1] {
             query!(
                 r#"
                 INSERT INTO user_char (user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag)
-                VALUES (?, ?, 1, 0, 0, 0, 0)
+                SELECT ?, ?, 1, 0, 0, 0, 0
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM user_char WHERE user_id = ? AND character_id = ?
+                )
                 "#,
-                user_id,
-                character.character_id
+                admin_user_id,
+                character_id,
+                admin_user_id,
+                character_id
             )
             .execute(&self.pool)
             .await
             .map_err(|e| ArcError::input(format!("Failed to insert user character: {e}")))?;
         }
 
+        // Full-unlock table mirrors Python UserRegister._insert_user_char().
+        for character in &arc_data.characters {
+            let exp = if character.max_level == 30 {
+                25000.0
+            } else {
+                10000.0
+            };
+
+            query!(
+                r#"
+                INSERT INTO user_char_full (
+                    user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag
+                ) VALUES (?, ?, ?, ?, ?, 0, 0)
+                ON DUPLICATE KEY UPDATE
+                    level = VALUES(level),
+                    exp = VALUES(exp),
+                    is_uncapped = VALUES(is_uncapped)
+                "#,
+                admin_user_id,
+                character.character_id,
+                character.max_level,
+                exp,
+                character.is_uncapped
+            )
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ArcError::input(format!("Failed to insert full user character: {e}")))?;
+        }
+
         // Assign admin role
         query!(
-            "INSERT INTO user_role (user_id, role_id) VALUES (?, 'admin')",
-            user_id
+            "INSERT IGNORE INTO user_role (user_id, role_id) VALUES (?, 'admin')",
+            admin_user_id
         )
         .execute(&self.pool)
         .await
@@ -499,6 +631,13 @@ impl AssetInitService {
             INSERT INTO course (course_id, course_name, dan_name, style, gauge_requirement,
                               flag_as_hidden_when_requirements_not_met, can_start)
             VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                course_name = VALUES(course_name),
+                dan_name = VALUES(dan_name),
+                style = VALUES(style),
+                gauge_requirement = VALUES(gauge_requirement),
+                flag_as_hidden_when_requirements_not_met = VALUES(flag_as_hidden_when_requirements_not_met),
+                can_start = VALUES(can_start)
             "#,
             course.course_id,
             course.course_name,
@@ -518,6 +657,10 @@ impl AssetInitService {
                 r#"
                 INSERT INTO course_chart (course_id, song_id, difficulty, flag_as_hidden, song_index)
                 VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    song_id = VALUES(song_id),
+                    difficulty = VALUES(difficulty),
+                    flag_as_hidden = VALUES(flag_as_hidden)
                 "#,
                 course.course_id,
                 chart.id,
@@ -533,7 +676,7 @@ impl AssetInitService {
         // Insert course requirements
         for requirement in course.requirements {
             query!(
-                "INSERT INTO course_requirement (course_id, required_id) VALUES (?, ?)",
+                "INSERT IGNORE INTO course_requirement (course_id, required_id) VALUES (?, ?)",
                 course.course_id,
                 requirement.value
             )
@@ -564,7 +707,11 @@ impl AssetInitService {
                     panic!("Unknown reward type: {reward}");
                 };
             query!(
-                "INSERT INTO course_item (course_id, item_id, type, amount) VALUES (?, ?, ?, ?)",
+                r#"
+                INSERT INTO course_item (course_id, item_id, type, amount)
+                VALUES (?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE amount = VALUES(amount)
+                "#,
                 course.course_id,
                 item_id,
                 item_type,
@@ -644,5 +791,38 @@ impl AssetInitService {
             ),
             ("selecter", vec!["select"]),
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::service::arc_data::load_arc_data_from_file;
+
+    #[test]
+    fn bundled_assets_parse_and_include_latest_python_resources() {
+        let arc_data = load_arc_data_from_file("assets/arc_data.json").unwrap();
+        assert!(arc_data
+            .world_songs
+            .iter()
+            .any(|song| song == "thirdavenue"));
+        assert!(arc_data
+            .course_banners
+            .iter()
+            .any(|banner| banner == "course_banner_12"));
+        assert!(arc_data
+            .online_banners
+            .iter()
+            .any(|banner| banner == "online_banner_2026_03"));
+
+        let singles = AssetInitService::load_purchase_assets("singles.json").unwrap();
+        assert!(singles.iter().any(|purchase| purchase.name == "unknownnum"));
+
+        let courses_data = std::fs::read_to_string("assets/courses.json").unwrap();
+        let courses: Vec<CourseData> = serde_json::from_str(&courses_data).unwrap();
+        assert!(courses
+            .iter()
+            .flat_map(|course| course.rewards.iter())
+            .any(|reward| reward == "course_banner_12"));
     }
 }

@@ -192,6 +192,7 @@ impl ItemTypes {
     pub const STAMINA6: &'static str = "stamina6";
     pub const STAMINA: &'static str = "stamina";
     pub const COURSE_BANNER: &'static str = "course_banner";
+    pub const ONLINE_BANNER: &'static str = "online_banner";
 }
 
 /// Item configuration trait
@@ -263,6 +264,7 @@ impl NormalItemTypes {
     pub const WORLD_SONG: &'static str = ItemTypes::WORLD_SONG;
     pub const WORLD_UNLOCK: &'static str = ItemTypes::WORLD_UNLOCK;
     pub const COURSE_BANNER: &'static str = ItemTypes::COURSE_BANNER;
+    pub const ONLINE_BANNER: &'static str = ItemTypes::ONLINE_BANNER;
     pub const SINGLE: &'static str = ItemTypes::SINGLE;
     pub const PACK: &'static str = ItemTypes::PACK;
 }

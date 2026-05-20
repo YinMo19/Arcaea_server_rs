@@ -14,6 +14,8 @@ pub struct ArcData {
     pub world_unlocks: Vec<String>,
     #[serde(default)]
     pub course_banners: Vec<String>,
+    #[serde(default)]
+    pub online_banners: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -68,7 +70,7 @@ pub fn load_arc_data_from_file(file_path: &str) -> ArcResult<ArcData> {
     })?;
 
     if data.course_banners.is_empty() {
-        data.course_banners = (1..=11).map(|i| format!("course_banner_{i}")).collect();
+        data.course_banners = (1..=12).map(|i| format!("course_banner_{i}")).collect();
     }
 
     validate_arc_data(&data)?;
@@ -84,6 +86,9 @@ fn validate_arc_data(data: &ArcData) -> ArcResult<()> {
     ensure_unique_non_empty(&data.world_songs, "world_songs")?;
     ensure_unique_non_empty(&data.world_unlocks, "world_unlocks")?;
     ensure_unique_non_empty(&data.course_banners, "course_banners")?;
+    if !data.online_banners.is_empty() {
+        ensure_unique_non_empty(&data.online_banners, "online_banners")?;
+    }
 
     let mut character_ids = HashSet::new();
     for character in &data.characters {

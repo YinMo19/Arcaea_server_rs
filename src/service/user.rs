@@ -992,7 +992,7 @@ impl UserService {
     /// Get user course banners
     async fn get_user_course_banners(&self, user_id: i32) -> ArcResult<Vec<Value>> {
         let banners = sqlx::query_scalar!(
-            "SELECT item_id FROM user_item WHERE user_id = ? AND type = 'course_banner' ORDER BY item_id",
+            "SELECT item_id FROM user_item WHERE user_id = ? AND type IN ('course_banner', 'online_banner') ORDER BY type, item_id",
             user_id
         )
         .fetch_all(&self.pool)
