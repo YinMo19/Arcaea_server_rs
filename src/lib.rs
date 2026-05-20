@@ -16,8 +16,9 @@ pub mod service;
 pub use config::{Constants, ARCAEA_SERVER_VERSION, CONFIG};
 pub use error::{ArcError, ArcResult};
 
-use sqlx::{MySql, Pool};
+use sqlx::{mysql::MySqlPoolOptions, MySql, Pool};
 use std::env;
+use std::time::Duration;
 
 /// Database connection pool type alias
 pub type DbPool = Pool<MySql>;
@@ -36,7 +37,22 @@ impl Database {
             "mysql://arcaea:yinmo19sprivite@localhost:3306/arcaea_core".to_string()
         });
 
-        let pool = sqlx::MySqlPool::connect(&database_url).await?;
+        let mut options = MySqlPoolOptions::new();
+
+        if let Some(max_connections) = env_u32("DB_MAX_CONNECTIONS") {
+            options = options.max_connections(max_connections);
+        }
+        if let Some(min_connections) = env_u32("DB_MIN_CONNECTIONS") {
+            options = options.min_connections(min_connections);
+        }
+        if let Some(connect_timeout) = env_u64("DB_CONNECT_TIMEOUT") {
+            options = options.acquire_timeout(Duration::from_secs(connect_timeout));
+        }
+        if let Some(idle_timeout) = env_u64("DB_IDLE_TIMEOUT") {
+            options = options.idle_timeout(Duration::from_secs(idle_timeout));
+        }
+
+        let pool = options.connect(&database_url).await?;
 
         // Run any pending migrations
         sqlx::migrate!("./migrations").run(&pool).await?;
@@ -51,6 +67,14 @@ impl Database {
             .await?;
         Ok(())
     }
+}
+
+fn env_u32(name: &str) -> Option<u32> {
+    env::var(name).ok()?.parse().ok()
+}
+
+fn env_u64(name: &str) -> Option<u64> {
+    env::var(name).ok()?.parse().ok()
 }
 
 /// Application state that will be managed by Rocket
