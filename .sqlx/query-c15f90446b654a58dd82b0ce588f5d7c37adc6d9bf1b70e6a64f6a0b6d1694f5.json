@@ -1,0 +1,114 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n                    COALESCE(song_id, '') as `song_id!: String`,\n                    COALESCE(difficulty, 0) as `difficulty!: i32`,\n                    COALESCE(score, 0) as `score!: i32`,\n                    COALESCE(shiny_perfect_count, 0) as `shiny_perfect_count!: i32`,\n                    COALESCE(perfect_count, 0) as `perfect_count!: i32`,\n                    COALESCE(near_count, 0) as `near_count!: i32`,\n                    COALESCE(miss_count, 0) as `miss_count!: i32`,\n                    COALESCE(time_played, 0) as `time_played!: i64`,\n                    COALESCE(clear_type, 0) as `clear_type!: i32`,\n                    COALESCE(rating, 0) as `rating!: f64`\n                 FROM best_score\n                 WHERE user_id = ?\n                 ORDER BY rating DESC, score DESC\n                 LIMIT 30",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "song_id!: String",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "difficulty!: i32",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "score!: i32",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "shiny_perfect_count!: i32",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "perfect_count!: i32",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "near_count!: i32",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "miss_count!: i32",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "time_played!: i64",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "clear_type!: i32",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "rating!: f64",
+        "type_info": {
+          "type": "Double",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 22
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c15f90446b654a58dd82b0ce588f5d7c37adc6d9bf1b70e6a64f6a0b6d1694f5"
+}

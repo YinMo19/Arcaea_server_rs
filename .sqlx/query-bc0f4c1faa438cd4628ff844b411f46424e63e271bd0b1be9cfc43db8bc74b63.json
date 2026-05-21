@@ -1,0 +1,74 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT user_id, name, user_code, password, ban_flag, COALESCE(role, 0) as `role!: i8`\n         FROM user\n         WHERE name = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | AUTO_INCREMENT",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "UNIQUE_KEY",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "user_code",
+        "type_info": {
+          "type": "VarString",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "password",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "ban_flag",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "role!: i8",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 4
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "bc0f4c1faa438cd4628ff844b411f46424e63e271bd0b1be9cfc43db8bc74b63"
+}

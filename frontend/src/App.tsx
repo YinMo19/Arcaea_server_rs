@@ -9,6 +9,7 @@ import {
   ChevronsRight,
   ChartSpline,
   Database,
+  Images,
   KeyRound,
   Link2,
   LoaderCircle,
@@ -50,6 +51,7 @@ import {
   type AdminActionResult,
   type AdminOperation,
   type AdminScoreRow,
+  type AdminSession,
   type AdminUserSummary,
   type AdminUserScores,
   type DashboardData,
@@ -64,6 +66,7 @@ import {
   type PurchaseRow,
   type RedeemPayload,
   type ScoreDeletePayload,
+  type ScoreImages,
   type SongPayload,
   type SongRow,
   type UserPurchasePayload,
@@ -78,6 +81,7 @@ type View =
   | MaintenanceView
   | 'users'
   | 'playerScores'
+  | 'scoreImages'
   | 'chartTop'
   | 'userTicket'
   | 'userPassword'
@@ -161,7 +165,10 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
   },
   {
     label: '成绩',
-    items: [{ id: 'scoreDelete', label: '删除成绩', icon: Trash2 }],
+    items: [
+      { id: 'scoreImages', label: '成绩图', icon: Images },
+      { id: 'scoreDelete', label: '删除成绩', icon: Trash2 },
+    ],
   },
   {
     label: '奖励',
@@ -196,6 +203,8 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
     ],
   },
 ]
+
+const userAllowedViews = new Set<View>(['playerScores', 'scoreImages'])
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error'
 type ActionState = {
@@ -354,15 +363,35 @@ const purchaseItemTypeOptions = [
 ]
 
 function App() {
-  const [loggedIn, setLoggedIn] = useState(false)
+  const [session, setSession] = useState<AdminSession>()
   const [checkingSession, setCheckingSession] = useState(true)
   const [view, setView] = useState<View>('dashboard')
+  const isAdmin = session?.role === 1
+  const visibleNavSections = useMemo(
+    () =>
+      isAdmin
+        ? navSections
+        : navSections
+            .map((section) => ({
+              ...section,
+              items: section.items.filter((item) => userAllowedViews.has(item.id)),
+            }))
+            .filter((section) => section.items.length > 0),
+    [isAdmin],
+  )
+  const activeView =
+    isAdmin || userAllowedViews.has(view) ? view : 'scoreImages'
 
   useEffect(() => {
     adminApi
       .session()
-      .then((session) => setLoggedIn(session.loggedIn))
-      .catch(() => setLoggedIn(false))
+      .then((session) => {
+        setSession(session.loggedIn ? session : undefined)
+        if (session.loggedIn && session.role !== 1) {
+          setView('scoreImages')
+        }
+      })
+      .catch(() => setSession(undefined))
       .finally(() => setCheckingSession(false))
   }, [])
 
@@ -374,8 +403,17 @@ function App() {
     )
   }
 
-  if (!loggedIn) {
-    return <LoginScreen onLoggedIn={() => setLoggedIn(true)} />
+  if (!session) {
+    return (
+      <LoginScreen
+        onLoggedIn={(session) => {
+          setSession(session)
+          if (session.role !== 1) {
+            setView('scoreImages')
+          }
+        }}
+      />
+    )
   }
 
   return (
@@ -392,7 +430,7 @@ function App() {
         </div>
 
         <nav className="mt-6 grid max-h-[calc(100svh-7rem)] gap-4 overflow-auto pr-1">
-          {navSections.map((section) => (
+          {visibleNavSections.map((section) => (
             <div key={section.label} className="grid gap-1">
               <div className="px-3 text-xs font-medium text-muted-foreground">
                 {section.label}
@@ -404,7 +442,7 @@ function App() {
                   onClick={() => setView(item.id)}
                   className={cn(
                     'flex h-9 items-center gap-3 rounded-md px-3 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground',
-                    view === item.id && 'bg-accent text-accent-foreground',
+                    activeView === item.id && 'bg-accent text-accent-foreground',
                   )}
                 >
                   <item.icon className="size-4" />
@@ -420,18 +458,18 @@ function App() {
         <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
           <div className="flex min-h-16 items-center justify-between gap-4 px-4 sm:px-6">
             <div>
-              <h1 className="text-lg font-semibold">{viewTitle(view)}</h1>
+              <h1 className="text-lg font-semibold">{viewTitle(activeView)}</h1>
               <p className="text-sm text-muted-foreground">
-                {viewSubtitle(view)}
+                {viewSubtitle(activeView)}
               </p>
             </div>
             <div className="flex items-center gap-2">
               <select
                 className="h-9 max-w-48 rounded-md border bg-background px-3 text-sm lg:hidden"
-                value={view}
+                value={activeView}
                 onChange={(event) => setView(event.target.value as View)}
               >
-                {navSections.map((section) => (
+                {visibleNavSections.map((section) => (
                   <optgroup key={section.label} label={section.label}>
                     {section.items.map((item) => (
                       <option key={item.id} value={item.id}>
@@ -446,7 +484,7 @@ function App() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  adminApi.logout().finally(() => setLoggedIn(false))
+                  adminApi.logout().finally(() => setSession(undefined))
                 }}
               >
                 <LogOut />
@@ -457,35 +495,36 @@ function App() {
         </header>
 
         <main className="px-4 py-5 sm:px-6">
-          {view === 'dashboard' && <DashboardView />}
-          {isMaintenanceView(view) && (
-            <MaintenanceOperationView config={maintenanceOperations[view]} />
+          {isAdmin && activeView === 'dashboard' && <DashboardView />}
+          {isAdmin && isMaintenanceView(activeView) && (
+            <MaintenanceOperationView config={maintenanceOperations[activeView]} />
           )}
-          {view === 'users' && <UsersView />}
-          {view === 'playerScores' && <PlayerScoresView />}
-          {view === 'chartTop' && <ChartTopView />}
-          {view === 'userTicket' && <UserTicketView />}
-          {view === 'userPassword' && <UserPasswordView />}
-          {view === 'userBan' && <UserBanView />}
-          {view === 'userPurchase' && <UserPurchaseView />}
-          {view === 'scoreDelete' && <ScoreDeleteView />}
-          {view === 'presentCreate' && <PresentCreateView />}
-          {view === 'presentDeliver' && <PresentDeliverView />}
-          {view === 'presentDelete' && <PresentDeleteView />}
-          {view === 'redeemCreate' && <RedeemCreateView />}
-          {view === 'redeemDelete' && <RedeemDeleteView />}
-          {view === 'redeemUsers' && <RedeemUsersView />}
-          {view === 'songs' && <SongsView />}
-          {view === 'items' && <ItemsView />}
-          {view === 'purchases' && <PurchasesView />}
-          {view === 'purchaseItems' && <PurchaseItemsView />}
+          {isAdmin && activeView === 'users' && <UsersView />}
+          {activeView === 'playerScores' && <PlayerScoresView isAdmin={isAdmin} />}
+          {activeView === 'scoreImages' && <ScoreImagesView isAdmin={isAdmin} />}
+          {isAdmin && activeView === 'chartTop' && <ChartTopView />}
+          {isAdmin && activeView === 'userTicket' && <UserTicketView />}
+          {isAdmin && activeView === 'userPassword' && <UserPasswordView />}
+          {isAdmin && activeView === 'userBan' && <UserBanView />}
+          {isAdmin && activeView === 'userPurchase' && <UserPurchaseView />}
+          {isAdmin && activeView === 'scoreDelete' && <ScoreDeleteView />}
+          {isAdmin && activeView === 'presentCreate' && <PresentCreateView />}
+          {isAdmin && activeView === 'presentDeliver' && <PresentDeliverView />}
+          {isAdmin && activeView === 'presentDelete' && <PresentDeleteView />}
+          {isAdmin && activeView === 'redeemCreate' && <RedeemCreateView />}
+          {isAdmin && activeView === 'redeemDelete' && <RedeemDeleteView />}
+          {isAdmin && activeView === 'redeemUsers' && <RedeemUsersView />}
+          {isAdmin && activeView === 'songs' && <SongsView />}
+          {isAdmin && activeView === 'items' && <ItemsView />}
+          {isAdmin && activeView === 'purchases' && <PurchasesView />}
+          {isAdmin && activeView === 'purchaseItems' && <PurchaseItemsView />}
         </main>
       </div>
     </div>
   )
 }
 
-function LoginScreen({ onLoggedIn }: { onLoggedIn: () => void }) {
+function LoginScreen({ onLoggedIn }: { onLoggedIn: (session: AdminSession) => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -496,8 +535,8 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: () => void }) {
     setLoading(true)
     setError('')
     try {
-      await adminApi.login(username, password)
-      onLoggedIn()
+      const session = await adminApi.login(username, password)
+      onLoggedIn(session)
     } catch {
       setError('用户名或密码错误')
     } finally {
@@ -512,8 +551,8 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: () => void }) {
           <div className="mb-2 flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <KeyRound className="size-5" />
           </div>
-          <CardTitle>管理员登录</CardTitle>
-          <CardDescription>进入管理后台</CardDescription>
+          <CardTitle>用户登录</CardTitle>
+          <CardDescription>进入 Web 控制台</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="grid gap-4" onSubmit={onSubmit}>
@@ -820,8 +859,8 @@ function ActionCard({
   )
 }
 
-function PlayerScoresView() {
-  const [form, setForm] = useState({ ...emptyUserSelectorForm, limit: '50' })
+function PlayerScoresView({ isAdmin }: { isAdmin: boolean }) {
+  const [form, setForm] = useState({ ...emptyUserSelectorForm })
   const [scores, setScores] = useState<AdminUserScores>()
   const [action, setAction] = useState<ActionState>(emptyAction)
   const [loading, setLoading] = useState(false)
@@ -832,13 +871,12 @@ function PlayerScoresView() {
     setAction(emptyAction)
     try {
       const result = await adminApi.userScores({
-        ...buildUserSelectorPayload(form),
-        limit: parseOptionalPositiveInt(form.limit, 'limit'),
+        ...(isAdmin ? buildUserSelectorPayload(form) : {}),
       })
       setScores(result)
       setAction({
         kind: 'success',
-        message: `${result.user.name || result.user.userId} · ${result.scores.length} 条`,
+        message: `${result.user.name || result.user.userId} · B30 ${result.b30.length} · R10 ${result.r10.length}`,
       })
     } catch (error) {
       setAction({ kind: 'error', message: errorMessage(error) })
@@ -855,17 +893,13 @@ function PlayerScoresView() {
       contentClassName="min-h-0 flex-1"
     >
       <form className="grid gap-3" onSubmit={onSubmit}>
-        <UserSelectorFields
-          value={form}
-          onChange={(value) => setForm({ ...form, ...value })}
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            className="w-28"
-            value={form.limit}
-            onChange={(event) => setForm({ ...form, limit: event.target.value })}
-            placeholder="limit"
+        {isAdmin && (
+          <UserSelectorFields
+            value={form}
+            onChange={(value) => setForm({ ...form, ...value })}
           />
+        )}
+        <div className="flex flex-wrap items-center gap-2">
           <Button type="submit" size="sm" disabled={loading}>
             {loading ? <LoaderCircle className="animate-spin" /> : <Search />}
             查询
@@ -875,11 +909,107 @@ function PlayerScoresView() {
       </form>
       {scores && (
         <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-2">
-          <div className="text-sm font-medium">
-            {scores.user.name || '-'} · {scores.user.userId} ·{' '}
-            {scores.user.userCode || '-'}
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">
+              {scores.user.name || '-'} · {scores.user.userId} ·{' '}
+              {scores.user.userCode || '-'}
+            </span>
+            <Badge variant="secondary">PTT {scores.stats.potential.toFixed(4)}</Badge>
+            <Badge variant="outline">B30 {scores.stats.best30Sum.toFixed(4)}</Badge>
+            <Badge variant="outline">R10 {scores.stats.recent10Sum.toFixed(4)}</Badge>
           </div>
-          <ScoreResultsTable scores={scores.scores} />
+          <div className="grid min-h-0 gap-3 xl:grid-cols-2">
+            <ScoreSection title="B30" scores={scores.b30} />
+            <ScoreSection title="R10" scores={scores.r10} />
+          </div>
+        </div>
+      )}
+    </ActionCard>
+  )
+}
+
+function ScoreImagesView({ isAdmin }: { isAdmin: boolean }) {
+  const [form, setForm] = useState({ ...emptyUserSelectorForm })
+  const [result, setResult] = useState<ScoreImages>()
+  const [action, setAction] = useState<ActionState>(emptyAction)
+  const [loading, setLoading] = useState(false)
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault()
+    setLoading(true)
+    setAction(emptyAction)
+    try {
+      const value = await adminApi.scoreImages({
+        ...(isAdmin ? buildUserSelectorPayload(form) : {}),
+      })
+      setResult(value)
+      setAction({
+        kind: 'success',
+        message: `${value.user.name || value.user.userId} · ${value.images.length} 张`,
+      })
+    } catch (error) {
+      setAction({ kind: 'error', message: errorMessage(error) })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <ActionCard
+      title="成绩图"
+      description="生成 B30 / AP30 / Sex30"
+      className="flex min-h-[calc(100svh-6.5rem)] flex-col"
+      contentClassName="min-h-0 flex-1"
+    >
+      <form className="grid gap-3" onSubmit={onSubmit}>
+        {isAdmin && (
+          <UserSelectorFields
+            value={form}
+            onChange={(value) => setForm({ ...form, ...value })}
+          />
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="submit" size="sm" disabled={loading}>
+            {loading ? <LoaderCircle className="animate-spin" /> : <Images />}
+            生成
+          </Button>
+          <ActionMessage action={action} />
+        </div>
+      </form>
+
+      {result && (
+        <div className="grid min-h-0 flex-1 gap-4">
+          <div className="text-sm font-medium">
+            {result.user.name || '-'} · {result.user.userId} ·{' '}
+            {result.user.userCode || '-'}
+          </div>
+          <div className="grid gap-4 xl:grid-cols-3">
+            {result.images.map((image) => (
+              <div
+                key={image.mode}
+                className="grid min-w-0 gap-2 rounded-md border bg-card p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-medium">{image.title}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {image.entryCount} 条
+                    </div>
+                  </div>
+                  <Button asChild variant="outline" size="sm">
+                    <a href={image.dataUrl} download={`${image.mode}.png`}>
+                      下载
+                    </a>
+                  </Button>
+                </div>
+                <img
+                  className="w-full rounded border bg-muted"
+                  src={image.dataUrl}
+                  alt={image.title}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </ActionCard>
@@ -2837,6 +2967,28 @@ function ToggleLabel({
   )
 }
 
+function ScoreSection({
+  title,
+  scores,
+}: {
+  title: string
+  scores: AdminScoreRow[]
+}) {
+  const totalRating = scores.reduce((sum, score) => sum + score.rating, 0)
+
+  return (
+    <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm font-medium">{title}</div>
+        <div className="font-mono text-xs text-muted-foreground">
+          {scores.length} · {totalRating.toFixed(4)}
+        </div>
+      </div>
+      <ScoreResultsTable scores={scores} />
+    </div>
+  )
+}
+
 function ScoreResultsTable({
   scores,
   showUser = false,
@@ -2861,7 +3013,7 @@ function ScoreResultsTable({
             <TableHead>Song</TableHead>
             <TableHead>Diff</TableHead>
             <TableHead>Score</TableHead>
-            <TableHead>SP/P/N/M</TableHead>
+            <TableHead>BP/LP/F/L</TableHead>
             <TableHead>Clear</TableHead>
             <TableHead>Rating</TableHead>
             <TableHead>Time</TableHead>
@@ -2886,8 +3038,9 @@ function ScoreResultsTable({
                 {score.score.toLocaleString()}
               </TableCell>
               <TableCell className="font-mono text-xs">
-                {score.shinyPerfectCount}/{score.perfectCount}/{score.nearCount}
-                /{score.missCount}
+                {score.shinyPerfectCount}/
+                {Math.max(score.perfectCount - score.shinyPerfectCount, 0)}/
+                {score.nearCount}/{score.missCount}
               </TableCell>
               <TableCell>
                 {score.clearType}/{score.bestClearType}
@@ -3174,6 +3327,8 @@ function viewTitle(view: View) {
       return '总览'
     case 'playerScores':
       return '玩家成绩'
+    case 'scoreImages':
+      return '成绩图'
     case 'chartTop':
       return '单曲排行榜'
     case 'userTicket':
@@ -3221,6 +3376,8 @@ function viewSubtitle(view: View) {
       return '服务状态与运营数据'
     case 'playerScores':
       return '查询单个玩家的成绩记录'
+    case 'scoreImages':
+      return '生成 B30 / AP30 / Sex30 成绩图'
     case 'chartTop':
       return '查询单曲指定难度排行榜'
     case 'userTicket':

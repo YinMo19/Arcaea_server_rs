@@ -8,6 +8,8 @@ export type ApiEnvelope<T> = {
 
 export type AdminSession = {
   loggedIn: boolean
+  role: number
+  user?: AdminUserSummary
 }
 
 export type DashboardData = {
@@ -136,9 +138,29 @@ export type AdminScoreRow = {
   timePlayed: string
 }
 
+export type AdminUserScoreStats = {
+  best30Sum: number
+  recent10Sum: number
+  potential: number
+}
+
 export type AdminUserScores = {
   user: AdminUserSummary
-  scores: AdminScoreRow[]
+  stats: AdminUserScoreStats
+  b30: AdminScoreRow[]
+  r10: AdminScoreRow[]
+}
+
+export type ScoreImage = {
+  mode: string
+  title: string
+  entryCount: number
+  dataUrl: string
+}
+
+export type ScoreImages = {
+  user: AdminUserSummary
+  images: ScoreImage[]
 }
 
 export type AdminChartTop = {
@@ -365,13 +387,20 @@ export const adminApi = {
       method: 'DELETE',
       body: JSON.stringify({ purchase_name, item_id, item_type }),
     }),
-  userScores: (params: UserSelectorPayload & { limit?: number }) =>
+  userScores: (params: UserSelectorPayload) =>
     request<AdminUserScores>(
       `/web/api/user-scores${query({
         user_id: params.user_id,
         name: params.name,
         user_code: params.user_code,
-        limit: params.limit,
+      })}`,
+    ),
+  scoreImages: (params: UserSelectorPayload) =>
+    request<ScoreImages>(
+      `/web/api/score-images${query({
+        user_id: params.user_id,
+        name: params.name,
+        user_code: params.user_code,
       })}`,
     ),
   chartTop: (params: { sid: string; difficulty: number; limit?: number }) =>

@@ -13,11 +13,12 @@ use std::sync::{OnceLock, RwLock};
 use crate::config::CONFIG;
 use crate::error::ArcError;
 use crate::route::common::{success_return, success_return_no_value, EmptyResponse, RouteResult};
-use crate::service::OperationManager;
+use crate::service::{generate_score_images, OperationManager, ScoreImageMode};
 use crate::utils::sql_placeholders;
 use crate::DbPool;
 
-const ADMIN_COOKIE: &str = "arcaea_admin_session";
+const ADMIN_COOKIE: &str = "arcaea_web_session";
+const ADMIN_ROLE: i8 = 1;
 
 #[derive(Debug, Clone)]
 pub struct AdminConfig {
@@ -133,9 +134,19 @@ pub struct AdminScoreRowView {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AdminUserScoreStats {
+    best_30_sum: f64,
+    recent_10_sum: f64,
+    potential: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AdminUserScoresResponse {
     user: AdminUserSummary,
-    scores: Vec<AdminScoreRowView>,
+    stats: AdminUserScoreStats,
+    b30: Vec<AdminScoreRowView>,
+    r10: Vec<AdminScoreRowView>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -159,6 +170,22 @@ pub struct AdminActionResponse {
 pub struct AdminRedeemUsersResponse {
     code: String,
     users: Vec<AdminUserSummary>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScoreImageView {
+    mode: String,
+    title: String,
+    entry_count: usize,
+    data_url: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScoreImagesResponse {
+    user: AdminUserSummary,
+    images: Vec<ScoreImageView>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -338,7 +365,6 @@ pub struct AdminUserScoreQuery {
     user_id: Option<i32>,
     name: Option<String>,
     user_code: Option<String>,
-    limit: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -351,6 +377,14 @@ pub struct AdminLoginRequest {
 #[serde(rename_all = "camelCase")]
 pub struct AdminSessionResponse {
     logged_in: bool,
+    role: i8,
+    user: Option<AdminUserSummary>,
+}
+
+#[derive(Debug, Clone)]
+struct WebSession {
+    user: AdminUserSummary,
+    role: i8,
 }
 
 #[derive(Debug, Serialize)]
@@ -433,11 +467,13 @@ struct AdminUserDbSummary {
     user_code: Option<String>,
 }
 
-fn expected_admin_cookie_value() -> String {
-    let (username, password) = admin_credentials();
-    let inner = format!("{:x}", Sha256::digest(password.as_bytes()));
-    let joined = format!("{}{}", username, inner);
-    format!("{:x}", Sha256::digest(joined.as_bytes()))
+struct WebLoginUserRow {
+    user_id: i32,
+    name: Option<String>,
+    user_code: Option<String>,
+    password: Option<String>,
+    ban_flag: Option<String>,
+    role: i8,
 }
 
 fn admin_credentials() -> (String, String) {
@@ -460,16 +496,36 @@ fn admin_credentials() -> (String, String) {
     (username, password)
 }
 
-fn is_admin_logged_in(cookies: &CookieJar<'_>) -> bool {
-    let expected = expected_admin_cookie_value();
-    cookies
-        .get(ADMIN_COOKIE)
-        .map(|cookie| cookie.value() == expected)
-        .unwrap_or(false)
+fn web_session_secret() -> String {
+    env::var("WEB_SESSION_SECRET")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| {
+            let (username, password) = admin_credentials();
+            format!("{username}:{password}")
+        })
 }
 
-fn set_admin_cookie(cookies: &CookieJar<'_>) {
-    let mut cookie = Cookie::new(ADMIN_COOKIE, expected_admin_cookie_value());
+fn web_session_signature(user_id: i32, role: i8, password_hash: &str) -> String {
+    let secret = web_session_secret();
+    let joined = format!("{user_id}:{role}:{password_hash}:{secret}");
+    format!("{:x}", Sha256::digest(joined.as_bytes()))
+}
+
+fn parse_web_session_cookie(value: &str) -> Option<(i32, i8, &str)> {
+    let mut parts = value.splitn(3, ':');
+    let user_id = parts.next()?.parse::<i32>().ok()?;
+    let role = parts.next()?.parse::<i8>().ok()?;
+    let signature = parts.next()?;
+    Some((user_id, role, signature))
+}
+
+fn set_admin_cookie(cookies: &CookieJar<'_>, user_id: i32, role: i8, password_hash: &str) {
+    let value = format!(
+        "{user_id}:{role}:{}",
+        web_session_signature(user_id, role, password_hash)
+    );
+    let mut cookie = Cookie::new(ADMIN_COOKIE, value);
     cookie.set_http_only(true);
     cookie.set_same_site(SameSite::Lax);
     cookie.set_path("/web");
@@ -480,6 +536,59 @@ fn clear_admin_cookie(cookies: &CookieJar<'_>) {
     let mut cookie = Cookie::from(ADMIN_COOKIE);
     cookie.set_path("/web");
     cookies.remove(cookie);
+}
+
+async fn current_web_session(
+    cookies: &CookieJar<'_>,
+    pool: &DbPool,
+) -> Result<Option<WebSession>, ArcError> {
+    let Some(cookie) = cookies.get(ADMIN_COOKIE) else {
+        return Ok(None);
+    };
+    let Some((cookie_user_id, cookie_role, signature)) = parse_web_session_cookie(cookie.value())
+    else {
+        return Ok(None);
+    };
+
+    let user = sqlx::query!(
+        "SELECT user_id, name, user_code, password, COALESCE(role, 0) as `role!: i8`
+         FROM user
+         WHERE user_id = ?",
+        cookie_user_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|err| ArcError::input(format!("查询登录状态失败: {err}")))?;
+
+    let Some(user) = user else {
+        return Ok(None);
+    };
+    let password_hash = user.password.unwrap_or_default();
+    if password_hash.is_empty() || cookie_role != user.role {
+        return Ok(None);
+    }
+    let expected = web_session_signature(user.user_id, user.role, &password_hash);
+    if signature != expected {
+        return Ok(None);
+    }
+
+    Ok(Some(WebSession {
+        user: AdminUserSummary {
+            user_id: user.user_id,
+            name: user.name.unwrap_or_default(),
+            user_code: user.user_code.unwrap_or_default(),
+        },
+        role: user.role,
+    }))
+}
+
+async fn require_web_session(
+    cookies: &CookieJar<'_>,
+    pool: &DbPool,
+) -> Result<WebSession, ArcError> {
+    current_web_session(cookies, pool)
+        .await?
+        .ok_or_else(admin_unauthorized)
 }
 
 fn format_timestamp(ts: Option<i64>) -> String {
@@ -719,14 +828,82 @@ fn admin_unauthorized() -> ArcError {
     ArcError::no_access("Admin login required", 401)
 }
 
-fn require_admin_api(cookies: &CookieJar<'_>) -> Result<(), ArcError> {
-    is_admin_logged_in(cookies)
-        .then_some(())
-        .ok_or_else(admin_unauthorized)
+async fn require_admin_api(cookies: &CookieJar<'_>, pool: &DbPool) -> Result<WebSession, ArcError> {
+    let session = require_web_session(cookies, pool).await?;
+    if session.role == ADMIN_ROLE {
+        Ok(session)
+    } else {
+        Err(ArcError::no_access("Admin role required", 403))
+    }
 }
 
 fn hash_user_password(password: &str) -> String {
     format!("{:x}", Sha256::digest(password.as_bytes()))
+}
+
+async fn load_web_login_user(
+    pool: &DbPool,
+    username: &str,
+) -> Result<Option<WebLoginUserRow>, ArcError> {
+    sqlx::query_as!(
+        WebLoginUserRow,
+        "SELECT user_id, name, user_code, password, ban_flag, COALESCE(role, 0) as `role!: i8`
+         FROM user
+         WHERE name = ?",
+        username
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|err| ArcError::input(format!("登录查询失败: {err}")))
+}
+
+async fn bootstrap_config_admin_user(
+    pool: &DbPool,
+    username: &str,
+    password_hash: &str,
+) -> Result<WebLoginUserRow, ArcError> {
+    let admin_count =
+        sqlx::query_scalar!("SELECT COUNT(*) as `count!: i64` FROM user WHERE role = 1")
+            .fetch_one(pool)
+            .await
+            .map_err(|err| ArcError::input(format!("查询管理员用户失败: {err}")))?;
+    if admin_count > 0 {
+        return Err(ArcError::no_access("Incorrect username or password", 401));
+    }
+
+    let now = Utc::now().timestamp_millis();
+    sqlx::query!(
+        r#"
+        INSERT INTO user (
+            name, password, join_date, user_code, rating_ptt,
+            character_id, is_skill_sealed, is_char_uncapped, is_char_uncapped_override,
+            is_hide_rating, favorite_character, max_stamina_notification_enabled,
+            current_map, ticket, prog_boost, email, role
+        ) VALUES (?, ?, ?, '123456789', 0, 0, 0, 0, 0, 0, -1, 0, '', 0, 0, 'admin@admin.com', 1)
+        "#,
+        username,
+        password_hash,
+        now
+    )
+    .execute(pool)
+    .await
+    .map_err(|err| ArcError::input(format!("创建管理员用户失败: {err}")))?;
+
+    load_web_login_user(pool, username)
+        .await?
+        .ok_or_else(|| ArcError::no_data("管理员用户不存在", -2))
+}
+
+fn web_session_response(user: &WebLoginUserRow) -> AdminSessionResponse {
+    AdminSessionResponse {
+        logged_in: true,
+        role: user.role,
+        user: Some(AdminUserSummary {
+            user_id: user.user_id,
+            name: user.name.clone().unwrap_or_default(),
+            user_code: user.user_code.clone().unwrap_or_default(),
+        }),
+    }
 }
 
 fn clean_optional_payload_text(value: &Option<String>) -> Option<&str> {
@@ -1508,8 +1685,7 @@ async fn load_admin_user_scores(
         pool,
     )
     .await?;
-    let limit = query.limit.unwrap_or(50).clamp(1, 200);
-    let rows = sqlx::query!(
+    let b30 = sqlx::query!(
         "SELECT bs.user_id, u.name, bs.song_id, bs.difficulty, bs.score,
                 bs.shiny_perfect_count, bs.perfect_count, bs.near_count, bs.miss_count,
                 bs.clear_type, bs.best_clear_type, bs.rating, bs.time_played
@@ -1517,13 +1693,12 @@ async fn load_admin_user_scores(
          JOIN user u ON u.user_id = bs.user_id
          WHERE bs.user_id = ?
          ORDER BY bs.rating DESC, bs.score DESC
-         LIMIT ?",
-        user.user_id,
-        limit
+         LIMIT 30",
+        user.user_id
     )
     .fetch_all(pool)
     .await
-    .map_err(|err| ArcError::input(format!("查询玩家成绩失败: {err}")))?
+    .map_err(|err| ArcError::input(format!("查询玩家 B30 失败: {err}")))?
     .into_iter()
     .map(|row| AdminScoreRowView {
         user_id: row.user_id,
@@ -1540,9 +1715,63 @@ async fn load_admin_user_scores(
         rating: row.rating.unwrap_or(0.0),
         time_played: format_timestamp(row.time_played),
     })
-    .collect();
+    .collect::<Vec<_>>();
 
-    Ok(AdminUserScoresResponse { user, scores: rows })
+    let r10 = sqlx::query!(
+        "WITH ranked_songs AS (
+            SELECT r.*,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY r.song_id
+                       ORDER BY r.rating DESC, r.score DESC
+                   ) AS song_rank
+            FROM recent30 r
+            WHERE r.user_id = ? AND r.song_id != ''
+         )
+         SELECT rs.user_id, u.name, rs.song_id, rs.difficulty, rs.score,
+                rs.shiny_perfect_count, rs.perfect_count, rs.near_count, rs.miss_count,
+                rs.clear_type, rs.rating, rs.time_played
+         FROM ranked_songs rs
+         JOIN user u ON u.user_id = rs.user_id
+        WHERE rs.song_rank = 1
+         ORDER BY rs.rating DESC, rs.score DESC
+         LIMIT 10",
+        user.user_id
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|err| ArcError::input(format!("查询玩家 R10 失败: {err}")))?
+    .into_iter()
+    .map(|row| AdminScoreRowView {
+        user_id: row.user_id.unwrap_or(user.user_id),
+        name: row.name,
+        song_id: row.song_id.unwrap_or_default(),
+        difficulty: row.difficulty.unwrap_or_default(),
+        score: row.score.unwrap_or_default(),
+        shiny_perfect_count: row.shiny_perfect_count.unwrap_or_default(),
+        perfect_count: row.perfect_count.unwrap_or_default(),
+        near_count: row.near_count.unwrap_or_default(),
+        miss_count: row.miss_count.unwrap_or_default(),
+        clear_type: row.clear_type.unwrap_or_default(),
+        best_clear_type: row.clear_type.unwrap_or_default(),
+        rating: row.rating.unwrap_or(0.0),
+        time_played: format_timestamp(row.time_played),
+    })
+    .collect::<Vec<_>>();
+
+    let best_30_sum = b30.iter().map(|score| score.rating).sum();
+    let recent_10_sum = r10.iter().map(|score| score.rating).sum();
+    let stats = AdminUserScoreStats {
+        best_30_sum,
+        recent_10_sum,
+        potential: best_30_sum * CONFIG.best30_weight + recent_10_sum * CONFIG.recent10_weight,
+    };
+
+    Ok(AdminUserScoresResponse {
+        user,
+        stats,
+        b30,
+        r10,
+    })
 }
 
 async fn load_admin_chart_top(
@@ -2416,24 +2645,53 @@ fn admin_api_input_error(message: String) -> ArcError {
 }
 
 #[get("/api/session")]
-pub fn admin_api_session(cookies: &CookieJar<'_>) -> RouteResult<AdminSessionResponse> {
+pub async fn admin_api_session(
+    cookies: &CookieJar<'_>,
+    pool: &State<DbPool>,
+) -> RouteResult<AdminSessionResponse> {
+    let session = current_web_session(cookies, pool.inner()).await?;
     Ok(success_return(AdminSessionResponse {
-        logged_in: is_admin_logged_in(cookies),
+        logged_in: session.is_some(),
+        role: session.as_ref().map(|session| session.role).unwrap_or(0),
+        user: session.map(|session| session.user),
     }))
 }
 
 #[post("/api/login", format = "json", data = "<payload>")]
-pub fn admin_api_login(
+pub async fn admin_api_login(
     payload: Json<AdminLoginRequest>,
     cookies: &CookieJar<'_>,
+    pool: &State<DbPool>,
 ) -> RouteResult<AdminSessionResponse> {
-    let (username, password) = admin_credentials();
-    if payload.username == username && payload.password == password {
-        set_admin_cookie(cookies);
-        Ok(success_return(AdminSessionResponse { logged_in: true }))
-    } else {
-        Err(ArcError::no_access("Incorrect username or password", 401))
+    let username = payload.username.trim();
+    if username.is_empty() {
+        return Err(ArcError::no_access("Incorrect username or password", 401));
     }
+
+    let user = match load_web_login_user(pool.inner(), username).await? {
+        Some(user) => user,
+        None => {
+            let (admin_username, admin_password) = admin_credentials();
+            if username == admin_username && payload.password == admin_password {
+                let password_hash = hash_user_password(&payload.password);
+                bootstrap_config_admin_user(pool.inner(), username, &password_hash).await?
+            } else {
+                return Err(ArcError::no_access("Incorrect username or password", 401));
+            }
+        }
+    };
+
+    if is_ban_flag_active(user.ban_flag.as_deref()) {
+        return Err(ArcError::no_access("Account is banned", 403));
+    }
+
+    let password_hash = user.password.as_deref().unwrap_or_default();
+    if password_hash.is_empty() || password_hash != hash_user_password(&payload.password) {
+        return Err(ArcError::no_access("Incorrect username or password", 401));
+    }
+
+    set_admin_cookie(cookies, user.user_id, user.role, password_hash);
+    Ok(success_return(web_session_response(&user)))
 }
 
 #[post("/api/logout")]
@@ -2447,7 +2705,7 @@ pub async fn admin_api_dashboard(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminDashboardApiResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     Ok(success_return(load_dashboard_api(pool.inner()).await))
 }
 
@@ -2455,9 +2713,10 @@ pub async fn admin_api_dashboard(
 pub async fn admin_api_operation(
     operation_name: &str,
     operation_manager: &State<OperationManager>,
+    pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<EmptyResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
 
     match operation_name {
         "refresh_song_file_cache" | "refresh_content_bundle_cache" | "refresh_all_score_rating" => {
@@ -2479,7 +2738,7 @@ pub async fn admin_api_users(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminPageResponse<UserListView>> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     let (page, page_size) = normalize_page(page, page_size);
     Ok(success_return(
         load_admin_users(q, status, page, page_size, pool.inner()).await?,
@@ -2494,7 +2753,7 @@ pub async fn admin_api_songs(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminPageResponse<SongRowView>> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     let (page, page_size) = normalize_page(page, page_size);
     Ok(success_return(
         load_admin_songs(q, page, page_size, pool.inner()).await,
@@ -2509,7 +2768,7 @@ pub async fn admin_api_items(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminPageResponse<ItemRowView>> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     let (page, page_size) = normalize_page(page, page_size);
     Ok(success_return(
         load_admin_items(q, page, page_size, pool.inner()).await,
@@ -2524,7 +2783,7 @@ pub async fn admin_api_purchases(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminPageResponse<PurchaseRowView>> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     let (page, page_size) = normalize_page(page, page_size);
     Ok(success_return(
         load_admin_purchases(pq, page, page_size, pool.inner()).await,
@@ -2539,32 +2798,83 @@ pub async fn admin_api_purchase_items(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminPageResponse<PurchaseItemRowView>> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     let (page, page_size) = normalize_page(page, page_size);
     Ok(success_return(
         load_admin_purchase_items(iq, page, page_size, pool.inner()).await,
     ))
 }
 
-#[get("/api/user-scores?<user_id>&<name>&<user_code>&<limit>")]
+#[get("/api/user-scores?<user_id>&<name>&<user_code>")]
 pub async fn admin_api_user_scores(
     user_id: Option<i32>,
     name: Option<String>,
     user_code: Option<String>,
-    limit: Option<i64>,
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminUserScoresResponse> {
-    require_admin_api(cookies)?;
-    let query = AdminUserScoreQuery {
-        user_id,
-        name,
-        user_code,
-        limit,
+    let session = require_web_session(cookies, pool.inner()).await?;
+    let query = if session.role == ADMIN_ROLE {
+        AdminUserScoreQuery {
+            user_id,
+            name,
+            user_code,
+        }
+    } else {
+        AdminUserScoreQuery {
+            user_id: Some(session.user.user_id),
+            name: None,
+            user_code: None,
+        }
     };
     Ok(success_return(
         load_admin_user_scores(&query, pool.inner()).await?,
     ))
+}
+
+#[get("/api/score-images?<user_id>&<name>&<user_code>")]
+pub async fn admin_api_score_images(
+    user_id: Option<i32>,
+    name: Option<String>,
+    user_code: Option<String>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> RouteResult<ScoreImagesResponse> {
+    let session = require_web_session(cookies, pool.inner()).await?;
+    let user = if session.role == ADMIN_ROLE
+        && (user_id.is_some() || name.is_some() || user_code.is_some())
+    {
+        resolve_admin_user(
+            user_id,
+            clean_optional_payload_text(&name),
+            clean_optional_payload_text(&user_code),
+            pool.inner(),
+        )
+        .await?
+    } else {
+        session.user.clone()
+    };
+
+    let images = generate_score_images(
+        pool.inner(),
+        user.user_id,
+        &[
+            ScoreImageMode::B30,
+            ScoreImageMode::Ap30,
+            ScoreImageMode::Sex30,
+        ],
+    )
+    .await?
+    .into_iter()
+    .map(|image| ScoreImageView {
+        mode: image.mode.slug().to_string(),
+        title: image.mode.title().to_string(),
+        entry_count: image.entry_count,
+        data_url: image.data_url,
+    })
+    .collect();
+
+    Ok(success_return(ScoreImagesResponse { user, images }))
 }
 
 #[get("/api/chart-top?<sid>&<difficulty>&<limit>")]
@@ -2575,7 +2885,7 @@ pub async fn admin_api_chart_top(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminChartTopResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     Ok(success_return(
         load_admin_chart_top(sid, difficulty.unwrap_or(0), limit, pool.inner()).await?,
     ))
@@ -2587,7 +2897,7 @@ pub async fn admin_api_redeem_users(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminRedeemUsersResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     Ok(success_return(
         load_admin_redeem_users(code, pool.inner()).await?,
     ))
@@ -2599,7 +2909,7 @@ pub async fn admin_api_user_ticket(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminActionResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     Ok(success_return(
         update_admin_user_ticket(&payload, pool.inner()).await?,
     ))
@@ -2615,7 +2925,7 @@ pub async fn admin_api_user_password(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminActionResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     Ok(success_return(
         update_admin_user_password(&payload, pool.inner()).await?,
     ))
@@ -2627,7 +2937,7 @@ pub async fn admin_api_user_ban(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminActionResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     Ok(success_return(
         ban_admin_user(&payload, pool.inner()).await?,
     ))
@@ -2643,7 +2953,7 @@ pub async fn admin_api_user_purchase(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminActionResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     Ok(success_return(
         update_admin_user_purchase(&payload, pool.inner()).await?,
     ))
@@ -2659,7 +2969,7 @@ pub async fn admin_api_scores_delete(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminActionResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     Ok(success_return(
         delete_admin_scores(&payload, pool.inner()).await?,
     ))
@@ -2671,7 +2981,7 @@ pub async fn admin_api_present_create(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminActionResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     Ok(success_return(
         create_admin_present(&payload, pool.inner()).await?,
     ))
@@ -2683,7 +2993,7 @@ pub async fn admin_api_present_delete(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminActionResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     Ok(success_return(
         delete_admin_present(&payload, pool.inner()).await?,
     ))
@@ -2699,7 +3009,7 @@ pub async fn admin_api_present_deliver(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminActionResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     Ok(success_return(
         deliver_admin_present(&payload, pool.inner()).await?,
     ))
@@ -2711,7 +3021,7 @@ pub async fn admin_api_redeem_create(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminActionResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     Ok(success_return(
         create_admin_redeem(&payload, pool.inner()).await?,
     ))
@@ -2723,7 +3033,7 @@ pub async fn admin_api_redeem_delete(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminActionResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     Ok(success_return(
         delete_admin_redeem(&payload, pool.inner()).await?,
     ))
@@ -2735,7 +3045,7 @@ pub async fn admin_api_song_create(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<EmptyResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     create_song(pool.inner(), AdminSongInput::from(&*payload))
         .await
         .map_err(admin_api_input_error)?;
@@ -2749,7 +3059,7 @@ pub async fn admin_api_song_update(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<EmptyResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     update_song(pool.inner(), AdminSongInput::from(&*payload).with_sid(sid))
         .await
         .map_err(admin_api_input_error)?;
@@ -2762,7 +3072,7 @@ pub async fn admin_api_song_delete(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<EmptyResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     delete_song(pool.inner(), &payload.sid)
         .await
         .map_err(admin_api_input_error)?;
@@ -2775,7 +3085,7 @@ pub async fn admin_api_item_create(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<EmptyResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     create_item(
         pool.inner(),
         &payload.item_id,
@@ -2793,7 +3103,7 @@ pub async fn admin_api_item_update(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<EmptyResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     update_item(
         pool.inner(),
         &payload.item_id,
@@ -2811,7 +3121,7 @@ pub async fn admin_api_item_delete(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<EmptyResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     delete_item(pool.inner(), &payload.item_id, &payload.item_type)
         .await
         .map_err(admin_api_input_error)?;
@@ -2824,7 +3134,7 @@ pub async fn admin_api_purchase_create(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<EmptyResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     create_purchase(
         pool.inner(),
         &payload.purchase_name,
@@ -2846,7 +3156,7 @@ pub async fn admin_api_purchase_update(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<EmptyResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     update_purchase(
         pool.inner(),
         purchase_name,
@@ -2867,7 +3177,7 @@ pub async fn admin_api_purchase_delete(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<EmptyResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     delete_purchase(pool.inner(), &payload.purchase_name)
         .await
         .map_err(admin_api_input_error)?;
@@ -2880,7 +3190,7 @@ pub async fn admin_api_purchase_item_create(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<EmptyResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     create_purchase_item(
         pool.inner(),
         &payload.purchase_name,
@@ -2899,7 +3209,7 @@ pub async fn admin_api_purchase_item_update(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<EmptyResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     update_purchase_item(
         pool.inner(),
         &payload.purchase_name,
@@ -2918,7 +3228,7 @@ pub async fn admin_api_purchase_item_delete(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<EmptyResponse> {
-    require_admin_api(cookies)?;
+    require_admin_api(cookies, pool.inner()).await?;
     delete_purchase_item(
         pool.inner(),
         &payload.purchase_name,
@@ -2943,6 +3253,7 @@ pub fn routes() -> Vec<Route> {
         admin_api_purchases,
         admin_api_purchase_items,
         admin_api_user_scores,
+        admin_api_score_images,
         admin_api_chart_top,
         admin_api_redeem_users,
         admin_api_user_ticket,

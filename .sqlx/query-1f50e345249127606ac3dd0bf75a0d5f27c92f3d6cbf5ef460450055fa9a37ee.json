@@ -1,0 +1,64 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT user_id, name, user_code, password, COALESCE(role, 0) as `role!: i8`\n         FROM user\n         WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | AUTO_INCREMENT",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "UNIQUE_KEY",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "user_code",
+        "type_info": {
+          "type": "VarString",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "password",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "role!: i8",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 4
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "1f50e345249127606ac3dd0bf75a0d5f27c92f3d6cbf5ef460450055fa9a37ee"
+}

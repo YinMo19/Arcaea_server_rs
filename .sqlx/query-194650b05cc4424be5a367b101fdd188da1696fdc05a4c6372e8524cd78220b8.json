@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT bs.user_id, u.name, bs.song_id, bs.difficulty, bs.score,\n                bs.shiny_perfect_count, bs.perfect_count, bs.near_count, bs.miss_count,\n                bs.clear_type, bs.best_clear_type, bs.rating, bs.time_played\n         FROM best_score bs\n         JOIN user u ON u.user_id = bs.user_id\n         WHERE bs.user_id = ?\n         ORDER BY bs.rating DESC, bs.score DESC\n         LIMIT ?",
+  "query": "WITH ranked_songs AS (\n            SELECT r.*,\n                   ROW_NUMBER() OVER (\n                       PARTITION BY r.song_id\n                       ORDER BY r.rating DESC, r.score DESC\n                   ) AS song_rank\n            FROM recent30 r\n            WHERE r.user_id = ? AND r.song_id != ''\n         )\n         SELECT rs.user_id, u.name, rs.song_id, rs.difficulty, rs.score,\n                rs.shiny_perfect_count, rs.perfect_count, rs.near_count, rs.miss_count,\n                rs.clear_type, rs.rating, rs.time_played\n         FROM ranked_songs rs\n         JOIN user u ON u.user_id = rs.user_id\n        WHERE rs.song_rank = 1\n         ORDER BY rs.rating DESC, rs.score DESC\n         LIMIT 10",
   "describe": {
     "columns": [
       {
@@ -8,7 +8,7 @@
         "name": "user_id",
         "type_info": {
           "type": "Long",
-          "flags": "NOT_NULL | PRIMARY_KEY | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "flags": "NO_DEFAULT_VALUE",
           "max_size": 11
         }
       },
@@ -26,7 +26,7 @@
         "name": "song_id",
         "type_info": {
           "type": "VarString",
-          "flags": "NOT_NULL | PRIMARY_KEY | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "flags": "",
           "max_size": 1020
         }
       },
@@ -35,7 +35,7 @@
         "name": "difficulty",
         "type_info": {
           "type": "Long",
-          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "flags": "",
           "max_size": 11
         }
       },
@@ -95,15 +95,6 @@
       },
       {
         "ordinal": 10,
-        "name": "best_clear_type",
-        "type_info": {
-          "type": "Long",
-          "flags": "",
-          "max_size": 11
-        }
-      },
-      {
-        "ordinal": 11,
         "name": "rating",
         "type_info": {
           "type": "Double",
@@ -112,7 +103,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 11,
         "name": "time_played",
         "type_info": {
           "type": "LongLong",
@@ -122,13 +113,12 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 1
     },
     "nullable": [
-      false,
       true,
-      false,
-      false,
+      true,
+      true,
       true,
       true,
       true,
@@ -140,5 +130,5 @@
       true
     ]
   },
-  "hash": "308123a7ebbb33a107e76a72f49bfa22ec86a449cbd26004301d45d8800ac995"
+  "hash": "194650b05cc4424be5a367b101fdd188da1696fdc05a4c6372e8524cd78220b8"
 }

@@ -1,0 +1,64 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT user_id, name, user_code, rating_ptt, character_id\n         FROM user\n         WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | AUTO_INCREMENT",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "UNIQUE_KEY",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "user_code",
+        "type_info": {
+          "type": "VarString",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "rating_ptt",
+        "type_info": {
+          "type": "Long",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "character_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "a0cb6805ebbce16173212428969f3d8ba7a6d3e18763a040d8a03959abfe2c23"
+}
