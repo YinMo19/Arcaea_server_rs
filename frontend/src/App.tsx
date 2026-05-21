@@ -3005,28 +3005,33 @@ function ScoreResultsTable({
   }
 
   return (
-    <div className="min-h-0 overflow-auto rounded-md border">
-      <Table className={cn('table-fixed', showUser ? 'min-w-[920px]' : 'min-w-[780px]')}>
+    <div className="min-h-0 overflow-x-hidden overflow-y-auto rounded-md border">
+      <Table
+        className={cn(
+          'table-fixed text-[11px] leading-tight',
+          showUser ? 'min-w-[820px]' : 'w-full',
+        )}
+      >
         <colgroup>
           {showUser && <col className="w-[14%]" />}
-          <col className={showUser ? 'w-[22%]' : 'w-[30%]'} />
-          <col className="w-[8%]" />
-          <col className="w-[14%]" />
-          <col className="w-[16%]" />
-          <col className="w-[8%]" />
-          <col className="w-[11%]" />
-          <col className={showUser ? 'w-[7%]' : 'w-[13%]'} />
+          <col className={showUser ? 'w-[19%]' : 'w-[24%]'} />
+          <col className={showUser ? 'w-[7%]' : 'w-[8%]'} />
+          <col className={showUser ? 'w-[12%]' : 'w-[15%]'} />
+          <col className={showUser ? 'w-[14%]' : 'w-[18%]'} />
+          <col className={showUser ? 'w-[7%]' : 'w-[8%]'} />
+          <col className={showUser ? 'w-[10%]' : 'w-[13%]'} />
+          <col className={showUser ? 'w-[17%]' : 'w-[14%]'} />
         </colgroup>
         <TableHeader>
           <TableRow>
-            {showUser && <TableHead>User</TableHead>}
-            <TableHead>Song</TableHead>
-            <TableHead>Diff</TableHead>
-            <TableHead>Score</TableHead>
-            <TableHead>BP/LP/F/L</TableHead>
-            <TableHead>Clear</TableHead>
-            <TableHead>Rating</TableHead>
-            <TableHead>Time</TableHead>
+            {showUser && <TableHead className="px-1.5">User</TableHead>}
+            <TableHead className="px-1.5">Song</TableHead>
+            <TableHead className="px-1.5">Diff</TableHead>
+            <TableHead className="px-1.5">Score</TableHead>
+            <TableHead className="px-1.5">BP/LP/F/L</TableHead>
+            <TableHead className="px-1.5">Clear</TableHead>
+            <TableHead className="px-1.5">Rating</TableHead>
+            <TableHead className="px-1.5">Time</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -3035,36 +3040,36 @@ function ScoreResultsTable({
               key={`${score.userId}:${score.songId}:${score.difficulty}:${score.timePlayed}`}
             >
               {showUser && (
-                <TableCell>
+                <TableCell className="px-1.5 py-2">
                   <div className="font-medium">{score.name || '-'}</div>
                   <div className="font-mono text-xs text-muted-foreground">
                     {score.userId}
                   </div>
               </TableCell>
               )}
-              <TableCell className="min-w-0 font-mono">
+              <TableCell className="min-w-0 px-1.5 py-2 font-mono">
                 <span className="score-song-id" title={score.songId}>
                   {score.songId}
                 </span>
               </TableCell>
-              <TableCell className="whitespace-nowrap">
+              <TableCell className="whitespace-nowrap px-1.5 py-2">
                 {difficultyLabel(score.difficulty)}
               </TableCell>
-              <TableCell className="whitespace-nowrap font-mono">
+              <TableCell className="whitespace-nowrap px-1.5 py-2 font-mono">
                 {score.score.toLocaleString()}
               </TableCell>
-              <TableCell className="whitespace-nowrap font-mono text-xs">
+              <TableCell className="whitespace-nowrap px-1.5 py-2 font-mono">
                 {score.shinyPerfectCount}/
                 {Math.max(score.perfectCount - score.shinyPerfectCount, 0)}/
                 {score.nearCount}/{score.missCount}
               </TableCell>
-              <TableCell className="whitespace-nowrap">
+              <TableCell className="whitespace-nowrap px-1.5 py-2">
                 {score.clearType}/{score.bestClearType}
               </TableCell>
-              <TableCell className="whitespace-nowrap font-mono">
+              <TableCell className="whitespace-nowrap px-1.5 py-2 font-mono">
                 {score.rating.toFixed(4)}
               </TableCell>
-              <TableCell className="whitespace-nowrap font-mono">
+              <TableCell className="break-all px-1.5 py-2 font-mono">
                 {score.timePlayed}
               </TableCell>
             </TableRow>
