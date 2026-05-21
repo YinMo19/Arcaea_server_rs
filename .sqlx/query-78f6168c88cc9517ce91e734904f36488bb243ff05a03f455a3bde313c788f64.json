@@ -17,7 +17,7 @@
         "name": "login_time",
         "type_info": {
           "type": "LongLong",
-          "flags": "",
+          "flags": "MULTIPLE_KEY",
           "max_size": 20
         }
       }

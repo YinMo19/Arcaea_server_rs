@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT IGNORE INTO course_requirement (course_id, required_id) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "1f1312100748cd7925bf7434f9ec3b1cc3f3d95f916c945fcef45e02f20ceb7c"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT IGNORE INTO user_role (user_id, role_id) VALUES (?, 'admin')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "52730c204927d4bc72c73a0fe47b72fd8fa50cebc2860673a94351d541283d2c"
+}

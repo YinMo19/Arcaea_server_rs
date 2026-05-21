@@ -1,0 +1,34 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT user_id, world_rank_score FROM user WHERE world_rank_score > 0",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | AUTO_INCREMENT",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "world_rank_score",
+        "type_info": {
+          "type": "Long",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "ff3d6304fbb2aafb36cf11af2a4516611fbba196d04e71c14d7421c9624cf267"
+}

@@ -8,7 +8,7 @@
         "name": "rating_ptt",
         "type_info": {
           "type": "Long",
-          "flags": "",
+          "flags": "MULTIPLE_KEY",
           "max_size": 11
         }
       }

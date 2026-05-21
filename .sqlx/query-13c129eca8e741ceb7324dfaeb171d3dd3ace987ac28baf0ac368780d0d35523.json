@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT access_token FROM login WHERE login_device = ? AND user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "access_token",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | PRIMARY_KEY | BLOB | NO_DEFAULT_VALUE",
+          "max_size": 262140
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "13c129eca8e741ceb7324dfaeb171d3dd3ace987ac28baf0ac368780d0d35523"
+}

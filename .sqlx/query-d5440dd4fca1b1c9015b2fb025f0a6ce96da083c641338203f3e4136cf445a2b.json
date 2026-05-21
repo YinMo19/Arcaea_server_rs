@@ -1,0 +1,44 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT score, best_clear_type, score_v2 FROM best_score WHERE user_id = ? AND song_id = ? AND difficulty = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "score",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "best_clear_type",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "score_v2",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "max_size": 22
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "d5440dd4fca1b1c9015b2fb025f0a6ce96da083c641338203f3e4136cf445a2b"
+}

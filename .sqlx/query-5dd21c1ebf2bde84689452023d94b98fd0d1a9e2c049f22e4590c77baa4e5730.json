@@ -8,7 +8,7 @@
         "name": "song_id",
         "type_info": {
           "type": "VarString",
-          "flags": "",
+          "flags": "MULTIPLE_KEY",
           "max_size": 1020
         }
       },

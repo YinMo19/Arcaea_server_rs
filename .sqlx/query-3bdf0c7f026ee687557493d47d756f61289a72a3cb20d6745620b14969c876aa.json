@@ -1,0 +1,274 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                SELECT\n                    CASE WHEN fm.user_id_me IS NULL THEN 0 ELSE 1 END AS `is_mutual!: i64`,\n                    u.user_id,\n                    u.name,\n                    u.join_date,\n                    u.rating_ptt,\n                    u.character_id,\n                    u.is_skill_sealed,\n                    u.is_hide_rating,\n                    u.song_id,\n                    u.difficulty,\n                    u.score,\n                    u.shiny_perfect_count,\n                    u.perfect_count,\n                    u.near_count,\n                    u.miss_count,\n                    u.health,\n                    u.modifier,\n                    u.time_played,\n                    u.clear_type,\n                    u.rating,\n                    u.favorite_character,\n                    u.custom_banner,\n                    u.is_profile_public,\n                    uc.is_uncapped AS displayed_is_uncapped,\n                    uc.is_uncapped_override AS displayed_is_uncapped_override,\n                    bs.best_clear_type\n                FROM friend f\n                JOIN user u ON u.user_id = f.user_id_other\n                LEFT JOIN friend fm\n                    ON fm.user_id_me = f.user_id_other AND fm.user_id_other = ?\n                LEFT JOIN user_char_full uc\n                    ON uc.user_id = u.user_id\n                    AND uc.character_id = CASE\n                        WHEN COALESCE(u.favorite_character, -1) = -1\n                        THEN COALESCE(u.character_id, 0)\n                        ELSE u.favorite_character\n                    END\n                LEFT JOIN best_score bs\n                    ON bs.user_id = u.user_id\n                    AND bs.song_id = u.song_id\n                    AND bs.difficulty = u.difficulty\n                WHERE f.user_id_me = ?\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "is_mutual!: i64",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 1
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | AUTO_INCREMENT",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "UNIQUE_KEY",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "join_date",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "rating_ptt",
+        "type_info": {
+          "type": "Long",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "character_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "is_skill_sealed",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "max_size": 4
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "is_hide_rating",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "max_size": 4
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "song_id",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "difficulty",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "score",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "shiny_perfect_count",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "perfect_count",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "near_count",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "miss_count",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "health",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "modifier",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "time_played",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "clear_type",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "rating",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "favorite_character",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "custom_banner",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 22,
+        "name": "is_profile_public",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "max_size": 4
+        }
+      },
+      {
+        "ordinal": 23,
+        "name": "displayed_is_uncapped",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "max_size": 4
+        }
+      },
+      {
+        "ordinal": 24,
+        "name": "displayed_is_uncapped_override",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "max_size": 4
+        }
+      },
+      {
+        "ordinal": 25,
+        "name": "best_clear_type",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "3bdf0c7f026ee687557493d47d756f61289a72a3cb20d6745620b14969c876aa"
+}

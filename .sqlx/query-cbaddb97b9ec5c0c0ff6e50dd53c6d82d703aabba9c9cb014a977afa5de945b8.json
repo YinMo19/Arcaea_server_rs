@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                INSERT INTO role (role_id, caption)\n                VALUES (?, ?)\n                ON DUPLICATE KEY UPDATE caption = VALUES(caption)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "cbaddb97b9ec5c0c0ff6e50dd53c6d82d703aabba9c9cb014a977afa5de945b8"
+}

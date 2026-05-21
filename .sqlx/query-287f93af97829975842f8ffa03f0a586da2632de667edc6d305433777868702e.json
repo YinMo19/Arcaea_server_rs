@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                INSERT INTO user_char (user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag)\n                SELECT ?, ?, 1, 0, 0, 0, 0\n                WHERE NOT EXISTS (\n                    SELECT 1 FROM user_char WHERE user_id = ? AND character_id = ?\n                )\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "287f93af97829975842f8ffa03f0a586da2632de667edc6d305433777868702e"
+}

@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT access_token FROM login WHERE user_id = ? ORDER BY login_time ASC LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "access_token",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | PRIMARY_KEY | BLOB | NO_DEFAULT_VALUE",
+          "max_size": 262140
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5fc058b2beabdad3cf60546b3ee700f9b1125801d5aa464679809883288fbb6a"
+}

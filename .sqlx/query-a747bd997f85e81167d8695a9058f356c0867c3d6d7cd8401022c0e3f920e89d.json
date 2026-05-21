@@ -44,7 +44,7 @@
         "name": "user_code",
         "type_info": {
           "type": "VarString",
-          "flags": "",
+          "flags": "MULTIPLE_KEY",
           "max_size": 1020
         }
       },
@@ -53,7 +53,7 @@
         "name": "rating_ptt",
         "type_info": {
           "type": "Long",
-          "flags": "",
+          "flags": "MULTIPLE_KEY",
           "max_size": 11
         }
       },
@@ -260,7 +260,7 @@
         "name": "email",
         "type_info": {
           "type": "VarString",
-          "flags": "",
+          "flags": "MULTIPLE_KEY",
           "max_size": 1020
         }
       },
@@ -269,7 +269,7 @@
         "name": "world_rank_score",
         "type_info": {
           "type": "Long",
-          "flags": "",
+          "flags": "MULTIPLE_KEY",
           "max_size": 11
         }
       },

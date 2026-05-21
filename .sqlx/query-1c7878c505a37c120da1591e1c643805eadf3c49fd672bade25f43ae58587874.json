@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT COUNT(*) as `rank_count!: i64` FROM best_score\n             WHERE song_id = ? AND difficulty = ? AND\n             (score > ? OR (score = ? AND time_played > ?))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rank_count!: i64",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 21
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1c7878c505a37c120da1591e1c643805eadf3c49fd672bade25f43ae58587874"
+}

@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT value FROM user_kvdata WHERE user_id = ? AND class = 'score' AND `key` = 'world_rank_score_raw' AND idx = 0",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "aa39c06a1ea26bd56c29ea1cb00a9020d031b3e1ebef6eb7973180c7877c8f62"
+}

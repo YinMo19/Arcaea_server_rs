@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT IGNORE INTO role_power (role_id, power_id) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "4d05af9974f6bf036b68e8422cf01309a18d00df0fdabc456e16ccc95ad0ddd8"
+}

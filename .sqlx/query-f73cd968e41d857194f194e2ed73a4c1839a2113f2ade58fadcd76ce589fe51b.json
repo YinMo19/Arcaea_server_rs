@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO redeem_item (code, item_id, type, amount) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "f73cd968e41d857194f194e2ed73a4c1839a2113f2ade58fadcd76ce589fe51b"
+}

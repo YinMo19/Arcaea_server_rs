@@ -1,0 +1,44 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT u.user_id, u.name, u.user_code\n         FROM user u\n         JOIN user_redeem ur ON ur.user_id = u.user_id\n         WHERE ur.code = ?\n         ORDER BY u.user_id ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | AUTO_INCREMENT",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "UNIQUE_KEY",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "user_code",
+        "type_info": {
+          "type": "VarString",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 1020
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "b04dc4f8fd90c8eded4a2bb83dbf7a4f2432244fcd08aaa20b4639ec3ad9227a"
+}

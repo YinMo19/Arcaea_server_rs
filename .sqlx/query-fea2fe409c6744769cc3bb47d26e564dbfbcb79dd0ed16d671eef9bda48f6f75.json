@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM redeem_item WHERE code = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "fea2fe409c6744769cc3bb47d26e564dbfbcb79dd0ed16d671eef9bda48f6f75"
+}

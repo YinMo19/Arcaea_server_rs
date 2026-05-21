@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                INSERT INTO power (power_id, caption)\n                VALUES (?, ?)\n                ON DUPLICATE KEY UPDATE caption = VALUES(caption)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "6032acaa98dfb55b40b4ea1479f7259026bdfd1e89e4df0bf013877d9aeb6cb1"
+}

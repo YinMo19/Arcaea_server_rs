@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT item_id FROM user_item WHERE user_id = ? AND type IN ('course_banner', 'online_banner') ORDER BY type, item_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "max_size": 1020
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5f7431562cb914aa8b17386df81afcfbb1ec8862f69f19f17266f957cf68c616"
+}

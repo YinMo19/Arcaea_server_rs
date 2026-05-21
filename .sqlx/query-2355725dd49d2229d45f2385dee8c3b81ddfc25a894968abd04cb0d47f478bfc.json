@@ -1,0 +1,34 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT song_id, name FROM chart WHERE song_id LIKE ? OR name LIKE ? LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "song_id",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "2355725dd49d2229d45f2385dee8c3b81ddfc25a894968abd04cb0d47f478bfc"
+}

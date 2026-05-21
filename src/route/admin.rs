@@ -348,7 +348,6 @@ struct RecentLoginRow {
     login_time: Option<i64>,
 }
 
-#[derive(FromRow)]
 struct UserListDbRow {
     user_id: i32,
     name: Option<String>,
@@ -357,6 +356,7 @@ struct UserListDbRow {
     ticket: Option<i32>,
     time_played: Option<i64>,
     password: Option<String>,
+    ban_flag: Option<String>,
 }
 
 #[derive(FromRow)]
@@ -466,6 +466,24 @@ fn format_timestamp(ts: Option<i64>) -> String {
         .single()
         .map(|x| x.format("%Y-%m-%d %H:%M").to_string())
         .unwrap_or_else(|| "-".to_string())
+}
+
+fn is_ban_flag_active(ban_flag: Option<&str>) -> bool {
+    let Some(flag) = ban_flag.map(str::trim).filter(|value| !value.is_empty()) else {
+        return false;
+    };
+    let Some(end_timestamp) = flag
+        .split(':')
+        .nth(1)
+        .and_then(|value| value.parse::<i64>().ok())
+    else {
+        return false;
+    };
+    end_timestamp > Utc::now().timestamp_millis()
+}
+
+fn is_admin_user_banned(password: Option<&str>, ban_flag: Option<&str>) -> bool {
+    password.map(str::is_empty).unwrap_or(true) || is_ban_flag_active(ban_flag)
 }
 
 fn format_rating_input_tenths(value: Option<i32>) -> String {
@@ -1666,33 +1684,60 @@ async fn load_admin_users(
     page: i64,
     page_size: i64,
     pool: &DbPool,
-) -> AdminPageResponse<UserListView> {
+) -> Result<AdminPageResponse<UserListView>, ArcError> {
     let keyword = clean_query_value(q);
     let status = status
         .map(str::trim)
         .filter(|value| matches!(*value, "normal" | "banned"));
 
-    let (filters, binds) = user_filters(keyword.as_deref(), status);
-    let where_sql = filter_sql(&filters);
-    let count_sql = format!("SELECT COUNT(*) FROM user{where_sql}");
-    let total = bind_strings_scalar(sqlx::query_scalar::<_, i64>(&count_sql), &binds)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(0);
+    let like = keyword.as_ref().map(|kw| format!("%{kw}%"));
+    let keyword = keyword.as_deref();
+    let like = like.as_deref();
+    let has_keyword = keyword.is_some();
+    let is_banned_filter = matches!(status, Some("banned"));
+    let is_normal_filter = matches!(status, Some("normal"));
+
+    let total = sqlx::query_scalar!(
+        r#"
+        SELECT COUNT(*) as `count!: i64`
+        FROM user
+        WHERE (? = 0 OR CAST(user_id AS CHAR) = ? OR name LIKE ? OR user_code LIKE ?)
+          AND (? = 0 OR COALESCE(password, '') = '' OR COALESCE(CAST(SUBSTRING_INDEX(NULLIF(ban_flag, ''), ':', -1) AS SIGNED), 0) > UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000)
+          AND (? = 0 OR (COALESCE(password, '') <> '' AND NOT (COALESCE(CAST(SUBSTRING_INDEX(NULLIF(ban_flag, ''), ':', -1) AS SIGNED), 0) > UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000)))
+        "#,
+        has_keyword,
+        keyword,
+        like,
+        like,
+        is_banned_filter,
+        is_normal_filter,
+    )
+    .fetch_one(pool)
+    .await?;
     let (page, offset) = clamp_page(page, page_size, total);
 
-    let row_sql = format!(
-        "SELECT user_id, name, user_code, rating_ptt, ticket, time_played, password
-         FROM user{where_sql}
-         ORDER BY rating_ptt DESC, user_id ASC
-         LIMIT ? OFFSET ?"
-    );
-    let rows = bind_strings_as(sqlx::query_as::<_, UserListDbRow>(&row_sql), &binds)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default()
+    let rows = sqlx::query_as!(
+        UserListDbRow,
+        r#"
+        SELECT user_id, name, user_code, rating_ptt, ticket, time_played, password, ban_flag
+        FROM user
+        WHERE (? = 0 OR CAST(user_id AS CHAR) = ? OR name LIKE ? OR user_code LIKE ?)
+          AND (? = 0 OR COALESCE(password, '') = '' OR COALESCE(CAST(SUBSTRING_INDEX(NULLIF(ban_flag, ''), ':', -1) AS SIGNED), 0) > UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000)
+          AND (? = 0 OR (COALESCE(password, '') <> '' AND NOT (COALESCE(CAST(SUBSTRING_INDEX(NULLIF(ban_flag, ''), ':', -1) AS SIGNED), 0) > UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000)))
+        ORDER BY rating_ptt DESC, user_id ASC
+        LIMIT ? OFFSET ?
+        "#,
+        has_keyword,
+        keyword,
+        like,
+        like,
+        is_banned_filter,
+        is_normal_filter,
+        page_size,
+        offset,
+    )
+    .fetch_all(pool)
+    .await?
         .into_iter()
         .map(|row| UserListView {
             user_id: row.user_id,
@@ -1701,34 +1746,11 @@ async fn load_admin_users(
             rating_ptt: row.rating_ptt.unwrap_or(0),
             ticket: row.ticket.unwrap_or(0),
             last_play: format_timestamp(row.time_played),
-            banned: row.password.unwrap_or_default().is_empty(),
+            banned: is_admin_user_banned(row.password.as_deref(), row.ban_flag.as_deref()),
         })
         .collect();
 
-    page_response(rows, total, page, page_size)
-}
-
-fn user_filters(keyword: Option<&str>, status: Option<&str>) -> (Vec<&'static str>, Vec<String>) {
-    let mut filters = Vec::new();
-    let mut binds = Vec::new();
-    if let Some(kw) = keyword {
-        let like = format!("%{kw}%");
-        filters.push("(name LIKE ? OR user_code LIKE ?)");
-        binds.push(like.clone());
-        binds.push(like);
-    }
-
-    match status {
-        Some("banned") => {
-            filters.push("COALESCE(password, '') = ''");
-        }
-        Some("normal") => {
-            filters.push("COALESCE(password, '') <> ''");
-        }
-        _ => {}
-    }
-
-    (filters, binds)
+    Ok(page_response(rows, total, page, page_size))
 }
 
 async fn load_admin_songs(
@@ -2477,7 +2499,7 @@ pub async fn admin_api_users(
     require_admin_api(cookies)?;
     let (page, page_size) = normalize_page(page, page_size);
     Ok(success_return(
-        load_admin_users(q, status, page, page_size, pool.inner()).await,
+        load_admin_users(q, status, page, page_size, pool.inner()).await?,
     ))
 }
 

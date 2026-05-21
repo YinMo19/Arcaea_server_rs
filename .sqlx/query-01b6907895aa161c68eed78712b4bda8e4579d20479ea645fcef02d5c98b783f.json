@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM present_item WHERE present_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "01b6907895aa161c68eed78712b4bda8e4579d20479ea645fcef02d5c98b783f"
+}

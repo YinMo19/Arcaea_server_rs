@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            INSERT INTO user_char_full (\n                user_id,\n                character_id,\n                level,\n                exp,\n                is_uncapped,\n                is_uncapped_override,\n                skill_flag\n            )\n            SELECT\n                u.user_id,\n                c.character_id,\n                COALESCE(c.max_level, 20) AS level,\n                CASE\n                    WHEN COALESCE(c.max_level, 20) = 30 THEN 25000.0\n                    ELSE 10000.0\n                END AS exp,\n                COALESCE(c.is_uncapped, 0) AS is_uncapped,\n                0 AS is_uncapped_override,\n                0 AS skill_flag\n            FROM user u\n            CROSS JOIN `character` c\n            WHERE TRUE\n            ON DUPLICATE KEY UPDATE\n                level = GREATEST(user_char_full.level, VALUES(level)),\n                exp = GREATEST(user_char_full.exp, VALUES(exp)),\n                is_uncapped = GREATEST(user_char_full.is_uncapped, VALUES(is_uncapped))\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "5930a80b711aa0a96729114082ed296011ca83a81277a4ac2209915954dc6dd2"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                INSERT INTO course_chart (course_id, song_id, difficulty, flag_as_hidden, song_index)\n                VALUES (?, ?, ?, ?, ?)\n                ON DUPLICATE KEY UPDATE\n                    song_id = VALUES(song_id),\n                    difficulty = VALUES(difficulty),\n                    flag_as_hidden = VALUES(flag_as_hidden)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "40cc2ed369fc0183f1621170f0126d85a7d27b01efc0aba587586b7c337b20ac"
+}

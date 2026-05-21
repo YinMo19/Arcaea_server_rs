@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n            INSERT INTO user_kvdata (user_id, class, `key`, idx, value)\n            VALUES (?, 'score', 'world_rank_score_raw', 0, ?)\n            ON DUPLICATE KEY UPDATE value = VALUES(value)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "73223b5897e50593fe6251d191013248eea5690c0bf56a56994c450ace1e7822"
+}
