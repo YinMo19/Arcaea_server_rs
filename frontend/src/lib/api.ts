@@ -19,6 +19,18 @@ export type DashboardData = {
   recentOps: RecentOp[]
 }
 
+export type PageData<T> = {
+  rows: T[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export type PageParams = {
+  page: number
+  pageSize: number
+}
+
 export type RecentOp = {
   name: string
   operator: string
@@ -101,11 +113,6 @@ export type PurchaseItemPayload = {
   amount?: string
 }
 
-export type PurchaseData = {
-  purchases: PurchaseRow[]
-  purchaseItems: PurchaseItemRow[]
-}
-
 export type AdminOperation =
   | 'refresh_song_file_cache'
   | 'refresh_content_bundle_cache'
@@ -132,11 +139,11 @@ async function request<T>(
   return data.value as T
 }
 
-function query(params: Record<string, string | undefined>) {
+function query(params: Record<string, string | number | undefined>) {
   const search = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
-    if (value) {
-      search.set(key, value)
+    if (value !== undefined && value !== '') {
+      search.set(key, String(value))
     }
   }
   const value = search.toString()
@@ -159,9 +166,23 @@ export const adminApi = {
     request<void>(`/web/api/operations/${operation}`, {
       method: 'POST',
     }),
-  users: (q?: string, status?: string) =>
-    request<UserRow[]>(`/web/api/users${query({ q, status })}`),
-  songs: (q?: string) => request<SongRow[]>(`/web/api/songs${query({ q })}`),
+  users: (params: PageParams & { q?: string; status?: string }) =>
+    request<PageData<UserRow>>(
+      `/web/api/users${query({
+        q: params.q,
+        status: params.status,
+        page: params.page,
+        page_size: params.pageSize,
+      })}`,
+    ),
+  songs: (params: PageParams & { q?: string }) =>
+    request<PageData<SongRow>>(
+      `/web/api/songs${query({
+        q: params.q,
+        page: params.page,
+        page_size: params.pageSize,
+      })}`,
+    ),
   createSong: (payload: SongPayload) =>
     request<void>('/web/api/songs', {
       method: 'POST',
@@ -177,7 +198,14 @@ export const adminApi = {
       method: 'DELETE',
       body: JSON.stringify({ sid }),
     }),
-  items: (q?: string) => request<ItemRow[]>(`/web/api/items${query({ q })}`),
+  items: (params: PageParams & { q?: string }) =>
+    request<PageData<ItemRow>>(
+      `/web/api/items${query({
+        q: params.q,
+        page: params.page,
+        page_size: params.pageSize,
+      })}`,
+    ),
   createItem: (payload: ItemPayload) =>
     request<void>('/web/api/items', {
       method: 'POST',
@@ -193,8 +221,14 @@ export const adminApi = {
       method: 'DELETE',
       body: JSON.stringify({ item_id, item_type }),
     }),
-  purchases: (pq?: string, iq?: string) =>
-    request<PurchaseData>(`/web/api/purchases${query({ pq, iq })}`),
+  purchases: (params: PageParams & { pq?: string }) =>
+    request<PageData<PurchaseRow>>(
+      `/web/api/purchases${query({
+        pq: params.pq,
+        page: params.page,
+        page_size: params.pageSize,
+      })}`,
+    ),
   createPurchase: (payload: PurchasePayload) =>
     request<void>('/web/api/purchases', {
       method: 'POST',
@@ -210,6 +244,14 @@ export const adminApi = {
       method: 'DELETE',
       body: JSON.stringify({ purchase_name }),
     }),
+  purchaseItems: (params: PageParams & { iq?: string }) =>
+    request<PageData<PurchaseItemRow>>(
+      `/web/api/purchase-items${query({
+        iq: params.iq,
+        page: params.page,
+        page_size: params.pageSize,
+      })}`,
+    ),
   createPurchaseItem: (payload: PurchaseItemPayload) =>
     request<void>('/web/api/purchase-items', {
       method: 'POST',

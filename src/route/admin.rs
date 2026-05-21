@@ -5,7 +5,7 @@ use rocket::{delete, get, patch, post, routes, Route, State};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::FromRow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::env;
 use std::sync::{OnceLock, RwLock};
 
@@ -188,9 +188,11 @@ pub struct AdminDashboardApiResponse {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AdminPurchaseApiResponse {
-    purchases: Vec<PurchaseRowView>,
-    purchase_items: Vec<PurchaseItemRowView>,
+pub struct AdminPageResponse<T> {
+    rows: Vec<T>,
+    total: i64,
+    page: i64,
+    page_size: i64,
 }
 
 #[derive(FromRow)]
@@ -469,6 +471,60 @@ fn clean_query_value(value: Option<&str>) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+fn normalize_page(page: Option<i64>, page_size: Option<i64>) -> (i64, i64) {
+    let page = page.unwrap_or(1).max(1);
+    let page_size = page_size.unwrap_or(25).clamp(10, 100);
+    (page, page_size)
+}
+
+fn clamp_page(page: i64, page_size: i64, total: i64) -> (i64, i64) {
+    let page_count = ((total.max(1) + page_size - 1) / page_size).max(1);
+    let page = page.clamp(1, page_count);
+    (page, (page - 1) * page_size)
+}
+
+fn page_response<T>(
+    rows: Vec<T>,
+    total: i64,
+    page: i64,
+    page_size: i64,
+) -> AdminPageResponse<T> {
+    AdminPageResponse {
+        rows,
+        total,
+        page,
+        page_size,
+    }
+}
+
+fn filter_sql(filters: &[&str]) -> String {
+    if filters.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", filters.join(" AND "))
+    }
+}
+
+fn bind_strings_scalar<'q, O>(
+    mut query: sqlx::query::QueryScalar<'q, sqlx::MySql, O, sqlx::mysql::MySqlArguments>,
+    values: &'q [String],
+) -> sqlx::query::QueryScalar<'q, sqlx::MySql, O, sqlx::mysql::MySqlArguments> {
+    for value in values {
+        query = query.bind(value);
+    }
+    query
+}
+
+fn bind_strings_as<'q, T>(
+    mut query: sqlx::query::QueryAs<'q, sqlx::MySql, T, sqlx::mysql::MySqlArguments>,
+    values: &'q [String],
+) -> sqlx::query::QueryAs<'q, sqlx::MySql, T, sqlx::mysql::MySqlArguments> {
+    for value in values {
+        query = query.bind(value);
+    }
+    query
+}
+
 fn admin_unauthorized() -> ArcError {
     ArcError::no_access("Admin login required", 401)
 }
@@ -567,95 +623,37 @@ async fn load_dashboard_api(pool: &DbPool) -> AdminDashboardApiResponse {
 async fn load_admin_users(
     q: Option<&str>,
     status: Option<&str>,
+    page: i64,
+    page_size: i64,
     pool: &DbPool,
-) -> Vec<UserListView> {
+) -> AdminPageResponse<UserListView> {
     let keyword = clean_query_value(q);
-    let status = status.map(str::trim);
+    let status = status
+        .map(str::trim)
+        .filter(|value| matches!(*value, "normal" | "banned"));
 
-    let rows = match (keyword.as_deref(), status) {
-        (Some(kw), Some("banned")) => {
-            let like = format!("%{kw}%");
-            sqlx::query_as!(
-                UserListDbRow,
-                "SELECT user_id, name, user_code, rating_ptt, ticket, time_played, password
-                 FROM user
-                 WHERE (name LIKE ? OR user_code LIKE ?) AND COALESCE(password, '') = ''
-                 ORDER BY rating_ptt DESC, user_id ASC
-                 LIMIT 300",
-                &like,
-                &like
-            )
-            .fetch_all(pool)
-            .await
-            .unwrap_or_default()
-        }
-        (Some(kw), Some("normal")) => {
-            let like = format!("%{kw}%");
-            sqlx::query_as!(
-                UserListDbRow,
-                "SELECT user_id, name, user_code, rating_ptt, ticket, time_played, password
-                 FROM user
-                 WHERE (name LIKE ? OR user_code LIKE ?) AND COALESCE(password, '') <> ''
-                 ORDER BY rating_ptt DESC, user_id ASC
-                 LIMIT 300",
-                &like,
-                &like
-            )
-            .fetch_all(pool)
-            .await
-            .unwrap_or_default()
-        }
-        (Some(kw), _) => {
-            let like = format!("%{kw}%");
-            sqlx::query_as!(
-                UserListDbRow,
-                "SELECT user_id, name, user_code, rating_ptt, ticket, time_played, password
-                 FROM user
-                 WHERE (name LIKE ? OR user_code LIKE ?)
-                 ORDER BY rating_ptt DESC, user_id ASC
-                 LIMIT 300",
-                &like,
-                &like
-            )
-            .fetch_all(pool)
-            .await
-            .unwrap_or_default()
-        }
-        (None, Some("banned")) => sqlx::query_as!(
-            UserListDbRow,
-            "SELECT user_id, name, user_code, rating_ptt, ticket, time_played, password
-             FROM user
-             WHERE COALESCE(password, '') = ''
-             ORDER BY rating_ptt DESC, user_id ASC
-             LIMIT 300"
-        )
-        .fetch_all(pool)
+    let (filters, binds) = user_filters(keyword.as_deref(), status);
+    let where_sql = filter_sql(&filters);
+    let count_sql = format!("SELECT COUNT(*) FROM user{where_sql}");
+    let total = bind_strings_scalar(sqlx::query_scalar::<_, i64>(&count_sql), &binds)
+        .fetch_one(pool)
         .await
-        .unwrap_or_default(),
-        (None, Some("normal")) => sqlx::query_as!(
-            UserListDbRow,
-            "SELECT user_id, name, user_code, rating_ptt, ticket, time_played, password
-             FROM user
-             WHERE COALESCE(password, '') <> ''
-             ORDER BY rating_ptt DESC, user_id ASC
-             LIMIT 300"
-        )
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default(),
-        (None, _) => sqlx::query_as!(
-            UserListDbRow,
-            "SELECT user_id, name, user_code, rating_ptt, ticket, time_played, password
-             FROM user
-             ORDER BY rating_ptt DESC, user_id ASC
-             LIMIT 300"
-        )
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default(),
-    };
+        .unwrap_or(0);
+    let (page, offset) = clamp_page(page, page_size, total);
 
-    rows.into_iter()
+    let row_sql = format!(
+        "SELECT user_id, name, user_code, rating_ptt, ticket, time_played, password
+         FROM user{where_sql}
+         ORDER BY rating_ptt DESC, user_id ASC
+         LIMIT ? OFFSET ?"
+    );
+    let rows = bind_strings_as(sqlx::query_as::<_, UserListDbRow>(&row_sql), &binds)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
         .map(|row| UserListView {
             user_id: row.user_id,
             name: row.name.unwrap_or_default(),
@@ -665,135 +663,189 @@ async fn load_admin_users(
             last_play: format_timestamp(row.time_played),
             banned: row.password.unwrap_or_default().is_empty(),
         })
-        .collect()
+        .collect();
+
+    page_response(rows, total, page, page_size)
 }
 
-async fn load_admin_songs(q: Option<&str>, pool: &DbPool) -> Vec<SongRowView> {
-    let query = clean_query_value(q).unwrap_or_default();
+fn user_filters(
+    keyword: Option<&str>,
+    status: Option<&str>,
+) -> (Vec<&'static str>, Vec<String>) {
+    let mut filters = Vec::new();
+    let mut binds = Vec::new();
+    if let Some(kw) = keyword {
+        let like = format!("%{kw}%");
+        filters.push("(name LIKE ? OR user_code LIKE ?)");
+        binds.push(like.clone());
+        binds.push(like);
+    }
 
-    let db_rows = if query.is_empty() {
-        sqlx::query_as!(
-            ChartDbRow,
-            "SELECT song_id, name, rating_pst, rating_prs, rating_ftr, rating_byn, rating_etr
-             FROM chart
-             ORDER BY song_id ASC"
-        )
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default()
-    } else {
-        let like = format!("%{query}%");
-        sqlx::query_as!(
-            ChartDbRow,
-            "SELECT song_id, name, rating_pst, rating_prs, rating_ftr, rating_byn, rating_etr
-             FROM chart
-             WHERE song_id LIKE ? OR name LIKE ?
-             ORDER BY song_id ASC",
-            like,
-            like
-        )
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default()
-    };
+    match status {
+        Some("banned") => {
+            filters.push("COALESCE(password, '') = ''");
+        }
+        Some("normal") => {
+            filters.push("COALESCE(password, '') <> ''");
+        }
+        _ => {}
+    }
 
-    db_rows.into_iter().map(chart_db_row_to_song_view).collect()
+    (filters, binds)
 }
 
-async fn load_admin_items(q: Option<&str>, pool: &DbPool) -> Vec<ItemRowView> {
+async fn load_admin_songs(
+    q: Option<&str>,
+    page: i64,
+    page_size: i64,
+    pool: &DbPool,
+) -> AdminPageResponse<SongRowView> {
     let query = clean_query_value(q).unwrap_or_default();
-
-    let db_rows = if query.is_empty() {
-        sqlx::query_as!(
-            ItemDbRow,
-            "SELECT item_id, type, is_available
-             FROM item
-             ORDER BY type, item_id",
-        )
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default()
+    let (where_sql, binds) = if query.is_empty() {
+        (String::new(), Vec::new())
     } else {
         let like = format!("%{query}%");
-        sqlx::query_as!(
-            ItemDbRow,
-            "SELECT item_id, type, is_available
-             FROM item
-             WHERE item_id LIKE ? OR type LIKE ?
-             ORDER BY type, item_id",
-            like,
-            like
+        (
+            " WHERE song_id LIKE ? OR name LIKE ?".to_string(),
+            vec![like.clone(), like],
         )
+    };
+
+    let count_sql = format!("SELECT COUNT(*) FROM chart{where_sql}");
+    let total = bind_strings_scalar(sqlx::query_scalar::<_, i64>(&count_sql), &binds)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+    let (page, offset) = clamp_page(page, page_size, total);
+
+    let row_sql = format!(
+        "SELECT song_id, name, rating_pst, rating_prs, rating_ftr, rating_byn, rating_etr
+         FROM chart{where_sql}
+         ORDER BY song_id ASC
+         LIMIT ? OFFSET ?"
+    );
+    let rows = bind_strings_as(sqlx::query_as::<_, ChartDbRow>(&row_sql), &binds)
+        .bind(page_size)
+        .bind(offset)
         .fetch_all(pool)
         .await
         .unwrap_or_default()
+        .into_iter()
+        .map(chart_db_row_to_song_view)
+        .collect();
+
+    page_response(rows, total, page, page_size)
+}
+
+async fn load_admin_items(
+    q: Option<&str>,
+    page: i64,
+    page_size: i64,
+    pool: &DbPool,
+) -> AdminPageResponse<ItemRowView> {
+    let query = clean_query_value(q).unwrap_or_default();
+    let (where_sql, binds) = if query.is_empty() {
+        (String::new(), Vec::new())
+    } else {
+        let like = format!("%{query}%");
+        (
+            " WHERE item_id LIKE ? OR type LIKE ?".to_string(),
+            vec![like.clone(), like],
+        )
     };
 
-    db_rows.into_iter().map(item_db_row_to_item_view).collect()
+    let count_sql = format!("SELECT COUNT(*) FROM item{where_sql}");
+    let total = bind_strings_scalar(sqlx::query_scalar::<_, i64>(&count_sql), &binds)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+    let (page, offset) = clamp_page(page, page_size, total);
+
+    let row_sql = format!(
+        "SELECT item_id, type, is_available
+         FROM item{where_sql}
+         ORDER BY type, item_id
+         LIMIT ? OFFSET ?"
+    );
+    let rows = bind_strings_as(sqlx::query_as::<_, ItemDbRow>(&row_sql), &binds)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(item_db_row_to_item_view)
+        .collect();
+
+    page_response(rows, total, page, page_size)
 }
 
 async fn load_admin_purchases(
     pq: Option<&str>,
-    iq: Option<&str>,
+    page: i64,
+    page_size: i64,
     pool: &DbPool,
-) -> AdminPurchaseApiResponse {
+) -> AdminPageResponse<PurchaseRowView> {
     let query_purchase = clean_query_value(pq).unwrap_or_default();
-    let query_purchase_item = clean_query_value(iq).unwrap_or_default();
-
-    let purchase_rows = if query_purchase.is_empty() {
-        sqlx::query_as!(
-            PurchaseDbRow,
-            "SELECT purchase_name, price, orig_price, discount_from, discount_to, discount_reason
-             FROM purchase
-             ORDER BY purchase_name ASC",
-        )
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default()
+    let (where_sql, binds) = if query_purchase.is_empty() {
+        (String::new(), Vec::new())
     } else {
         let like = format!("%{query_purchase}%");
-        sqlx::query_as!(
-            PurchaseDbRow,
-            "SELECT purchase_name, price, orig_price, discount_from, discount_to, discount_reason
-             FROM purchase
-             WHERE purchase_name LIKE ? OR COALESCE(discount_reason, '') LIKE ?
-             ORDER BY purchase_name ASC",
-            like,
-            like
+        (
+            " WHERE purchase_name LIKE ? OR COALESCE(discount_reason, '') LIKE ?".to_string(),
+            vec![like.clone(), like],
         )
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default()
     };
 
-    let all_purchase_item_rows = sqlx::query_as!(
-        PurchaseItemDbRow,
-        "SELECT purchase_name, item_id, type, amount
-         FROM purchase_item
-         ORDER BY purchase_name ASC, item_id ASC, type ASC",
-    )
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default();
+    let count_sql = format!("SELECT COUNT(*) FROM purchase{where_sql}");
+    let total = bind_strings_scalar(sqlx::query_scalar::<_, i64>(&count_sql), &binds)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+    let (page, offset) = clamp_page(page, page_size, total);
 
-    let purchase_names = purchase_rows
-        .iter()
-        .map(|row| row.purchase_name.clone())
-        .collect::<HashSet<_>>();
+    let row_sql = format!(
+        "SELECT purchase_name, price, orig_price, discount_from, discount_to, discount_reason
+         FROM purchase{where_sql}
+         ORDER BY purchase_name ASC
+         LIMIT ? OFFSET ?"
+    );
+    let purchase_rows = bind_strings_as(sqlx::query_as::<_, PurchaseDbRow>(&row_sql), &binds)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
     let mut item_summaries: HashMap<String, Vec<String>> = HashMap::new();
-    for item in &all_purchase_item_rows {
-        if !purchase_names.contains(&item.purchase_name) {
-            continue;
+    if !purchase_rows.is_empty() {
+        let purchase_names = purchase_rows
+            .iter()
+            .map(|row| row.purchase_name.clone())
+            .collect::<Vec<_>>();
+        let placeholders = vec!["?"; purchase_names.len()].join(", ");
+        let item_sql = format!(
+            "SELECT purchase_name, item_id, type, amount
+             FROM purchase_item
+             WHERE purchase_name IN ({placeholders})
+             ORDER BY purchase_name ASC, item_id ASC, type ASC"
+        );
+        let purchase_item_rows =
+            bind_strings_as(sqlx::query_as::<_, PurchaseItemDbRow>(&item_sql), &purchase_names)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
+        for item in purchase_item_rows {
+            item_summaries
+                .entry(item.purchase_name.clone())
+                .or_default()
+                .push(format!(
+                    "{}:{}x{}",
+                    item.item_id,
+                    item.r#type,
+                    item.amount.unwrap_or(1)
+                ));
         }
-        item_summaries
-            .entry(item.purchase_name.clone())
-            .or_default()
-            .push(format!(
-                "{}:{}x{}",
-                item.item_id,
-                item.r#type,
-                item.amount.unwrap_or(1)
-            ));
     }
 
     let purchases = purchase_rows
@@ -807,34 +859,50 @@ async fn load_admin_purchases(
         })
         .collect();
 
-    let purchase_item_rows = if query_purchase_item.is_empty() {
-        all_purchase_item_rows
+    page_response(purchases, total, page, page_size)
+}
+
+async fn load_admin_purchase_items(
+    iq: Option<&str>,
+    page: i64,
+    page_size: i64,
+    pool: &DbPool,
+) -> AdminPageResponse<PurchaseItemRowView> {
+    let query_purchase_item = clean_query_value(iq).unwrap_or_default();
+    let (where_sql, binds) = if query_purchase_item.is_empty() {
+        (String::new(), Vec::new())
     } else {
         let like = format!("%{query_purchase_item}%");
-        sqlx::query_as!(
-            PurchaseItemDbRow,
-            "SELECT purchase_name, item_id, type, amount
-             FROM purchase_item
-             WHERE purchase_name LIKE ? OR item_id LIKE ? OR type LIKE ?
-             ORDER BY purchase_name ASC, item_id ASC, type ASC",
-            like,
-            like,
-            like
+        (
+            " WHERE purchase_name LIKE ? OR item_id LIKE ? OR type LIKE ?".to_string(),
+            vec![like.clone(), like.clone(), like],
         )
+    };
+
+    let count_sql = format!("SELECT COUNT(*) FROM purchase_item{where_sql}");
+    let total = bind_strings_scalar(sqlx::query_scalar::<_, i64>(&count_sql), &binds)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+    let (page, offset) = clamp_page(page, page_size, total);
+
+    let row_sql = format!(
+        "SELECT purchase_name, item_id, type, amount
+         FROM purchase_item{where_sql}
+         ORDER BY purchase_name ASC, item_id ASC, type ASC
+         LIMIT ? OFFSET ?"
+    );
+    let purchase_items = bind_strings_as(sqlx::query_as::<_, PurchaseItemDbRow>(&row_sql), &binds)
+        .bind(page_size)
+        .bind(offset)
         .fetch_all(pool)
         .await
         .unwrap_or_default()
-    };
-
-    let purchase_items = purchase_item_rows
         .into_iter()
         .map(purchase_item_db_row_to_view)
         .collect();
 
-    AdminPurchaseApiResponse {
-        purchases,
-        purchase_items,
-    }
+    page_response(purchase_items, total, page, page_size)
 }
 
 async fn create_song(
@@ -1361,47 +1429,79 @@ pub async fn admin_api_operation(
     }
 }
 
-#[get("/api/users?<q>&<status>")]
+#[get("/api/users?<q>&<status>&<page>&<page_size>")]
 pub async fn admin_api_users(
     q: Option<&str>,
     status: Option<&str>,
+    page: Option<i64>,
+    page_size: Option<i64>,
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
-) -> RouteResult<Vec<UserListView>> {
+) -> RouteResult<AdminPageResponse<UserListView>> {
     require_admin_api(cookies)?;
-    Ok(success_return(load_admin_users(q, status, pool.inner()).await))
+    let (page, page_size) = normalize_page(page, page_size);
+    Ok(success_return(
+        load_admin_users(q, status, page, page_size, pool.inner()).await,
+    ))
 }
 
-#[get("/api/songs?<q>")]
+#[get("/api/songs?<q>&<page>&<page_size>")]
 pub async fn admin_api_songs(
     q: Option<&str>,
+    page: Option<i64>,
+    page_size: Option<i64>,
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
-) -> RouteResult<Vec<SongRowView>> {
+) -> RouteResult<AdminPageResponse<SongRowView>> {
     require_admin_api(cookies)?;
-    Ok(success_return(load_admin_songs(q, pool.inner()).await))
+    let (page, page_size) = normalize_page(page, page_size);
+    Ok(success_return(
+        load_admin_songs(q, page, page_size, pool.inner()).await,
+    ))
 }
 
-#[get("/api/items?<q>")]
+#[get("/api/items?<q>&<page>&<page_size>")]
 pub async fn admin_api_items(
     q: Option<&str>,
+    page: Option<i64>,
+    page_size: Option<i64>,
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
-) -> RouteResult<Vec<ItemRowView>> {
+) -> RouteResult<AdminPageResponse<ItemRowView>> {
     require_admin_api(cookies)?;
-    Ok(success_return(load_admin_items(q, pool.inner()).await))
+    let (page, page_size) = normalize_page(page, page_size);
+    Ok(success_return(
+        load_admin_items(q, page, page_size, pool.inner()).await,
+    ))
 }
 
-#[get("/api/purchases?<pq>&<iq>")]
+#[get("/api/purchases?<pq>&<page>&<page_size>")]
 pub async fn admin_api_purchases(
     pq: Option<&str>,
-    iq: Option<&str>,
+    page: Option<i64>,
+    page_size: Option<i64>,
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
-) -> RouteResult<AdminPurchaseApiResponse> {
+) -> RouteResult<AdminPageResponse<PurchaseRowView>> {
     require_admin_api(cookies)?;
+    let (page, page_size) = normalize_page(page, page_size);
     Ok(success_return(
-        load_admin_purchases(pq, iq, pool.inner()).await,
+        load_admin_purchases(pq, page, page_size, pool.inner()).await,
+    ))
+}
+
+#[get("/api/purchase-items?<iq>&<page>&<page_size>")]
+pub async fn admin_api_purchase_items(
+    iq: Option<&str>,
+    page: Option<i64>,
+    page_size: Option<i64>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> RouteResult<AdminPageResponse<PurchaseItemRowView>> {
+    require_admin_api(cookies)?;
+    let (page, page_size) = normalize_page(page, page_size);
+    Ok(success_return(
+        load_admin_purchase_items(iq, page, page_size, pool.inner()).await,
     ))
 }
 
@@ -1635,6 +1735,7 @@ pub fn routes() -> Vec<Route> {
         admin_api_songs,
         admin_api_items,
         admin_api_purchases,
+        admin_api_purchase_items,
         admin_api_song_create,
         admin_api_song_update,
         admin_api_song_delete,
