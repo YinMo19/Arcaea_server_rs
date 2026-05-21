@@ -864,6 +864,12 @@ function PlayerScoresView({ isAdmin }: { isAdmin: boolean }) {
   const [scores, setScores] = useState<AdminUserScores>()
   const [action, setAction] = useState<ActionState>(emptyAction)
   const [loading, setLoading] = useState(false)
+  const best30Average = scores?.b30.length
+    ? scores.stats.best30Sum / scores.b30.length
+    : 0
+  const recent10Average = scores?.r10.length
+    ? scores.stats.recent10Sum / scores.r10.length
+    : 0
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -915,8 +921,8 @@ function PlayerScoresView({ isAdmin }: { isAdmin: boolean }) {
               {scores.user.userCode || '-'}
             </span>
             <Badge variant="secondary">PTT {scores.stats.potential.toFixed(4)}</Badge>
-            <Badge variant="outline">B30 {scores.stats.best30Sum.toFixed(4)}</Badge>
-            <Badge variant="outline">R10 {scores.stats.recent10Sum.toFixed(4)}</Badge>
+            <Badge variant="outline">B30 Avg {best30Average.toFixed(4)}</Badge>
+            <Badge variant="outline">R10 Avg {recent10Average.toFixed(4)}</Badge>
           </div>
           <div className="grid min-h-0 gap-3 xl:grid-cols-2">
             <ScoreSection title="B30" scores={scores.b30} />
