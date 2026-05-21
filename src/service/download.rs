@@ -10,7 +10,7 @@ use crate::service::asset_manager::AssetManager;
 use crate::service::cache::{env_ttl_seconds, CacheService};
 use base64::Engine as _;
 use sqlx::MySqlPool;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -298,6 +298,7 @@ impl DownloadService {
 
         let mut download_songs = HashMap::new();
         let mut download_tokens = Vec::new();
+        let available_song_ids: HashSet<String> = self.get_all_song_ids().into_iter().collect();
 
         // Clear expired tokens before generating new ones
         if include_urls && s3_storage.is_none() {
@@ -305,8 +306,7 @@ impl DownloadService {
         }
 
         for song_id in target_song_ids {
-            // Check if song directory exists
-            if !self.song_exists(&song_id) {
+            if !available_song_ids.contains(&song_id) {
                 continue;
             }
 
@@ -444,12 +444,6 @@ impl DownloadService {
     /// Get user's unlocked songs using asset manager
     pub fn get_user_unlocks(&self, user: &UserInfo) -> std::collections::HashSet<String> {
         self.asset_manager.get_user_unlocks(user)
-    }
-
-    /// Check if a song directory exists
-    fn song_exists(&self, song_id: &str) -> bool {
-        let all_songs = self.get_all_song_ids();
-        all_songs.contains(&song_id.to_string())
     }
 
     /// Initialize song data cache (equivalent to Python's initialize_cache)
