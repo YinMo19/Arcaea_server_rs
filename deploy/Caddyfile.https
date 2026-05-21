@@ -1,0 +1,29 @@
+{
+	admin off
+	email {$ACME_EMAIL}
+}
+
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	redir /web /web/ 308
+
+	handle /web/api/* {
+		reverse_proxy {$BACKEND_UPSTREAM:app:8090}
+	}
+
+	handle /web/assets/* {
+		root * /srv
+		file_server
+	}
+
+	handle_path /web/* {
+		root * /srv/web
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+
+	handle {
+		reverse_proxy {$BACKEND_UPSTREAM:app:8090}
+	}
+}

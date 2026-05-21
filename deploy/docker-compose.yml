@@ -1,0 +1,178 @@
+name: arcaea-server-rs
+
+x-app-build: &app-build
+  context: ..
+  dockerfile: deploy/Dockerfile
+  target: app
+
+x-app-environment: &app-environment
+  DATABASE_URL: mysql://${MARIADB_USER:-arcaea}:${MARIADB_PASSWORD:-arcaea_password}@db:3306/${MARIADB_DATABASE:-arcaea_core}
+  DB_HOST: db
+  DB_PORT: 3306
+  DB_MAX_CONNECTIONS: ${DB_MAX_CONNECTIONS:-20}
+  DB_MIN_CONNECTIONS: ${DB_MIN_CONNECTIONS:-1}
+  REDIS_URL: redis://redis:6379/0
+  REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-arcaea}
+  RUST_LOG: ${RUST_LOG:-info}
+  ROCKET_ADDRESS: 0.0.0.0
+  ROCKET_PORT: 8090
+  ASSET_DIR: /app/assets
+  ARC_DATA_FILE: /app/assets/arc_data.json
+  STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+  ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+  USERNAME: ${SERVER_USERNAME:-admin}
+  PASSWORD: ${SERVER_PASSWORD:-admin}
+  SECRET_KEY: ${SECRET_KEY:-change-me}
+  API_TOKEN: ${API_TOKEN:-}
+  DOWNLOAD_LINK_PREFIX: ${DOWNLOAD_LINK_PREFIX:-}
+  BUNDLE_DOWNLOAD_LINK_PREFIX: ${BUNDLE_DOWNLOAD_LINK_PREFIX:-null}
+  LINKPLAY_HOST: linkplayd
+  LINKPLAY_UDP_PORT: ${LINKPLAY_UDP_PORT:-10900}
+  LINKPLAY_TCP_PORT: ${LINKPLAY_TCP_PORT:-10901}
+  LINKPLAY_DISPLAY_HOST: ${LINKPLAY_DISPLAY_HOST:-127.0.0.1}
+  LINKPLAY_DISPLAY_PORT: ${LINKPLAY_DISPLAY_PORT:-10900}
+  LINKPLAY_AUTHENTICATION: ${LINKPLAY_AUTHENTICATION:-my_link_play_server}
+  LINKPLAY_TCP_SECRET_KEY: ${LINKPLAY_TCP_SECRET_KEY:-change-me}
+  S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_BUCKET: ${S3_BUCKET:-arcaea-assets}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-minioadmin}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-minioadmin}
+  S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+  S3_MANIFEST_KEY: ${S3_MANIFEST_KEY:-manifest.json}
+  S3_PRESIGN_EXPIRES_SECONDS: ${S3_PRESIGN_EXPIRES_SECONDS:-3600}
+  S3_METADATA_SYNC_INTERVAL_SECONDS: ${S3_METADATA_SYNC_INTERVAL_SECONDS:-180}
+  RUN_DB_INIT: ${RUN_DB_INIT:-true}
+
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-arcaea_root_password}
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-arcaea_core}
+      MARIADB_USER: ${MARIADB_USER:-arcaea}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-arcaea_password}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max-connections=300
+    ports:
+      - "127.0.0.1:${MARIADB_PUBLISHED_PORT:-3306}:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u$${MARIADB_USER} -p$${MARIADB_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  app:
+    image: arcaea-server-rs:local
+    build: *app-build
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      linkplayd:
+        condition: service_started
+    environment: *app-environment
+    volumes:
+      - ../assets:/app/assets:ro
+      - ../songs:/app/songs:ro
+      - ../bundles:/app/bundles:ro
+    expose:
+      - "8090"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  linkplayd:
+    image: arcaea-server-rs:local
+    build: *app-build
+    restart: unless-stopped
+    command: ["linkplayd"]
+    environment:
+      RUST_LOG: ${RUST_LOG:-info}
+      LINKPLAY_HOST: 0.0.0.0
+      LINKPLAY_UDP_PORT: ${LINKPLAY_UDP_PORT:-10900}
+      LINKPLAY_TCP_PORT: ${LINKPLAY_TCP_PORT:-10901}
+      LINKPLAY_AUTHENTICATION: ${LINKPLAY_AUTHENTICATION:-my_link_play_server}
+      LINKPLAY_TCP_SECRET_KEY: ${LINKPLAY_TCP_SECRET_KEY:-change-me}
+      LINKPLAY_UNLOCK_LENGTH: ${LINKPLAY_UNLOCK_LENGTH:-1024}
+    ports:
+      - "${LINKPLAY_UDP_PUBLISHED_PORT:-10900}:${LINKPLAY_UDP_PORT:-10900}/udp"
+      - "127.0.0.1:${LINKPLAY_TCP_PUBLISHED_PORT:-10901}:${LINKPLAY_TCP_PORT:-10901}/tcp"
+
+  caddy:
+    image: arcaea-server-rs-caddy:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: ${CADDY_BUILD_TARGET:-caddy}
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      BACKEND_UPSTREAM: app:8090
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+
+  minio:
+    image: minio/minio:${MINIO_TAG:-latest}
+    profiles: ["s3"]
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+
+  s3-sync:
+    image: arcaea-server-rs:local
+    profiles: ["s3"]
+    build: *app-build
+    command: ["sync-s3", "sync"]
+    depends_on:
+      minio:
+        condition: service_started
+    environment:
+      <<: *app-environment
+      WAIT_FOR_S3: "true"
+      S3_WAIT_HOST: minio
+      S3_WAIT_PORT: 9000
+      S3_SYNC_SONGS_DIR: /app/songs
+      S3_SYNC_BUNDLES_DIR: /app/bundles
+      S3_SYNC_SKIP_CREATE_BUCKET: ${S3_SYNC_SKIP_CREATE_BUCKET:-false}
+    volumes:
+      - ../songs:/app/songs:ro
+      - ../bundles:/app/bundles:ro
+    restart: "no"
+
+volumes:
+  mariadb-data:
+  redis-data:
+  minio-data:

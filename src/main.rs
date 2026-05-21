@@ -77,10 +77,8 @@ async fn init_services(
             }
         });
 
-    let bundle_download_link_prefix = env::var("BUNDLE_DOWNLOAD_LINK_PREFIX")
-        .ok()
-        .filter(|s| !s.trim().is_empty())
-        .or_else(|| config::CONFIG.bundle_download_link_prefix.clone());
+    let bundle_download_link_prefix = env_optional_string("BUNDLE_DOWNLOAD_LINK_PREFIX")
+        .unwrap_or_else(|| config::CONFIG.bundle_download_link_prefix.clone());
 
     // Initialize AssetManager with proper paths
     let asset_manager = std::sync::Arc::new(
@@ -208,6 +206,19 @@ fn s3_metadata_sync_interval() -> Duration {
         .unwrap_or(DEFAULT_S3_METADATA_SYNC_INTERVAL_SECONDS);
 
     Duration::from_secs(seconds)
+}
+
+fn env_optional_string(key: &str) -> Option<Option<String>> {
+    let value = env::var(key).ok()?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    match trimmed.to_ascii_lowercase().as_str() {
+        "none" | "null" => Some(None),
+        _ => Some(Some(trimmed.to_string())),
+    }
 }
 
 fn spawn_s3_metadata_sync(bundle_service: BundleService, interval: Duration) {
