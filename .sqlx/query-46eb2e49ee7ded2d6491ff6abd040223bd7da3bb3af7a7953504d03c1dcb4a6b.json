@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user u\n                 LEFT JOIN (\n                     SELECT user_id, SUM(COALESCE(rating, 0)) AS best_30_sum\n                     FROM (\n                         SELECT user_id, rating,\n                                ROW_NUMBER() OVER (\n                                    PARTITION BY user_id\n                                    ORDER BY COALESCE(rating, 0) DESC\n                                ) AS rn\n                         FROM best_score\n                     ) ranked_best\n                     WHERE rn <= 30\n                     GROUP BY user_id\n                 ) b30 ON b30.user_id = u.user_id\n                 LEFT JOIN (\n                     SELECT user_id, SUM(rating) AS recent_10_sum\n                     FROM (\n                         SELECT user_id, rating,\n                                ROW_NUMBER() OVER (\n                                    PARTITION BY user_id\n                                    ORDER BY rating DESC\n                                ) AS rn\n                         FROM (\n                             SELECT user_id, song_id, difficulty, MAX(COALESCE(rating, 0)) AS rating\n                             FROM recent30\n                             WHERE song_id != ''\n                             GROUP BY user_id, song_id, difficulty\n                         ) recent_max\n                     ) ranked_recent\n                     WHERE rn <= 10\n                     GROUP BY user_id\n                 ) r10 ON r10.user_id = u.user_id\n                 SET u.rating_ptt = FLOOR(\n                     (\n                         COALESCE(b30.best_30_sum, 0) * ?\n                         + COALESCE(r10.recent_10_sum, 0) * ?\n                     ) * 100\n                 )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "46eb2e49ee7ded2d6491ff6abd040223bd7da3bb3af7a7953504d03c1dcb4a6b"
+}

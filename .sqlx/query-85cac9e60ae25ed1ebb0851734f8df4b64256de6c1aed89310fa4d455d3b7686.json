@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "WITH filtered_data AS (\n            SELECT *\n            FROM best_score\n            WHERE near_count = 0 AND miss_count = 0 AND user_id = ?\n         ),\n         ranked_data AS (\n            SELECT *,\n                   ROW_NUMBER() OVER (\n                       PARTITION BY song_id, difficulty\n                       ORDER BY score DESC\n                   ) AS score_rank\n            FROM filtered_data\n         )\n         SELECT\n            COALESCE(song_id, '') as `song_id!: String`,\n            COALESCE(difficulty, 0) as `difficulty!: i32`,\n            COALESCE(score, 0) as `score!: i32`,\n            COALESCE(shiny_perfect_count, 0) as `shiny_perfect_count!: i32`,\n            COALESCE(perfect_count, 0) as `perfect_count!: i32`,\n            COALESCE(near_count, 0) as `near_count!: i32`,\n            COALESCE(miss_count, 0) as `miss_count!: i32`,\n            COALESCE(time_played, 0) as `time_played!: i64`,\n            COALESCE(clear_type, 0) as `clear_type!: i32`,\n            COALESCE(rating, 0) as `rating!: f64`\n         FROM ranked_data\n         WHERE score_rank = 1\n         ORDER BY rating DESC, score DESC\n         LIMIT 30",
+  "query": "WITH filtered_data AS (\n            SELECT *\n            FROM best_score\n            WHERE near_count = 0 AND miss_count = 0 AND user_id = ?\n         ),\n         ranked_data AS (\n            SELECT *,\n                   ROW_NUMBER() OVER (\n                       PARTITION BY song_id, difficulty\n                       ORDER BY score DESC\n                   ) AS score_rank\n            FROM filtered_data\n         )\n         SELECT\n            COALESCE(song_id, '') as `song_id!: String`,\n            COALESCE(difficulty, 0) as `difficulty!: i32`,\n            COALESCE(score, 0) as `score!: i32`,\n            COALESCE(shiny_perfect_count, 0) as `shiny_perfect_count!: i32`,\n            COALESCE(perfect_count, 0) as `perfect_count!: i32`,\n            COALESCE(near_count, 0) as `near_count!: i32`,\n            COALESCE(miss_count, 0) as `miss_count!: i32`,\n            COALESCE(time_played, 0) as `time_played!: i64`,\n            COALESCE(rating, 0) as `rating!: f64`\n         FROM ranked_data\n         WHERE score_rank = 1\n         ORDER BY rating DESC, score DESC\n         LIMIT 30",
   "describe": {
     "columns": [
       {
@@ -77,15 +77,6 @@
       },
       {
         "ordinal": 8,
-        "name": "clear_type!: i32",
-        "type_info": {
-          "type": "Long",
-          "flags": "NOT_NULL | BINARY",
-          "max_size": 11
-        }
-      },
-      {
-        "ordinal": 9,
         "name": "rating!: f64",
         "type_info": {
           "type": "Double",
@@ -106,9 +97,8 @@
       false,
       false,
       false,
-      false,
       false
     ]
   },
-  "hash": "983275e8d6850834689a8739978e1b7648c0c21bf7e017c843e5ca47bb304d3c"
+  "hash": "85cac9e60ae25ed1ebb0851734f8df4b64256de6c1aed89310fa4d455d3b7686"
 }

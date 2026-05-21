@@ -3,6 +3,7 @@
 //! This module provides operations for refreshing various caches and performing
 //! maintenance tasks, similar to the Python implementation's operation.py.
 
+use crate::config::CONFIG;
 use crate::error::{ArcError, ArcResult};
 use crate::service::asset_manager::AssetManager;
 use crate::service::bundle::BundleService;
@@ -250,6 +251,56 @@ impl Operation for RefreshAllScoreRating {
             )
             .execute(&self.pool)
             .await?;
+
+            let user_rating_result = sqlx::query!(
+                "UPDATE user u
+                 LEFT JOIN (
+                     SELECT user_id, SUM(COALESCE(rating, 0)) AS best_30_sum
+                     FROM (
+                         SELECT user_id, rating,
+                                ROW_NUMBER() OVER (
+                                    PARTITION BY user_id
+                                    ORDER BY COALESCE(rating, 0) DESC
+                                ) AS rn
+                         FROM best_score
+                     ) ranked_best
+                     WHERE rn <= 30
+                     GROUP BY user_id
+                 ) b30 ON b30.user_id = u.user_id
+                 LEFT JOIN (
+                     SELECT user_id, SUM(rating) AS recent_10_sum
+                     FROM (
+                         SELECT user_id, rating,
+                                ROW_NUMBER() OVER (
+                                    PARTITION BY user_id
+                                    ORDER BY rating DESC
+                                ) AS rn
+                         FROM (
+                             SELECT user_id, song_id, difficulty, MAX(COALESCE(rating, 0)) AS rating
+                             FROM recent30
+                             WHERE song_id != ''
+                             GROUP BY user_id, song_id, difficulty
+                         ) recent_max
+                     ) ranked_recent
+                     WHERE rn <= 10
+                     GROUP BY user_id
+                 ) r10 ON r10.user_id = u.user_id
+                 SET u.rating_ptt = FLOOR(
+                     (
+                         COALESCE(b30.best_30_sum, 0) * ?
+                         + COALESCE(r10.recent_10_sum, 0) * ?
+                     ) * 100
+                 )",
+                CONFIG.best30_weight,
+                CONFIG.recent10_weight
+            )
+            .execute(&self.pool)
+            .await?;
+
+            log::info!(
+                "User rating_ptt refresh completed, changed rows: {}",
+                user_rating_result.rows_affected()
+            );
         }
 
         log::info!("All score rating refresh completed");

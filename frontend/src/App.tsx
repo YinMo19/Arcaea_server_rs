@@ -3006,7 +3006,17 @@ function ScoreResultsTable({
 
   return (
     <div className="min-h-0 overflow-auto rounded-md border">
-      <Table>
+      <Table className={cn('table-fixed', showUser ? 'min-w-[920px]' : 'min-w-[780px]')}>
+        <colgroup>
+          {showUser && <col className="w-[14%]" />}
+          <col className={showUser ? 'w-[22%]' : 'w-[30%]'} />
+          <col className="w-[8%]" />
+          <col className="w-[14%]" />
+          <col className="w-[16%]" />
+          <col className="w-[8%]" />
+          <col className="w-[11%]" />
+          <col className={showUser ? 'w-[7%]' : 'w-[13%]'} />
+        </colgroup>
         <TableHeader>
           <TableRow>
             {showUser && <TableHead>User</TableHead>}
@@ -3030,23 +3040,33 @@ function ScoreResultsTable({
                   <div className="font-mono text-xs text-muted-foreground">
                     {score.userId}
                   </div>
-                </TableCell>
+              </TableCell>
               )}
-              <TableCell className="font-mono">{score.songId}</TableCell>
-              <TableCell>{difficultyLabel(score.difficulty)}</TableCell>
-              <TableCell className="font-mono">
+              <TableCell className="min-w-0 font-mono">
+                <span className="score-song-id" title={score.songId}>
+                  {score.songId}
+                </span>
+              </TableCell>
+              <TableCell className="whitespace-nowrap">
+                {difficultyLabel(score.difficulty)}
+              </TableCell>
+              <TableCell className="whitespace-nowrap font-mono">
                 {score.score.toLocaleString()}
               </TableCell>
-              <TableCell className="font-mono text-xs">
+              <TableCell className="whitespace-nowrap font-mono text-xs">
                 {score.shinyPerfectCount}/
                 {Math.max(score.perfectCount - score.shinyPerfectCount, 0)}/
                 {score.nearCount}/{score.missCount}
               </TableCell>
-              <TableCell>
+              <TableCell className="whitespace-nowrap">
                 {score.clearType}/{score.bestClearType}
               </TableCell>
-              <TableCell>{score.rating.toFixed(4)}</TableCell>
-              <TableCell>{score.timePlayed}</TableCell>
+              <TableCell className="whitespace-nowrap font-mono">
+                {score.rating.toFixed(4)}
+              </TableCell>
+              <TableCell className="whitespace-nowrap font-mono">
+                {score.timePlayed}
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>

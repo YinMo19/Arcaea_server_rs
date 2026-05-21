@@ -76,3 +76,12 @@ input,
 select {
   font: inherit;
 }
+
+.score-song-id {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}

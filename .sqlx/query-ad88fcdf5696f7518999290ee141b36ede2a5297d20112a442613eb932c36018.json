@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "WITH ranked_songs AS (\n                    SELECT r.*,\n                           ROW_NUMBER() OVER (\n                               PARTITION BY r.song_id\n                               ORDER BY r.rating DESC, r.score DESC\n                           ) AS song_rank\n                    FROM recent30 r\n                    WHERE r.user_id = ? AND r.song_id != ''\n                 )\n                 SELECT\n                    COALESCE(song_id, '') as `song_id!: String`,\n                    COALESCE(difficulty, 0) as `difficulty!: i32`,\n                    COALESCE(score, 0) as `score!: i32`,\n                    COALESCE(shiny_perfect_count, 0) as `shiny_perfect_count!: i32`,\n                    COALESCE(perfect_count, 0) as `perfect_count!: i32`,\n                    COALESCE(near_count, 0) as `near_count!: i32`,\n                    COALESCE(miss_count, 0) as `miss_count!: i32`,\n                    COALESCE(time_played, 0) as `time_played!: i64`,\n                    COALESCE(clear_type, 0) as `clear_type!: i32`,\n                    COALESCE(rating, 0) as `rating!: f64`\n                 FROM ranked_songs\n                 WHERE song_rank = 1\n                 ORDER BY rating DESC, score DESC\n                 LIMIT 10",
+  "query": "WITH ranked_songs AS (\n                    SELECT r.*,\n                           ROW_NUMBER() OVER (\n                               PARTITION BY r.song_id\n                               ORDER BY r.rating DESC, r.score DESC\n                           ) AS song_rank\n                    FROM recent30 r\n                    WHERE r.user_id = ? AND r.song_id != ''\n                 )\n                 SELECT\n                    COALESCE(song_id, '') as `song_id!: String`,\n                    COALESCE(difficulty, 0) as `difficulty!: i32`,\n                    COALESCE(score, 0) as `score!: i32`,\n                    COALESCE(shiny_perfect_count, 0) as `shiny_perfect_count!: i32`,\n                    COALESCE(perfect_count, 0) as `perfect_count!: i32`,\n                    COALESCE(near_count, 0) as `near_count!: i32`,\n                    COALESCE(miss_count, 0) as `miss_count!: i32`,\n                    COALESCE(time_played, 0) as `time_played!: i64`,\n                    COALESCE(rating, 0) as `rating!: f64`\n                 FROM ranked_songs\n                 WHERE song_rank = 1\n                 ORDER BY rating DESC, score DESC\n                 LIMIT 10",
   "describe": {
     "columns": [
       {
@@ -77,15 +77,6 @@
       },
       {
         "ordinal": 8,
-        "name": "clear_type!: i32",
-        "type_info": {
-          "type": "Long",
-          "flags": "NOT_NULL | BINARY",
-          "max_size": 11
-        }
-      },
-      {
-        "ordinal": 9,
         "name": "rating!: f64",
         "type_info": {
           "type": "Double",
@@ -106,9 +97,8 @@
       false,
       false,
       false,
-      false,
       false
     ]
   },
-  "hash": "6c7b67d7aaaec2c45e9b749782872b6bdafb96c6f958e7e4a3249585c8eb8d3a"
+  "hash": "ad88fcdf5696f7518999290ee141b36ede2a5297d20112a442613eb932c36018"
 }

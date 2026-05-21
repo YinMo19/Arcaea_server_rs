@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT\n                    COALESCE(song_id, '') as `song_id!: String`,\n                    COALESCE(difficulty, 0) as `difficulty!: i32`,\n                    COALESCE(score, 0) as `score!: i32`,\n                    COALESCE(shiny_perfect_count, 0) as `shiny_perfect_count!: i32`,\n                    COALESCE(perfect_count, 0) as `perfect_count!: i32`,\n                    COALESCE(near_count, 0) as `near_count!: i32`,\n                    COALESCE(miss_count, 0) as `miss_count!: i32`,\n                    COALESCE(time_played, 0) as `time_played!: i64`,\n                    COALESCE(clear_type, 0) as `clear_type!: i32`,\n                    COALESCE(rating, 0) as `rating!: f64`\n                 FROM best_score\n                 WHERE user_id = ?\n                 ORDER BY rating DESC, score DESC\n                 LIMIT 30",
+  "query": "WITH filtered_data AS (\n            SELECT *\n            FROM best_score\n            WHERE ((near_count = 0 AND miss_count = 1) OR (near_count = 1 AND miss_count = 0))\n              AND user_id = ?\n         ),\n         ranked_data AS (\n            SELECT *,\n                   ROW_NUMBER() OVER (\n                       PARTITION BY song_id, difficulty\n                       ORDER BY score DESC\n                   ) AS score_rank\n            FROM filtered_data\n         )\n         SELECT\n            COALESCE(song_id, '') as `song_id!: String`,\n            COALESCE(difficulty, 0) as `difficulty!: i32`,\n            COALESCE(score, 0) as `score!: i32`,\n            COALESCE(shiny_perfect_count, 0) as `shiny_perfect_count!: i32`,\n            COALESCE(perfect_count, 0) as `perfect_count!: i32`,\n            COALESCE(near_count, 0) as `near_count!: i32`,\n            COALESCE(miss_count, 0) as `miss_count!: i32`,\n            COALESCE(time_played, 0) as `time_played!: i64`,\n            COALESCE(rating, 0) as `rating!: f64`\n         FROM ranked_data\n         WHERE score_rank = 1\n         ORDER BY rating DESC, score DESC\n         LIMIT 30",
   "describe": {
     "columns": [
       {
@@ -77,15 +77,6 @@
       },
       {
         "ordinal": 8,
-        "name": "clear_type!: i32",
-        "type_info": {
-          "type": "Long",
-          "flags": "NOT_NULL | BINARY",
-          "max_size": 11
-        }
-      },
-      {
-        "ordinal": 9,
         "name": "rating!: f64",
         "type_info": {
           "type": "Double",
@@ -106,9 +97,8 @@
       false,
       false,
       false,
-      false,
       false
     ]
   },
-  "hash": "c15f90446b654a58dd82b0ce588f5d7c37adc6d9bf1b70e6a64f6a0b6d1694f5"
+  "hash": "8b200f06f801043369437cb962ec92d5c7125f3d2f9e4555ba171208965bf37e"
 }
