@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: oklch(0.985 0.004 245);
+  --foreground: oklch(0.18 0.018 252);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.018 252);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.018 252);
+  --primary: oklch(0.42 0.12 252);
+  --primary-foreground: oklch(0.985 0.004 245);
+  --secondary: oklch(0.94 0.012 245);
+  --secondary-foreground: oklch(0.22 0.018 252);
+  --muted: oklch(0.95 0.009 245);
+  --muted-foreground: oklch(0.48 0.023 252);
+  --accent: oklch(0.93 0.018 210);
+  --accent-foreground: oklch(0.22 0.02 245);
+  --destructive: oklch(0.58 0.2 27);
+  --destructive-foreground: oklch(0.985 0.004 245);
+  --border: oklch(0.88 0.012 245);
+  --input: oklch(0.88 0.012 245);
+  --ring: oklch(0.54 0.12 252);
+  --sidebar: oklch(0.965 0.007 245);
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100svh;
+  background: var(--background);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  letter-spacing: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}

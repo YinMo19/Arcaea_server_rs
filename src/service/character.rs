@@ -1,8 +1,7 @@
 use crate::config::{Constants, CONFIG};
 use crate::error::{ArcError, ArcResult};
 use crate::model::{
-    Character, CharacterValue, CoreItem, Level, Skill, UpdateCharacter, UserCharacter,
-    UserCharacterInfo,
+    Character, CharacterValue, CoreItem, Level, Skill, UserCharacter, UserCharacterInfo,
 };
 use crate::service::arc_data::load_arc_data_from_file;
 use serde_json::{json, Value};
@@ -1228,42 +1227,49 @@ impl CharacterService {
     /// Update `user_char_full` from `character` without clearing existing rows.
     /// Missing rows are inserted; existing rows are upgraded only when target values are higher.
     pub async fn update_user_char_full(&self) -> ArcResult<()> {
-        let characters = sqlx::query_as!(
-            UpdateCharacter,
-            "SELECT character_id, max_level, is_uncapped FROM `character`"
+        let started_at = std::time::Instant::now();
+        log::info!("Updating user_char_full from character definitions...");
+
+        let result = sqlx::query!(
+            r#"
+            INSERT INTO user_char_full (
+                user_id,
+                character_id,
+                level,
+                exp,
+                is_uncapped,
+                is_uncapped_override,
+                skill_flag
+            )
+            SELECT
+                u.user_id,
+                c.character_id,
+                COALESCE(c.max_level, 20) AS level,
+                CASE
+                    WHEN COALESCE(c.max_level, 20) = 30 THEN 25000.0
+                    ELSE 10000.0
+                END AS exp,
+                COALESCE(c.is_uncapped, 0) AS is_uncapped,
+                0 AS is_uncapped_override,
+                0 AS skill_flag
+            FROM user u
+            CROSS JOIN `character` c
+            WHERE TRUE
+            ON DUPLICATE KEY UPDATE
+                level = GREATEST(user_char_full.level, VALUES(level)),
+                exp = GREATEST(user_char_full.exp, VALUES(exp)),
+                is_uncapped = GREATEST(user_char_full.is_uncapped, VALUES(is_uncapped))
+            "#
         )
-        .fetch_all(&self.pool)
+        .execute(&self.pool)
         .await?;
-        let user_ids = sqlx::query_scalar!("SELECT user_id FROM user")
-            .fetch_all(&self.pool)
-            .await?;
 
-        for user_id in user_ids {
-            for character in &characters {
-                let level = character.max_level.unwrap_or(20);
-                let exp = if level == 30 { 25000.0 } else { 10000.0 };
-                let is_uncapped = character.is_uncapped.unwrap_or(0);
+        log::info!(
+            "user_char_full update completed in {:?}, affected rows: {}",
+            started_at.elapsed(),
+            result.rows_affected()
+        );
 
-                sqlx::query!(
-                    r#"
-                    INSERT INTO user_char_full (
-                        user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag
-                    ) VALUES (?, ?, ?, ?, ?, 0, 0)
-                    ON DUPLICATE KEY UPDATE
-                        level = GREATEST(level, VALUES(level)),
-                        exp = GREATEST(exp, VALUES(exp)),
-                        is_uncapped = GREATEST(is_uncapped, VALUES(is_uncapped))
-                    "#,
-                    user_id,
-                    character.character_id,
-                    level,
-                    exp,
-                    is_uncapped
-                )
-                .execute(&self.pool)
-                .await?;
-            }
-        }
         Ok(())
     }
 }
