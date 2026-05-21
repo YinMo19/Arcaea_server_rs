@@ -1811,7 +1811,7 @@ function SongsView() {
                 <TableHead>FTR</TableHead>
                 <TableHead>BYD</TableHead>
                 <TableHead>ETR</TableHead>
-                <TableHead>操作</TableHead>
+                <TableHead className="w-0 text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1865,8 +1865,8 @@ function SongsView() {
                     <TableCell>{row.ratingFtr}</TableCell>
                     <TableCell>{row.ratingByd}</TableCell>
                     <TableCell>{row.ratingEtr}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
+                    <TableCell className="w-0 whitespace-nowrap">
+                      <div className="flex justify-end gap-2">
                         <Button type="button" size="sm" variant="outline" onClick={() => edit(row)}>
                           <Pencil />
                           编辑
@@ -2046,7 +2046,7 @@ function ItemsView() {
                 <TableHead>Item ID</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>可用</TableHead>
-                <TableHead>操作</TableHead>
+                <TableHead className="w-0 text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -2097,8 +2097,8 @@ function ItemsView() {
                           {row.isAvailable ? 'Yes' : 'No'}
                         </Badge>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
+                      <TableCell className="w-0 whitespace-nowrap">
+                        <div className="flex justify-end gap-2">
                           <Button type="button" size="sm" variant="outline" onClick={() => edit(row)}>
                             <Pencil />
                             编辑
@@ -2307,7 +2307,7 @@ function PurchasesView() {
                   <TableHead>Orig</TableHead>
                   <TableHead>Discount</TableHead>
                   <TableHead>Items</TableHead>
-                  <TableHead>操作</TableHead>
+                  <TableHead className="w-0 text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -2372,8 +2372,8 @@ function PurchasesView() {
                       <TableCell className="max-w-xl truncate" title={row.itemSummary}>
                         {row.itemSummary}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
+                      <TableCell className="w-0 whitespace-nowrap">
+                        <div className="flex justify-end gap-2">
                           <Button type="button" size="sm" variant="outline" onClick={() => editPurchase(row)}>
                             <Pencil />
                             编辑
@@ -2573,7 +2573,7 @@ function PurchaseItemsView() {
                 <TableHead>Item</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Amount</TableHead>
-                <TableHead>操作</TableHead>
+                <TableHead className="w-0 text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -2618,8 +2618,8 @@ function PurchaseItemsView() {
                       <TableCell>{row.itemId}</TableCell>
                       <TableCell>{row.itemType}</TableCell>
                       <TableCell>{row.amount}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
+                      <TableCell className="w-0 whitespace-nowrap">
+                        <div className="flex justify-end gap-2">
                           <Button type="button" size="sm" variant="outline" onClick={() => editPurchaseItem(row)}>
                             <Pencil />
                             编辑
