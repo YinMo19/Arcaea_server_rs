@@ -455,11 +455,7 @@ fn format_timestamp(ts: Option<i64>) -> String {
         return "-".to_string();
     };
 
-    let sec = if ts > 2_000_000_000_000 {
-        ts / 1000
-    } else {
-        ts
-    };
+    let sec = if ts > 10_000_000_000 { ts / 1000 } else { ts };
 
     Local
         .timestamp_opt(sec, 0)
