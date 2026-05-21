@@ -588,7 +588,7 @@ async fn require_web_session(
 ) -> Result<WebSession, ArcError> {
     current_web_session(cookies, pool)
         .await?
-        .ok_or_else(admin_unauthorized)
+        .ok_or_else(web_unauthorized)
 }
 
 fn format_timestamp(ts: Option<i64>) -> String {
@@ -824,8 +824,8 @@ fn like_filter(query: Option<&str>, columns: &[&str]) -> (String, Vec<String>) {
     )
 }
 
-fn admin_unauthorized() -> ArcError {
-    ArcError::no_access("Admin login required", 401)
+fn web_unauthorized() -> ArcError {
+    ArcError::no_access("Login required", 401)
 }
 
 async fn require_admin_api(cookies: &CookieJar<'_>, pool: &DbPool) -> Result<WebSession, ArcError> {
