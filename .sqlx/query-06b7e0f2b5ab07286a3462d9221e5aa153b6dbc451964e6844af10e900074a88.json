@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT rating_ptt FROM user_rating WHERE user_id = ? AND time = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rating_ptt",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "max_size": 22
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "06b7e0f2b5ab07286a3462d9221e5aa153b6dbc451964e6844af10e900074a88"
+}

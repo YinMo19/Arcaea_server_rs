@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO user_score (\n                user_id, song_id, difficulty, time_played, score,\n                shiny_perfect_count, perfect_count, near_count, miss_count,\n                health, modifier, clear_type, rating\n            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n            ON DUPLICATE KEY UPDATE\n                score = VALUES(score),\n                shiny_perfect_count = VALUES(shiny_perfect_count),\n                perfect_count = VALUES(perfect_count),\n                near_count = VALUES(near_count),\n                miss_count = VALUES(miss_count),\n                health = VALUES(health),\n                modifier = VALUES(modifier),\n                clear_type = VALUES(clear_type),\n                rating = VALUES(rating)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 13
+    },
+    "nullable": []
+  },
+  "hash": "e8420f5bc560ba5fb9df49d5af84d1163120968b5bc1bc5cb4233072d914fa31"
+}

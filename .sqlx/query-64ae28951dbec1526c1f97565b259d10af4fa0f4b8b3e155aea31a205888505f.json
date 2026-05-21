@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO user_rating (user_id, time, rating_ptt)\n                 VALUES (?, ?, ?)\n                 ON DUPLICATE KEY UPDATE rating_ptt = VALUES(rating_ptt)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "64ae28951dbec1526c1f97565b259d10af4fa0f4b8b3e155aea31a205888505f"
+}

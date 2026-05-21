@@ -19,6 +19,7 @@ use crate::service::user::UserService;
 use crate::service::world::{get_map_parser, StaminaImpl, WorldService};
 use crate::utils::sql_placeholders;
 use base64::{engine::general_purpose, Engine as _};
+use chrono::{Local, TimeZone};
 use md5;
 use rand::Rng;
 use serde_json::json;
@@ -2275,7 +2276,8 @@ impl ScoreService {
 
     async fn update_user_rating(&self, user_id: i32) -> ArcResult<()> {
         let potential = self.calculate_user_potential(user_id).await?;
-        let rating_ptt = (potential.calculate_value(BEST30_WEIGHT, RECENT10_WEIGHT) * 100.0) as i32;
+        let user_rating_ptt = potential.calculate_value(BEST30_WEIGHT, RECENT10_WEIGHT);
+        let rating_ptt = (user_rating_ptt * 100.0) as i32;
 
         sqlx::query!(
             "UPDATE user SET rating_ptt = ? WHERE user_id = ?",
@@ -2294,6 +2296,8 @@ impl ScoreService {
                 )
                 .await;
         }
+
+        self.record_rating_ptt(user_id, user_rating_ptt).await?;
 
         Ok(())
     }
@@ -2450,17 +2454,72 @@ impl ScoreService {
     }
 
     /// Record score to log database
-    async fn record_score(&self, _user_play: &UserPlay) -> ArcResult<()> {
-        // This would record to a separate log database
-        // For now, this is a placeholder implementation
+    async fn record_score(&self, user_play: &UserPlay) -> ArcResult<()> {
+        let user_id = user_play.user_score.user_id;
+        let score = &user_play.user_score.score;
+        sqlx::query!(
+            "INSERT INTO user_score (
+                user_id, song_id, difficulty, time_played, score,
+                shiny_perfect_count, perfect_count, near_count, miss_count,
+                health, modifier, clear_type, rating
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                score = VALUES(score),
+                shiny_perfect_count = VALUES(shiny_perfect_count),
+                perfect_count = VALUES(perfect_count),
+                near_count = VALUES(near_count),
+                miss_count = VALUES(miss_count),
+                health = VALUES(health),
+                modifier = VALUES(modifier),
+                clear_type = VALUES(clear_type),
+                rating = VALUES(rating)",
+            user_id,
+            score.song_id,
+            score.difficulty,
+            score.time_played,
+            score.score,
+            score.shiny_perfect_count,
+            score.perfect_count,
+            score.near_count,
+            score.miss_count,
+            score.health,
+            score.modifier,
+            score.clear_type,
+            score.rating
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
     /// Record user rating PTT changes to log database
-    #[allow(dead_code)]
-    async fn record_rating_ptt(&self, _user_id: i32, _user_rating_ptt: f64) -> ArcResult<()> {
-        // This would record to a separate log database
-        // For now, this is a placeholder implementation
+    async fn record_rating_ptt(&self, user_id: i32, user_rating_ptt: f64) -> ArcResult<()> {
+        let today_timestamp = today_timestamp_seconds();
+        let old_ptt = sqlx::query!(
+            "SELECT rating_ptt FROM user_rating WHERE user_id = ? AND time = ?",
+            user_id,
+            today_timestamp
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let old_ptt = old_ptt.and_then(|row| row.rating_ptt);
+        let should_record = match old_ptt {
+            Some(ptt) => (ptt - user_rating_ptt).abs() > f64::EPSILON,
+            None => true,
+        };
+        if should_record {
+            sqlx::query!(
+                "INSERT INTO user_rating (user_id, time, rating_ptt)
+                 VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE rating_ptt = VALUES(rating_ptt)",
+                user_id,
+                today_timestamp,
+                user_rating_ptt
+            )
+            .execute(&self.pool)
+            .await?;
+        }
         Ok(())
     }
 
@@ -3262,6 +3321,15 @@ fn current_timestamp_seconds() -> i64 {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64
+}
+
+fn today_timestamp_seconds() -> i64 {
+    let today = Local::now().date_naive();
+    Local
+        .from_local_datetime(&today.and_hms_opt(0, 0, 0).unwrap())
+        .earliest()
+        .unwrap()
+        .timestamp()
 }
 
 /// Calculate MD5 hash of a string
