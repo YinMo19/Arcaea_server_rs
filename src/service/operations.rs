@@ -209,10 +209,11 @@ impl Operation for RefreshAllScoreRating {
                 }
             }
 
-            // Update recent30 ratings
+            // Update recent30 ratings. Python treats missing chart rows as defnum = -10,
+            // which clamps to 0 after rating calculation, so use LEFT JOIN.
             sqlx::query!(
                 "UPDATE recent30 r
-                 JOIN chart c ON r.song_id = c.song_id
+                 LEFT JOIN chart c ON r.song_id = c.song_id
                  SET r.rating = GREATEST(
                      CASE
                          WHEN r.difficulty = 0 AND c.rating_pst IS NOT NULL AND c.rating_pst > 0 THEN
