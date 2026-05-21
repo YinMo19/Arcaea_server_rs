@@ -798,18 +798,24 @@ function ActionCard({
   title,
   description,
   children,
+  className,
+  contentClassName,
 }: {
   title: string
   description: string
   children: ReactNode
+  className?: string
+  contentClassName?: string
 }) {
   return (
-    <Card className="w-full">
+    <Card className={cn('w-full', className)}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-4">{children}</CardContent>
+      <CardContent className={cn('flex flex-col gap-4', contentClassName)}>
+        {children}
+      </CardContent>
     </Card>
   )
 }
@@ -842,7 +848,12 @@ function PlayerScoresView() {
   }
 
   return (
-    <ActionCard title="玩家成绩" description="singleplayer">
+    <ActionCard
+      title="玩家成绩"
+      description="singleplayer"
+      className="flex min-h-[calc(100svh-6.5rem)] flex-col"
+      contentClassName="min-h-0 flex-1"
+    >
       <form className="grid gap-3" onSubmit={onSubmit}>
         <UserSelectorFields
           value={form}
@@ -863,7 +874,7 @@ function PlayerScoresView() {
         </div>
       </form>
       {scores && (
-        <div className="grid gap-2">
+        <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-2">
           <div className="text-sm font-medium">
             {scores.user.name || '-'} · {scores.user.userId} ·{' '}
             {scores.user.userCode || '-'}
@@ -905,7 +916,12 @@ function ChartTopView() {
   }
 
   return (
-    <ActionCard title="单曲排行榜" description="singlecharttop">
+    <ActionCard
+      title="单曲排行榜"
+      description="singlecharttop"
+      className="flex min-h-[calc(100svh-6.5rem)] flex-col"
+      contentClassName="min-h-0 flex-1"
+    >
       <form className="grid gap-3" onSubmit={onSubmit}>
         <div className="grid gap-3 sm:grid-cols-[1fr_140px_120px]">
           <Input
@@ -933,7 +949,7 @@ function ChartTopView() {
         </div>
       </form>
       {chartTop && (
-        <div className="grid gap-2">
+        <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-2">
           <div className="text-sm font-medium">
             {chartTop.nameEn || chartTop.songId} · {chartTop.songId} ·{' '}
             {difficultyLabel(chartTop.difficulty)}
@@ -2830,14 +2846,14 @@ function ScoreResultsTable({
 }) {
   if (scores.length === 0) {
     return (
-      <div className="flex min-h-28 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
+      <div className="flex h-full min-h-28 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
         无成绩
       </div>
     )
   }
 
   return (
-    <div className="max-h-[30rem] overflow-auto rounded-md border">
+    <div className="min-h-0 overflow-auto rounded-md border">
       <Table>
         <TableHeader>
           <TableRow>
