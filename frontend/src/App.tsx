@@ -3008,8 +3008,8 @@ function ScoreResultsTable({
     <div className="min-h-0 overflow-x-hidden overflow-y-auto rounded-md border">
       <Table
         className={cn(
-          'table-fixed text-[11px] leading-tight',
-          showUser ? 'min-w-[820px]' : 'w-full',
+          'table-fixed leading-tight',
+          showUser ? 'min-w-[820px] text-[11px]' : 'w-full text-xs',
         )}
       >
         <colgroup>
