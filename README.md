@@ -84,7 +84,7 @@ redis-cli ping
 ```
 
 ### 前端管理台
-新的管理台前端在 `frontend/`，采用 React + TypeScript + Tailwind CSS + shadcn/ui 基础组件，并使用 pnpm 管理依赖。旧的 Askama 模板暂时保留作为迁移参考；后端新增的 JSON 接口集中在 `/web/api/*`。
+管理台已改为前后端分离架构。前端在 `frontend/`，采用 React + TypeScript + Tailwind CSS + shadcn/ui 基础组件，并使用 pnpm 管理依赖；后端不再渲染 Askama 模板，只保留 `/web/api/*` JSON 接口。
 
 ```sh
 # 终端 1：启动 Rust 后端
@@ -96,7 +96,7 @@ pnpm install
 pnpm dev
 ```
 
-Vite 已配置 `/web/api` 代理到 `http://127.0.0.1:8090`。生产部署时可以先用 `pnpm build` 生成 `frontend/dist`，后续再决定由反代、静态文件服务或 Rust 后端统一托管。
+Vite 已配置 `/web/api` 代理到 `http://127.0.0.1:8090`。生产部署时可以先用 `pnpm build` 生成 `frontend/dist`，再由反代或静态文件服务托管前端资源。
 
 ### S3/R2 存储
 歌曲和 bundle 资源支持本地文件，也支持 S3 兼容存储。开启 S3 时在 `.env` 设置：

@@ -106,6 +106,11 @@ export type PurchaseData = {
   purchaseItems: PurchaseItemRow[]
 }
 
+export type AdminOperation =
+  | 'refresh_song_file_cache'
+  | 'refresh_content_bundle_cache'
+  | 'refresh_all_score_rating'
+
 async function request<T>(
   path: string,
   init?: RequestInit,
@@ -150,6 +155,10 @@ export const adminApi = {
       method: 'POST',
     }),
   dashboard: () => request<DashboardData>('/web/api/dashboard'),
+  operation: (operation: AdminOperation) =>
+    request<void>(`/web/api/operations/${operation}`, {
+      method: 'POST',
+    }),
   users: (q?: string, status?: string) =>
     request<UserRow[]>(`/web/api/users${query({ q, status })}`),
   songs: (q?: string) => request<SongRow[]>(`/web/api/songs${query({ q })}`),

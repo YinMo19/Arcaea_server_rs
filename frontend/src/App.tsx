@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/table'
 import {
   adminApi,
+  type AdminOperation,
   type DashboardData,
   type ItemPayload,
   type ItemRow,
@@ -60,6 +61,15 @@ const navItems: Array<{
   { id: 'songs', label: '歌曲', icon: Music2 },
   { id: 'items', label: '物品', icon: Boxes },
   { id: 'purchases', label: '购买', icon: ShoppingBag },
+]
+
+const adminOperations: Array<{
+  id: AdminOperation
+  label: string
+}> = [
+  { id: 'refresh_song_file_cache', label: '刷新 Song Hash' },
+  { id: 'refresh_content_bundle_cache', label: '刷新 Bundle' },
+  { id: 'refresh_all_score_rating', label: '重算 Rating' },
 ]
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error'
@@ -279,6 +289,8 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: () => void }) {
 function DashboardView() {
   const [data, setData] = useState<DashboardData>()
   const [state, setState] = useState<LoadState>('loading')
+  const [operationAction, setOperationAction] = useState<ActionState>(emptyAction)
+  const [operationBusy, setOperationBusy] = useState<AdminOperation | ''>('')
 
   function load(showLoading = true) {
     if (showLoading) {
@@ -291,6 +303,20 @@ function DashboardView() {
         setState('ready')
       })
       .catch(() => setState('error'))
+  }
+
+  async function runOperation(operation: AdminOperation) {
+    setOperationBusy(operation)
+    setOperationAction(emptyAction)
+    try {
+      await adminApi.operation(operation)
+      setOperationAction({ kind: 'success', message: '操作已完成' })
+      load(false)
+    } catch (error) {
+      setOperationAction({ kind: 'error', message: errorMessage(error) })
+    } finally {
+      setOperationBusy('')
+    }
   }
 
   useEffect(() => {
@@ -335,6 +361,35 @@ function DashboardView() {
           icon={ShieldAlert}
         />
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>维护操作</CardTitle>
+          <CardDescription>资源缓存与成绩 Rating 维护</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-2">
+            {adminOperations.map((operation) => (
+              <Button
+                key={operation.id}
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={Boolean(operationBusy)}
+                onClick={() => runOperation(operation.id)}
+              >
+                {operationBusy === operation.id ? (
+                  <LoaderCircle className="animate-spin" />
+                ) : (
+                  <RefreshCcw />
+                )}
+                {operation.label}
+              </Button>
+            ))}
+            <ActionMessage action={operationAction} />
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex-row items-center justify-between">
