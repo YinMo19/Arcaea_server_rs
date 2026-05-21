@@ -2,6 +2,7 @@ export type ApiEnvelope<T> = {
   success: boolean
   value?: T
   error_code?: number
+  message?: string
   extra?: Record<string, unknown>
 }
 
@@ -113,6 +114,99 @@ export type PurchaseItemPayload = {
   amount?: string
 }
 
+export type AdminUserSummary = {
+  userId: number
+  name: string
+  userCode: string
+}
+
+export type AdminScoreRow = {
+  userId: number
+  name?: string
+  songId: string
+  difficulty: number
+  score: number
+  shinyPerfectCount: number
+  perfectCount: number
+  nearCount: number
+  missCount: number
+  clearType: number
+  bestClearType: number
+  rating: number
+  timePlayed: string
+}
+
+export type AdminUserScores = {
+  user: AdminUserSummary
+  scores: AdminScoreRow[]
+}
+
+export type AdminChartTop = {
+  songId: string
+  nameEn: string
+  difficulty: number
+  scores: AdminScoreRow[]
+}
+
+export type AdminActionResult = {
+  message: string
+  affectedRows: number
+}
+
+export type AdminRedeemUsers = {
+  code: string
+  users: AdminUserSummary[]
+}
+
+export type UserSelectorPayload = {
+  user_id?: number
+  name?: string
+  user_code?: string
+}
+
+export type UserTicketPayload = UserSelectorPayload & {
+  ticket: number
+  all_users?: boolean
+}
+
+export type UserPasswordPayload = UserSelectorPayload & {
+  password: string
+}
+
+export type UserPurchasePayload = UserSelectorPayload & {
+  method: 'unlock' | 'lock'
+  all_users?: boolean
+  item_types?: string[]
+}
+
+export type ScoreDeletePayload = UserSelectorPayload & {
+  song_id?: string
+  difficulty?: number
+}
+
+export type PresentPayload = {
+  present_id: string
+  expire_ts?: string
+  description?: string
+  item_id: string
+  item_type: string
+  amount?: string
+}
+
+export type PresentDeliverPayload = UserSelectorPayload & {
+  present_id: string
+  all_users?: boolean
+}
+
+export type RedeemPayload = {
+  code?: string
+  random_amount?: number
+  redeem_type: number
+  item_id: string
+  item_type: string
+  amount?: string
+}
+
 export type AdminOperation =
   | 'refresh_song_file_cache'
   | 'refresh_content_bundle_cache'
@@ -133,7 +227,7 @@ async function request<T>(
 
   const data = (await response.json()) as ApiEnvelope<T>
   if (!response.ok || !data.success) {
-    throw new Error(`Request failed: ${data.error_code ?? response.status}`)
+    throw new Error(data.message ?? `Request failed: ${data.error_code ?? response.status}`)
   }
 
   return data.value as T
@@ -270,5 +364,78 @@ export const adminApi = {
     request<void>('/web/api/purchase-items', {
       method: 'DELETE',
       body: JSON.stringify({ purchase_name, item_id, item_type }),
+    }),
+  userScores: (params: UserSelectorPayload & { limit?: number }) =>
+    request<AdminUserScores>(
+      `/web/api/user-scores${query({
+        user_id: params.user_id,
+        name: params.name,
+        user_code: params.user_code,
+        limit: params.limit,
+      })}`,
+    ),
+  chartTop: (params: { sid: string; difficulty: number; limit?: number }) =>
+    request<AdminChartTop>(
+      `/web/api/chart-top${query({
+        sid: params.sid,
+        difficulty: params.difficulty,
+        limit: params.limit,
+      })}`,
+    ),
+  updateUserTicket: (payload: UserTicketPayload) =>
+    request<AdminActionResult>('/web/api/admin-actions/user-ticket', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  resetUserPassword: (payload: UserPasswordPayload) =>
+    request<AdminActionResult>('/web/api/admin-actions/user-password', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  banUser: (payload: UserSelectorPayload) =>
+    request<AdminActionResult>('/web/api/admin-actions/user-ban', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  updateUserPurchase: (payload: UserPurchasePayload) =>
+    request<AdminActionResult>('/web/api/admin-actions/user-purchase', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  deleteScores: (payload: ScoreDeletePayload) =>
+    request<AdminActionResult>('/web/api/admin-actions/scores/delete', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  redeemUsers: (code: string) =>
+    request<AdminRedeemUsers>(
+      `/web/api/redeem-users${query({
+        code,
+      })}`,
+    ),
+  createPresent: (payload: PresentPayload) =>
+    request<AdminActionResult>('/web/api/admin-actions/presents', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  deletePresent: (present_id: string) =>
+    request<AdminActionResult>('/web/api/admin-actions/presents', {
+      method: 'DELETE',
+      body: JSON.stringify({ present_id }),
+    }),
+  deliverPresent: (payload: PresentDeliverPayload) =>
+    request<AdminActionResult>('/web/api/admin-actions/presents/deliver', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  createRedeem: (payload: RedeemPayload) =>
+    request<AdminActionResult>('/web/api/admin-actions/redeems', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  deleteRedeem: (code: string) =>
+    request<AdminActionResult>('/web/api/admin-actions/redeems', {
+      method: 'DELETE',
+      body: JSON.stringify({ code }),
     }),
 }

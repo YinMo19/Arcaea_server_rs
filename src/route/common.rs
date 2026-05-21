@@ -25,6 +25,8 @@ pub struct ApiErrorResponse {
     pub success: bool,
     pub error_code: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub extra: Option<HashMap<String, serde_json::Value>>,
 }
 
@@ -89,6 +91,7 @@ impl<'r> Responder<'r, 'static> for ArcError {
         let error_response = ApiErrorResponse {
             success: false,
             error_code: self.error_code(),
+            message: Some(self.to_string()),
             extra: self.extra_data().cloned(),
         };
 
