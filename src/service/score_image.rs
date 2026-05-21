@@ -3,15 +3,14 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use ab_glyph::FontArc;
-use base64::{engine::general_purpose, Engine as _};
-use chrono::{Local, TimeZone};
+use chrono::Local;
 use image::codecs::png::PngEncoder;
 use image::imageops::{overlay, resize, FilterType};
 use image::{ColorType, ImageEncoder, Rgba, RgbaImage};
-use imageproc::drawing::{draw_filled_rect_mut, draw_hollow_rect_mut, draw_text_mut, text_size};
-use imageproc::rect::Rect;
+use imageproc::drawing::{draw_text_mut, text_size};
 
 use crate::config::CONFIG;
 use crate::error::{ArcError, ArcResult};
@@ -43,14 +42,15 @@ impl ScoreImageMode {
             Self::Sex30 => "Player Sexs",
         }
     }
+}
 
-    fn summary_label(self) -> &'static str {
-        match self {
-            Self::B30 => "B30",
-            Self::R10 => "R10",
-            Self::Ap30 => "AP30",
-            Self::Sex30 => "SEX30",
-        }
+pub fn parse_score_image_mode(slug: &str) -> Option<ScoreImageMode> {
+    match slug {
+        "b30" => Some(ScoreImageMode::B30),
+        "r10" => Some(ScoreImageMode::R10),
+        "ap30" => Some(ScoreImageMode::Ap30),
+        "sex30" => Some(ScoreImageMode::Sex30),
+        _ => None,
     }
 }
 
@@ -58,12 +58,11 @@ impl ScoreImageMode {
 pub struct GeneratedScoreImage {
     pub mode: ScoreImageMode,
     pub entry_count: usize,
-    pub data_url: String,
+    pub url: String,
 }
 
 #[derive(Debug, Clone)]
 struct ScoreImageProfile {
-    user_id: i32,
     name: String,
     user_code: String,
     rating_ptt: i32,
@@ -80,7 +79,6 @@ struct ScoreImageEntry {
     near_count: i32,
     miss_count: i32,
     time_played: i64,
-    clear_type: i32,
     rating: f64,
 }
 
@@ -92,14 +90,80 @@ struct ScoreImageChart {
 
 #[derive(Clone)]
 struct ScoreImageRenderer {
-    fonts: Arc<ScoreImageFonts>,
+    assets: Arc<ScoreImageAssets>,
     manifest_dir: PathBuf,
     song_dir: PathBuf,
 }
 
+struct ScoreImageAssets {
+    asset_root: PathBuf,
+    fonts: ScoreImageFonts,
+    images: ScoreImageAssetImages,
+}
+
 struct ScoreImageFonts {
-    regular: FontArc,
-    cjk: FontArc,
+    exo_regular: CalibratedFont,
+    exo_semibold: CalibratedFont,
+    geosans: CalibratedFont,
+    yahei: CalibratedFont,
+    noto_sc: CalibratedFont,
+}
+
+struct ScoreImageAssetImages {
+    back: RgbaImage,
+    title: RgbaImage,
+    plate: RgbaImage,
+    diff_normal: Vec<RgbaImage>,
+    rating_images: Vec<RgbaImage>,
+}
+
+#[derive(Clone, Copy)]
+enum FontFamily {
+    ExoRegular,
+    ExoSemiBold,
+    Geosans,
+    Yahei,
+    NotoSc,
+}
+
+impl FontFamily {
+    fn scale_multiplier(self) -> f32 {
+        match self {
+            Self::ExoRegular => 1.33,
+            Self::ExoSemiBold => 1.34,
+            Self::Geosans => 1.14,
+            Self::Yahei => 1.33,
+            Self::NotoSc => 1.48,
+        }
+    }
+
+    fn y_offset(self, logical_scale: f32) -> i32 {
+        match self {
+            Self::ExoRegular | Self::ExoSemiBold => (logical_scale * 0.03).round() as i32,
+            Self::Yahei => (logical_scale * 0.015).round() as i32,
+            Self::Geosans | Self::NotoSc => 0,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct CalibratedFont {
+    inner: FontArc,
+    family: FontFamily,
+}
+
+impl CalibratedFont {
+    fn new(inner: FontArc, family: FontFamily) -> Self {
+        Self { inner, family }
+    }
+
+    fn scale(&self, logical_scale: f32) -> f32 {
+        logical_scale * self.family.scale_multiplier()
+    }
+
+    fn y_offset(&self, logical_scale: f32) -> i32 {
+        self.family.y_offset(logical_scale)
+    }
 }
 
 pub async fn generate_score_images(
@@ -107,35 +171,40 @@ pub async fn generate_score_images(
     user_id: i32,
     modes: &[ScoreImageMode],
 ) -> ArcResult<Vec<GeneratedScoreImage>> {
-    let profile = load_profile(pool, user_id).await?;
-    let renderer = ScoreImageRenderer::new()?;
     let mut images = Vec::with_capacity(modes.len());
 
     for mode in modes {
         let entries = load_entries(pool, user_id, *mode).await?;
-        let charts = load_chart_map(pool, &entries).await?;
-        let renderer = renderer.clone();
-        let profile = profile.clone();
-        let mode = *mode;
-        let entry_count = entries.len();
-        let png = tokio::task::spawn_blocking(move || {
-            renderer.render_best_list_png(&profile, &entries, &charts, mode)
-        })
-        .await
-        .map_err(|err| ArcError::input(format!("成绩图渲染任务失败: {err}")))?
-        .map_err(ArcError::input)?;
-
         images.push(GeneratedScoreImage {
-            mode,
-            entry_count,
-            data_url: format!(
-                "data:image/png;base64,{}",
-                general_purpose::STANDARD.encode(png)
+            mode: *mode,
+            entry_count: entries.len(),
+            url: format!(
+                "/web/api/score-images/{}.png?user_id={user_id}",
+                mode.slug()
             ),
         });
     }
 
     Ok(images)
+}
+
+pub async fn generate_score_image_png(
+    pool: &DbPool,
+    user_id: i32,
+    mode: ScoreImageMode,
+) -> ArcResult<Vec<u8>> {
+    let profile = load_profile(pool, user_id).await?;
+    let entries = load_entries(pool, user_id, mode).await?;
+    let charts = load_chart_map(pool, &entries).await?;
+    let renderer = ScoreImageRenderer::new()?;
+
+    tokio::task::spawn_blocking(move || {
+        let image = renderer.render_best_list_image(&profile, &entries, &charts, mode)?;
+        encode_png(&image)
+    })
+    .await
+    .map_err(|err| ArcError::input(format!("成绩图渲染任务失败: {err}")))?
+    .map_err(ArcError::input)
 }
 
 async fn load_profile(pool: &DbPool, user_id: i32) -> ArcResult<ScoreImageProfile> {
@@ -151,7 +220,6 @@ async fn load_profile(pool: &DbPool, user_id: i32) -> ArcResult<ScoreImageProfil
     .ok_or_else(|| ArcError::no_data("玩家不存在", -2))?;
 
     Ok(ScoreImageProfile {
-        user_id: row.user_id,
         name: row.name.unwrap_or_else(|| row.user_id.to_string()),
         user_code: row.user_code.unwrap_or_else(|| "-".to_string()),
         rating_ptt: row.rating_ptt.unwrap_or_default(),
@@ -176,7 +244,6 @@ async fn load_entries(
                     COALESCE(near_count, 0) as `near_count!: i32`,
                     COALESCE(miss_count, 0) as `miss_count!: i32`,
                     COALESCE(time_played, 0) as `time_played!: i64`,
-                    COALESCE(clear_type, 0) as `clear_type!: i32`,
                     COALESCE(rating, 0) as `rating!: f64`
                  FROM best_score
                  WHERE user_id = ?
@@ -199,7 +266,6 @@ async fn load_entries(
                     near_count: row.near_count,
                     miss_count: row.miss_count,
                     time_played: row.time_played,
-                    clear_type: row.clear_type,
                     rating: row.rating,
                 })
                 .collect())
@@ -224,7 +290,6 @@ async fn load_entries(
                     COALESCE(near_count, 0) as `near_count!: i32`,
                     COALESCE(miss_count, 0) as `miss_count!: i32`,
                     COALESCE(time_played, 0) as `time_played!: i64`,
-                    COALESCE(clear_type, 0) as `clear_type!: i32`,
                     COALESCE(rating, 0) as `rating!: f64`
                  FROM ranked_songs
                  WHERE song_rank = 1
@@ -247,7 +312,6 @@ async fn load_entries(
                     near_count: row.near_count,
                     miss_count: row.miss_count,
                     time_played: row.time_played,
-                    clear_type: row.clear_type,
                     rating: row.rating,
                 })
                 .collect())
@@ -281,7 +345,6 @@ async fn load_ap30_entries(pool: &DbPool, user_id: i32) -> ArcResult<Vec<ScoreIm
             COALESCE(near_count, 0) as `near_count!: i32`,
             COALESCE(miss_count, 0) as `miss_count!: i32`,
             COALESCE(time_played, 0) as `time_played!: i64`,
-            COALESCE(clear_type, 0) as `clear_type!: i32`,
             COALESCE(rating, 0) as `rating!: f64`
          FROM ranked_data
          WHERE score_rank = 1
@@ -304,7 +367,6 @@ async fn load_ap30_entries(pool: &DbPool, user_id: i32) -> ArcResult<Vec<ScoreIm
             near_count: row.near_count,
             miss_count: row.miss_count,
             time_played: row.time_played,
-            clear_type: row.clear_type,
             rating: row.rating,
         })
         .collect())
@@ -335,7 +397,6 @@ async fn load_sex30_entries(pool: &DbPool, user_id: i32) -> ArcResult<Vec<ScoreI
             COALESCE(near_count, 0) as `near_count!: i32`,
             COALESCE(miss_count, 0) as `miss_count!: i32`,
             COALESCE(time_played, 0) as `time_played!: i64`,
-            COALESCE(clear_type, 0) as `clear_type!: i32`,
             COALESCE(rating, 0) as `rating!: f64`
          FROM ranked_data
          WHERE score_rank = 1
@@ -358,7 +419,6 @@ async fn load_sex30_entries(pool: &DbPool, user_id: i32) -> ArcResult<Vec<ScoreI
             near_count: row.near_count,
             miss_count: row.miss_count,
             time_played: row.time_played,
-            clear_type: row.clear_type,
             rating: row.rating,
         })
         .collect())
@@ -407,318 +467,289 @@ async fn load_chart_map(
 
 impl ScoreImageRenderer {
     fn new() -> ArcResult<Self> {
-        let regular = load_first_font(&font_candidates("SCORE_IMAGE_FONT"))?;
-        let cjk = load_first_font(&font_candidates("SCORE_IMAGE_CJK_FONT"))
-            .unwrap_or_else(|_| regular.clone());
+        let asset_root = score_image_asset_root();
         Ok(Self {
-            fonts: Arc::new(ScoreImageFonts { regular, cjk }),
+            assets: Arc::new(ScoreImageAssets::load(asset_root)?),
             manifest_dir: PathBuf::from(env!("CARGO_MANIFEST_DIR")),
             song_dir: PathBuf::from(CONFIG.song_file_folder_path.trim()),
         })
     }
 
-    fn render_best_list_png(
+    fn render_best_list_image(
         &self,
         profile: &ScoreImageProfile,
         entries: &[ScoreImageEntry],
         charts: &HashMap<String, ScoreImageChart>,
         mode: ScoreImageMode,
-    ) -> Result<Vec<u8>, String> {
-        let mut canvas = RgbaImage::from_pixel(2400, 3800, rgba(247, 248, 252));
-        draw_background(&mut canvas, mode);
-        self.draw_header(&mut canvas, profile, mode);
-        self.draw_summary(&mut canvas, profile, entries, mode);
+    ) -> Result<RgbaImage, String> {
+        let mut canvas = RgbaImage::from_pixel(2400, 3800, rgba(255, 255, 255));
+        let fonts = &self.assets.fonts;
+        let images = &self.assets.images;
+
+        overlay(&mut canvas, &images.back, 0, 0);
+        overlay(&mut canvas, &images.title, 0, 50);
+        draw_text_with_outline(
+            &mut canvas,
+            mode.title(),
+            800,
+            70,
+            150.0,
+            &fonts.geosans,
+            rgba(255, 255, 255),
+            Some((1.0, rgba(0, 0, 0))),
+        );
+
+        let character_id = i64::from(profile.character_id);
+        let char_img = self.load_character_art(character_id, 750, 750);
+        overlay(&mut canvas, &char_img, 1500, 100);
+
+        let profile_icon = self.load_character_icon(character_id, 250, 250);
+        overlay(&mut canvas, &profile_icon, 200, 275);
+
+        let now_ptt = rating_ptt_to_float(profile.rating_ptt);
+        let ptt_img = resize(
+            &images.rating_images[ptt_badge_index(now_ptt)],
+            160,
+            160,
+            FilterType::CatmullRom,
+        );
+        overlay(&mut canvas, &ptt_img, 345, 400);
+
+        let ptt_text = format_ptt_text(profile.rating_ptt);
+        let ptt_x = if ptt_text.len() == 4 {
+            380
+        } else if ptt_text.chars().nth(1) == Some('1') {
+            375
+        } else {
+            370
+        };
+        draw_text_with_outline(
+            &mut canvas,
+            &ptt_text,
+            ptt_x,
+            440,
+            50.0,
+            &fonts.exo_semibold,
+            rgba(255, 255, 255),
+            Some((3.0, rgba(70, 70, 70))),
+        );
+
+        draw_text_with_outline(
+            &mut canvas,
+            &profile.name,
+            600,
+            300,
+            120.0,
+            &fonts.geosans,
+            rgba(255, 255, 255),
+            Some((1.0, rgba(0, 0, 0))),
+        );
+        draw_text_with_outline(
+            &mut canvas,
+            &format!("ID: {}", profile.user_code),
+            600,
+            450,
+            70.0,
+            &fonts.geosans,
+            rgba(200, 200, 200),
+            Some((1.0, rgba(0, 0, 0))),
+        );
+
+        let mut ptt_sum = 0.0;
+        let mut ptt_recent_sum = 0.0;
 
         for (index, entry) in entries.iter().enumerate() {
-            let row = index / 3;
-            let col = index % 3;
-            let base_x = 80 + col as i32 * 760;
-            let base_y = 820 + row as i32 * 280;
-            self.draw_entry_card(&mut canvas, base_x, base_y, index, entry, charts);
+            let row = index as i64 / 3;
+            let col = index as i64 % 3;
+            let base_x = col * 800;
+            let base_y = 850 + row * 280;
+
+            overlay(&mut canvas, &images.plate, base_x, base_y);
+
+            draw_text(
+                &mut canvas,
+                &format_score(entry.score),
+                base_x as i32 + 300,
+                base_y as i32 + 74,
+                65.0,
+                &fonts.exo_regular,
+                rgba(10, 10, 10),
+            );
+
+            let cover = self.load_cover(&entry.song_id, 200, 200);
+            overlay(&mut canvas, &cover, base_x + 70, base_y + 40);
+
+            let chart = charts.get(&entry.song_id);
+            let title = chart
+                .map(|chart| chart.name.as_str())
+                .unwrap_or(entry.song_id.as_str());
+            draw_mixed_text(
+                &mut canvas,
+                title,
+                base_x as i32 + 300,
+                base_y as i32 + 40,
+                &fonts.exo_regular,
+                35.0,
+                &fonts.yahei,
+                35.0,
+                rgba(10, 10, 10),
+            );
+
+            draw_right_aligned_text(
+                &mut canvas,
+                &format!("#{}", index + 1),
+                35.0,
+                &fonts.exo_regular,
+                base_y as i32 + 35,
+                2400 - col as i32 * 800 - 740,
+                rgba(10, 10, 10),
+                2400,
+            );
+
+            let difficulty = entry.difficulty.clamp(0, 4);
+            overlay(
+                &mut canvas,
+                &images.diff_normal[difficulty as usize],
+                base_x + 300,
+                base_y + 157,
+            );
+
+            let const_tenths = chart
+                .and_then(|chart| chart.ratings.get(difficulty as usize).copied())
+                .filter(|rating| *rating >= 0)
+                .unwrap_or_default();
+            draw_text(
+                &mut canvas,
+                &format!(
+                    "{} >> {}",
+                    format_constant(const_tenths),
+                    format_compact_float(entry.rating, 3)
+                ),
+                base_x as i32 + 410,
+                base_y as i32 + 150,
+                35.0,
+                &fonts.exo_regular,
+                rgba(10, 10, 10),
+            );
+
+            ptt_sum += entry.rating;
+            if index < 10 {
+                ptt_recent_sum += entry.rating;
+            }
+
+            draw_right_aligned_text(
+                &mut canvas,
+                &format!("{}d", days_since_timestamp(entry.time_played)),
+                35.0,
+                &fonts.exo_regular,
+                base_y as i32 + 205,
+                2400 - col as i32 * 800 - 740,
+                rgba(100, 100, 100),
+                2400,
+            );
+
+            draw_text_with_outline(
+                &mut canvas,
+                &format!(
+                    "P: {} (+{})",
+                    entry.perfect_count, entry.shiny_perfect_count
+                ),
+                base_x as i32 + 300,
+                base_y as i32 + 195,
+                30.0,
+                &fonts.exo_regular,
+                rgba(114, 73, 118),
+                Some((1.0, rgba(114, 73, 118))),
+            );
+            draw_text_with_outline(
+                &mut canvas,
+                &format!("F: {}", entry.near_count),
+                base_x as i32 + 525,
+                base_y as i32 + 195,
+                30.0,
+                &fonts.exo_regular,
+                rgba(172, 149, 58),
+                Some((1.0, rgba(172, 149, 58))),
+            );
+            draw_text_with_outline(
+                &mut canvas,
+                &format!("L: {}", entry.miss_count),
+                base_x as i32 + 600,
+                base_y as i32 + 195,
+                30.0,
+                &fonts.exo_regular,
+                rgba(120, 120, 120),
+                Some((1.0, rgba(120, 120, 120))),
+            );
+        }
+
+        match mode {
+            ScoreImageMode::B30 => {
+                let best30_avg = format_compact_float((ptt_sum / 30.0).round_to(2), 2);
+                let recent10_avg =
+                    format_compact_float(((now_ptt * 40.0 - ptt_sum) / 10.0).round_to(3), 3);
+                let max_ptt =
+                    format_compact_float(((ptt_sum + ptt_recent_sum) / 40.0).round_to(2), 2);
+                draw_summary_block(&mut canvas, fonts, 200, "Best 30", &best30_avg);
+                draw_summary_block(&mut canvas, fonts, 600, "Recent 10", &recent10_avg);
+                draw_summary_block(&mut canvas, fonts, 1000, "Max PTT", &max_ptt);
+            }
+            ScoreImageMode::R10 => {
+                let recent10_avg = format_compact_float((ptt_sum / 10.0).round_to(2), 2);
+                draw_summary_block(&mut canvas, fonts, 200, "Recent 10", &recent10_avg);
+            }
+            ScoreImageMode::Ap30 | ScoreImageMode::Sex30 => {}
         }
 
         let generated_at = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        draw_text(
+        draw_text_with_outline(
             &mut canvas,
-            &self.fonts.regular,
-            60.0,
-            760,
-            3725,
-            rgba(150, 152, 170),
-            &format!("Generated by Arcaea Server Web / {generated_at}"),
+            &format!("Generated by Arcaea Server Web / Reyar @{generated_at}"),
+            600,
+            3720,
+            50.0,
+            &fonts.noto_sc,
+            rgba(230, 230, 230),
+            Some((1.0, rgba(100, 100, 255))),
         );
 
-        encode_png(&canvas)
+        Ok(canvas)
     }
 
-    fn draw_header(
-        &self,
-        canvas: &mut RgbaImage,
-        profile: &ScoreImageProfile,
-        mode: ScoreImageMode,
-    ) {
-        draw_text(
-            canvas,
-            &self.fonts.regular,
-            132.0,
-            160,
-            105,
-            rgba(255, 255, 255),
-            mode.title(),
-        );
-        draw_text(
-            canvas,
-            &self.fonts.cjk,
-            96.0,
-            160,
-            275,
-            rgba(255, 255, 255),
-            &profile.name,
-        );
-        draw_text(
-            canvas,
-            &self.fonts.regular,
-            54.0,
-            166,
-            415,
-            rgba(229, 234, 255),
-            &format!("ID: {}   UID: {}", profile.user_code, profile.user_id),
-        );
-
-        let ptt = format_ptt(profile.rating_ptt);
-        draw_filled_rect_mut(
-            canvas,
-            Rect::at(1770, 120).of_size(440, 210),
-            rgba(255, 255, 255),
-        );
-        draw_hollow_rect_mut(
-            canvas,
-            Rect::at(1770, 120).of_size(440, 210),
-            rgba(216, 222, 245),
-        );
-        draw_text(
-            canvas,
-            &self.fonts.regular,
-            38.0,
-            1810,
-            152,
-            rgba(96, 101, 126),
-            "PTT",
-        );
-        draw_text(
-            canvas,
-            &self.fonts.regular,
-            94.0,
-            1810,
-            200,
-            rgba(45, 48, 72),
-            &ptt,
-        );
-        draw_text(
-            canvas,
-            &self.fonts.regular,
-            34.0,
-            1810,
-            302,
-            rgba(135, 140, 166),
-            &format!("Character {}", profile.character_id),
-        );
+    fn load_character_art(&self, character_id: i64, width: u32, height: u32) -> RgbaImage {
+        self.load_resized_with_fallback(
+            &self
+                .assets
+                .asset_root
+                .join("char/1080")
+                .join(format!("{character_id}.png")),
+            &self.assets.asset_root.join("char/1080/0.png"),
+            width,
+            height,
+            transparent(),
+        )
     }
 
-    fn draw_summary(
-        &self,
-        canvas: &mut RgbaImage,
-        profile: &ScoreImageProfile,
-        entries: &[ScoreImageEntry],
-        mode: ScoreImageMode,
-    ) {
-        let sum = entries.iter().map(|entry| entry.rating).sum::<f64>();
-        let avg = if entries.is_empty() {
-            0.0
-        } else {
-            sum / entries.len() as f64
-        };
-        let now_ptt = profile.rating_ptt as f64 / 100.0;
-
-        let blocks = match mode {
-            ScoreImageMode::B30 => vec![
-                ("Best 30", format!("{avg:.2}")),
-                (
-                    "Recent 10",
-                    format!("{:.3}", ((now_ptt * 40.0 - sum) / 10.0).max(0.0)),
-                ),
-                ("Count", entries.len().to_string()),
-            ],
-            ScoreImageMode::R10 => vec![
-                ("Recent 10", format!("{avg:.2}")),
-                ("Sum", format!("{sum:.4}")),
-                ("Count", entries.len().to_string()),
-            ],
-            ScoreImageMode::Ap30 | ScoreImageMode::Sex30 => vec![
-                (mode.summary_label(), format!("{avg:.2}")),
-                ("Sum", format!("{sum:.4}")),
-                ("Count", entries.len().to_string()),
-            ],
-        };
-
-        for (index, (label, value)) in blocks.into_iter().enumerate() {
-            let x = 80 + index as i32 * 520;
-            draw_filled_rect_mut(
-                canvas,
-                Rect::at(x, 560).of_size(460, 150),
-                rgba(255, 255, 255),
-            );
-            draw_hollow_rect_mut(
-                canvas,
-                Rect::at(x, 560).of_size(460, 150),
-                rgba(222, 226, 241),
-            );
-            draw_text(
-                canvas,
-                &self.fonts.regular,
-                36.0,
-                x + 34,
-                585,
-                rgba(111, 116, 143),
-                label,
-            );
-            draw_text(
-                canvas,
-                &self.fonts.regular,
-                70.0,
-                x + 34,
-                630,
-                rgba(45, 48, 72),
-                &value,
-            );
-        }
+    fn load_character_icon(&self, character_id: i64, width: u32, height: u32) -> RgbaImage {
+        self.load_resized_with_fallback(
+            &self
+                .assets
+                .asset_root
+                .join("char")
+                .join(format!("{character_id}_icon.png")),
+            &self.assets.asset_root.join("char/0_icon.png"),
+            width,
+            height,
+            transparent(),
+        )
     }
 
-    fn draw_entry_card(
-        &self,
-        canvas: &mut RgbaImage,
-        x: i32,
-        y: i32,
-        index: usize,
-        entry: &ScoreImageEntry,
-        charts: &HashMap<String, ScoreImageChart>,
-    ) {
-        draw_filled_rect_mut(
-            canvas,
-            Rect::at(x, y).of_size(700, 245),
-            rgba(255, 255, 255),
-        );
-        draw_hollow_rect_mut(
-            canvas,
-            Rect::at(x, y).of_size(700, 245),
-            rgba(224, 228, 242),
-        );
-
-        let cover = self.load_cover(&entry.song_id);
-        overlay(canvas, &cover, i64::from(x + 24), i64::from(y + 24));
-
-        let chart = charts.get(&entry.song_id);
-        let title = chart
-            .map(|chart| chart.name.as_str())
-            .unwrap_or(entry.song_id.as_str());
-        let title = ellipsize(title, 22);
-        draw_text(
-            canvas,
-            &self.fonts.cjk,
-            34.0,
-            x + 250,
-            y + 30,
-            rgba(36, 39, 59),
-            &title,
-        );
-
-        draw_right_text(
-            canvas,
-            &self.fonts.regular,
-            34.0,
-            x + 650,
-            y + 28,
-            rgba(120, 126, 152),
-            &format!("#{}", index + 1),
-        );
-
-        draw_text(
-            canvas,
-            &self.fonts.regular,
-            62.0,
-            x + 250,
-            y + 76,
-            rgba(25, 28, 45),
-            &format_score(entry.score),
-        );
-
-        let difficulty = entry.difficulty.clamp(0, 4);
-        let (diff_label, diff_color) = difficulty_label(difficulty);
-        draw_filled_rect_mut(
-            canvas,
-            Rect::at(x + 250, y + 155).of_size(84, 40),
-            diff_color,
-        );
-        draw_text(
-            canvas,
-            &self.fonts.regular,
-            24.0,
-            x + 266,
-            y + 163,
-            rgba(255, 255, 255),
-            diff_label,
-        );
-
-        let constant = chart
-            .and_then(|chart| chart.ratings.get(difficulty as usize).copied())
-            .unwrap_or(-1);
-        draw_text(
-            canvas,
-            &self.fonts.regular,
-            30.0,
-            x + 350,
-            y + 158,
-            rgba(64, 68, 92),
-            &format!("{} >> {:.3}", format_constant(constant), entry.rating),
-        );
-
-        draw_text(
-            canvas,
-            &self.fonts.regular,
-            28.0,
-            x + 250,
-            y + 204,
-            rgba(114, 73, 118),
-            &format!(
-                "BP/LP/F/L {}/{}/{}/{}",
-                entry.shiny_perfect_count,
-                (entry.perfect_count - entry.shiny_perfect_count).max(0),
-                entry.near_count,
-                entry.miss_count
-            ),
-        );
-        draw_right_text(
-            canvas,
-            &self.fonts.regular,
-            26.0,
-            x + 650,
-            y + 205,
-            clear_type_color(entry.clear_type),
-            clear_type_label(entry.clear_type),
-        );
-        draw_right_text(
-            canvas,
-            &self.fonts.regular,
-            25.0,
-            x + 650,
-            y + 158,
-            rgba(140, 145, 170),
-            &days_since(entry.time_played),
-        );
-    }
-
-    fn load_cover(&self, song_id: &str) -> RgbaImage {
+    fn load_cover(&self, song_id: &str, width: u32, height: u32) -> RgbaImage {
         let candidates = vec![
+            self.assets
+                .asset_root
+                .join("covers")
+                .join(format!("{song_id}.jpg")),
             self.song_dir.join(song_id).join("base_256.jpg"),
             self.song_dir.join(song_id).join("base.jpg"),
             self.song_dir
@@ -748,50 +779,84 @@ impl ScoreImageRenderer {
 
         for path in candidates {
             if let Ok(image) = image::open(path) {
-                return resize(&image.to_rgba8(), 190, 190, FilterType::CatmullRom);
+                return resize(&image.to_rgba8(), width, height, FilterType::CatmullRom);
             }
         }
 
-        fallback_cover(song_id)
+        RgbaImage::from_pixel(width, height, rgba(25, 25, 25))
+    }
+
+    fn load_resized_with_fallback(
+        &self,
+        path: &Path,
+        fallback: &Path,
+        width: u32,
+        height: u32,
+        fill: Rgba<u8>,
+    ) -> RgbaImage {
+        load_image_rgba(path)
+            .or_else(|_| load_image_rgba(fallback))
+            .map(|img| resize(&img, width, height, FilterType::CatmullRom))
+            .unwrap_or_else(|_| RgbaImage::from_pixel(width, height, fill))
     }
 }
 
-fn draw_background(canvas: &mut RgbaImage, mode: ScoreImageMode) {
-    let accent = match mode {
-        ScoreImageMode::B30 => rgba(69, 85, 178),
-        ScoreImageMode::R10 => rgba(42, 142, 126),
-        ScoreImageMode::Ap30 => rgba(159, 89, 170),
-        ScoreImageMode::Sex30 => rgba(190, 108, 72),
-    };
-    draw_filled_rect_mut(canvas, Rect::at(0, 0).of_size(2400, 510), accent);
-    draw_filled_rect_mut(
-        canvas,
-        Rect::at(0, 510).of_size(2400, 30),
-        rgba(222, 226, 241),
-    );
-    for idx in 0..16 {
-        let x = idx * 190;
-        draw_filled_rect_mut(
-            canvas,
-            Rect::at(x - 60, 0).of_size(90, 510),
-            rgba(255, 255, 255).map_alpha(12),
-        );
-    }
-}
+impl ScoreImageAssets {
+    fn load(asset_root: PathBuf) -> ArcResult<Self> {
+        let fonts = ScoreImageFonts {
+            exo_regular: CalibratedFont::new(
+                load_font(&asset_root.join("Exo-Regular.ttf"))?,
+                FontFamily::ExoRegular,
+            ),
+            exo_semibold: CalibratedFont::new(
+                load_font(&asset_root.join("Exo-SemiBold.ttf"))?,
+                FontFamily::ExoSemiBold,
+            ),
+            geosans: CalibratedFont::new(
+                load_font(&asset_root.join("GeosansLight.ttf"))?,
+                FontFamily::Geosans,
+            ),
+            yahei: CalibratedFont::new(
+                load_font(&asset_root.join("yahei.ttf"))?,
+                FontFamily::Yahei,
+            ),
+            noto_sc: CalibratedFont::new(
+                load_font(&asset_root.join("NotoSansCJKsc-Regular.otf"))?,
+                FontFamily::NotoSc,
+            ),
+        };
 
-fn fallback_cover(song_id: &str) -> RgbaImage {
-    let mut image = RgbaImage::from_pixel(190, 190, rgba(82, 91, 132));
-    let hash = song_id
-        .bytes()
-        .fold(0u8, |acc, byte| acc.wrapping_add(byte));
-    let accent = rgba(140 + (hash % 80), 120 + (hash % 90), 190);
-    draw_filled_rect_mut(&mut image, Rect::at(16, 16).of_size(158, 158), accent);
-    draw_hollow_rect_mut(
-        &mut image,
-        Rect::at(16, 16).of_size(158, 158),
-        rgba(240, 242, 250),
-    );
-    image
+        let images = ScoreImageAssetImages {
+            back: load_image_rgba(&asset_root.join("back.png")).map_err(ArcError::input)?,
+            title: resize(
+                &load_image_rgba(&asset_root.join("title.png")).map_err(ArcError::input)?,
+                745,
+                200,
+                FilterType::CatmullRom,
+            ),
+            plate: load_image_rgba(&asset_root.join("plate.png")).map_err(ArcError::input)?,
+            diff_normal: ["pst.png", "prs.png", "ftr.png", "byd.png", "etr.png"]
+                .into_iter()
+                .map(|name| {
+                    load_image_rgba(&asset_root.join(name))
+                        .map(|img| resize(&img, 100, 30, FilterType::CatmullRom))
+                        .map_err(ArcError::input)
+                })
+                .collect::<ArcResult<Vec<_>>>()?,
+            rating_images: (0..8)
+                .map(|idx| {
+                    load_image_rgba(&asset_root.join(format!("rating_{idx}.png")))
+                        .map_err(ArcError::input)
+                })
+                .collect::<ArcResult<Vec<_>>>()?,
+        };
+
+        Ok(Self {
+            asset_root,
+            fonts,
+            images,
+        })
+    }
 }
 
 fn encode_png(image: &RgbaImage) -> Result<Vec<u8>, String> {
@@ -807,99 +872,174 @@ fn encode_png(image: &RgbaImage) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-fn draw_text(
+fn draw_summary_block(
     canvas: &mut RgbaImage,
-    font: &FontArc,
-    size: f32,
+    fonts: &ScoreImageFonts,
+    x: i32,
+    label: &str,
+    value: &str,
+) {
+    draw_text_with_outline(
+        canvas,
+        label,
+        x,
+        620,
+        70.0,
+        &fonts.exo_regular,
+        rgba(230, 230, 230),
+        Some((1.0, rgba(100, 100, 100))),
+    );
+    draw_text_with_outline(
+        canvas,
+        value,
+        x + 60,
+        705,
+        70.0,
+        &fonts.exo_regular,
+        rgba(230, 230, 230),
+        Some((1.0, rgba(100, 100, 100))),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_mixed_text(
+    canvas: &mut RgbaImage,
+    text: &str,
     x: i32,
     y: i32,
-    color: Rgba<u8>,
-    text: &str,
+    font_en: &CalibratedFont,
+    scale_en: f32,
+    font_other: &CalibratedFont,
+    scale_other: f32,
+    fill: Rgba<u8>,
 ) {
-    draw_text_mut(canvas, color, x, y, size, font, text);
+    let mut cursor_x = x;
+    for ch in text.chars() {
+        let ch_text = ch.to_string();
+        let (font, scale) = if ch.is_ascii() {
+            (font_en, scale_en)
+        } else {
+            (font_other, scale_other)
+        };
+        draw_text(canvas, &ch_text, cursor_x, y, scale, font, fill);
+        cursor_x += text_width(font, scale, &ch_text);
+        if cursor_x.rem_euclid(800) > 600 {
+            draw_text(canvas, "...", cursor_x, y, scale, font, fill);
+            break;
+        }
+    }
 }
 
-fn draw_right_text(
+fn draw_right_aligned_text(
     canvas: &mut RgbaImage,
-    font: &FontArc,
-    size: f32,
-    right_x: i32,
-    y: i32,
-    color: Rgba<u8>,
     text: &str,
+    scale: f32,
+    font: &CalibratedFont,
+    y: i32,
+    right_margin: i32,
+    fill: Rgba<u8>,
+    canvas_width: i32,
 ) {
-    let (width, _) = text_size(size, font, text);
-    draw_text(canvas, font, size, right_x - width as i32, y, color, text);
+    let width = text_width(font, scale, text);
+    let x = canvas_width - width - right_margin;
+    draw_text(canvas, text, x, y, scale, font, fill);
 }
 
-fn font_candidates(env_key: &str) -> Vec<PathBuf> {
-    let mut candidates = Vec::new();
-    if let Ok(path) = env::var(env_key) {
+fn draw_text(
+    canvas: &mut RgbaImage,
+    text: &str,
+    x: i32,
+    y: i32,
+    scale: f32,
+    font: &CalibratedFont,
+    fill: Rgba<u8>,
+) {
+    draw_text_mut(
+        canvas,
+        fill,
+        x,
+        y + font.y_offset(scale),
+        font.scale(scale),
+        &font.inner,
+        text,
+    );
+}
+
+fn draw_text_with_outline(
+    canvas: &mut RgbaImage,
+    text: &str,
+    x: i32,
+    y: i32,
+    scale: f32,
+    font: &CalibratedFont,
+    fill: Rgba<u8>,
+    stroke: Option<(f32, Rgba<u8>)>,
+) {
+    if let Some((stroke_width, stroke_fill)) = stroke {
+        let radius = stroke_radius(stroke_width);
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+                if dx.abs() + dy.abs() > radius.max(1) {
+                    continue;
+                }
+                draw_text(canvas, text, x + dx, y + dy, scale, font, stroke_fill);
+            }
+        }
+    }
+    draw_text(canvas, text, x, y, scale, font, fill);
+}
+
+fn stroke_radius(width: f32) -> i32 {
+    if width <= 0.0 {
+        0
+    } else {
+        width.round().max(1.0) as i32
+    }
+}
+
+fn text_width(font: &CalibratedFont, scale: f32, text: &str) -> i32 {
+    text_size(font.scale(scale), &font.inner, text).0 as i32
+}
+
+fn load_font(path: &Path) -> ArcResult<FontArc> {
+    let bytes = fs::read(path)
+        .map_err(|err| ArcError::input(format!("读取成绩图字体失败 {}: {err}", path.display())))?;
+    FontArc::try_from_vec(bytes)
+        .map_err(|_| ArcError::input(format!("解析成绩图字体失败: {}", path.display())))
+}
+
+fn load_image_rgba(path: &Path) -> Result<RgbaImage, String> {
+    image::open(path)
+        .map(|img| img.to_rgba8())
+        .map_err(|err| format!("读取成绩图资源失败 {}: {err}", path.display()))
+}
+
+fn score_image_asset_root() -> PathBuf {
+    if let Ok(path) = env::var("SCORE_IMAGE_ASSET_DIR") {
         if !path.trim().is_empty() {
-            candidates.push(PathBuf::from(path));
+            return PathBuf::from(path);
         }
     }
 
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    candidates.extend([
-        manifest_dir.join("assets/fonts/Exo-Regular.ttf"),
-        manifest_dir.join("assets/fonts/NotoSansCJKsc-Regular.otf"),
-        manifest_dir.join("assets/renderer/Exo-Regular.ttf"),
-        manifest_dir.join("assets/renderer/NotoSansCJKsc-Regular.otf"),
-        PathBuf::from("/System/Library/Fonts/PingFang.ttc"),
-        PathBuf::from("/System/Library/Fonts/STHeiti Light.ttc"),
-        PathBuf::from("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
-        PathBuf::from("/System/Library/Fonts/Supplemental/Arial.ttf"),
-        PathBuf::from("/Library/Fonts/Arial Unicode.ttf"),
-        PathBuf::from("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
-        PathBuf::from("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.otf"),
-        PathBuf::from("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
-        PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-    ]);
-
-    candidates
-}
-
-fn load_first_font(candidates: &[PathBuf]) -> ArcResult<FontArc> {
-    let mut errors = Vec::new();
-    for path in candidates {
-        match load_font(path) {
-            Ok(font) => return Ok(font),
-            Err(err) => errors.push(format!("{}: {err}", path.display())),
-        }
-    }
-    Err(ArcError::input(format!(
-        "无法加载成绩图字体，请设置 SCORE_IMAGE_FONT: {}",
-        errors.join("; ")
-    )))
-}
-
-fn load_font(path: &Path) -> Result<FontArc, String> {
-    let bytes = fs::read(path).map_err(|err| err.to_string())?;
-    FontArc::try_from_vec(bytes).map_err(|_| "字体解析失败".to_string())
+    [
+        PathBuf::from("assets/renderer"),
+        manifest_dir.join("assets/renderer"),
+    ]
+    .into_iter()
+    .find(|path| path.is_dir())
+    .unwrap_or_else(|| manifest_dir.join("assets/renderer"))
 }
 
 fn rgba(r: u8, g: u8, b: u8) -> Rgba<u8> {
     Rgba([r, g, b, 255])
 }
 
-trait Alpha {
-    fn map_alpha(self, alpha: u8) -> Self;
-}
-
-impl Alpha for Rgba<u8> {
-    fn map_alpha(mut self, alpha: u8) -> Self {
-        self.0[3] = alpha;
-        self
-    }
-}
-
-fn format_ptt(rating_ptt: i32) -> String {
-    if rating_ptt < 0 {
-        "--".to_string()
-    } else {
-        format!("{:.2}", rating_ptt as f64 / 100.0)
-    }
+fn transparent() -> Rgba<u8> {
+    Rgba([0, 0, 0, 0])
 }
 
 fn format_score(score: i32) -> String {
@@ -907,73 +1047,74 @@ fn format_score(score: i32) -> String {
 }
 
 fn format_constant(value: i32) -> String {
-    if value < 0 {
-        "-".to_string()
+    format!("{:.1}", value as f64 / 10.0)
+}
+
+fn rating_ptt_to_float(rating_ptt: i32) -> f64 {
+    rating_ptt.max(0) as f64 / 100.0
+}
+
+fn format_ptt_text(rating_ptt: i32) -> String {
+    format!("{:.2}", rating_ptt_to_float(rating_ptt))
+}
+
+fn ptt_badge_index(ptt: f64) -> usize {
+    if ptt < 3.5 {
+        0
+    } else if ptt < 7.0 {
+        1
+    } else if ptt < 10.0 {
+        2
+    } else if ptt < 11.0 {
+        3
+    } else if ptt < 12.0 {
+        4
+    } else if ptt < 12.5 {
+        5
+    } else if ptt < 13.0 {
+        6
     } else {
-        format!("{:.1}", value as f64 / 10.0)
+        7
     }
 }
 
-fn difficulty_label(difficulty: i32) -> (&'static str, Rgba<u8>) {
-    match difficulty {
-        0 => ("PST", rgba(89, 142, 205)),
-        1 => ("PRS", rgba(89, 174, 116)),
-        2 => ("FTR", rgba(146, 87, 174)),
-        3 => ("BYD", rgba(188, 74, 88)),
-        4 => ("ETR", rgba(198, 137, 55)),
-        _ => ("UNK", rgba(110, 110, 120)),
-    }
-}
-
-fn clear_type_label(clear_type: i32) -> &'static str {
-    match clear_type {
-        3 => "PM",
-        2 => "FR",
-        5 => "HC",
-        1 => "NC",
-        4 => "EC",
-        _ => "TL",
-    }
-}
-
-fn clear_type_color(clear_type: i32) -> Rgba<u8> {
-    match clear_type {
-        3 => rgba(126, 91, 194),
-        2 => rgba(58, 128, 198),
-        5 => rgba(196, 92, 70),
-        1 => rgba(75, 145, 95),
-        4 => rgba(107, 154, 172),
-        _ => rgba(125, 128, 145),
-    }
-}
-
-fn days_since(timestamp: i64) -> String {
-    if timestamp <= 0 {
-        return "-".to_string();
-    }
-    let seconds = if timestamp > 10_000_000_000 {
-        timestamp / 1000
+fn days_since_timestamp(time_played: i64) -> i64 {
+    let sec = if time_played > 10_000_000_000 {
+        time_played / 1000
     } else {
-        timestamp
+        time_played
     };
-    let Some(played_at) = Local.timestamp_opt(seconds, 0).single() else {
-        return "-".to_string();
-    };
-    let days = Local::now()
-        .signed_duration_since(played_at)
-        .num_days()
-        .max(0);
-    format!("{days}d")
+    if sec <= 0 {
+        return 0;
+    }
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or_else(|_| Local::now().timestamp());
+    now.saturating_sub(sec) / 86_400
 }
 
-fn ellipsize(value: &str, max_chars: usize) -> String {
-    let mut result = String::new();
-    for (index, ch) in value.chars().enumerate() {
-        if index >= max_chars {
-            result.push_str("...");
-            return result;
+fn format_compact_float(value: f64, decimals: usize) -> String {
+    let mut s = format!("{:.*}", decimals, value);
+    if s.contains('.') {
+        while s.ends_with('0') {
+            s.pop();
         }
-        result.push(ch);
+        if s.ends_with('.') {
+            s.push('0');
+        }
     }
-    result
+    s
+}
+
+trait RoundTo {
+    fn round_to(self, decimals: usize) -> f64;
+}
+
+impl RoundTo for f64 {
+    fn round_to(self, decimals: usize) -> f64 {
+        let factor = 10_f64.powi(decimals as i32);
+        (self * factor).round() / factor
+    }
 }

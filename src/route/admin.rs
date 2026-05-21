@@ -1,6 +1,7 @@
 use chrono::{Local, NaiveDateTime, TimeZone, Utc};
 use rand::Rng;
-use rocket::http::{Cookie, CookieJar, SameSite};
+use rocket::http::{ContentType, Cookie, CookieJar, SameSite, Status};
+use rocket::response::{Responder, Response};
 use rocket::serde::json::Json;
 use rocket::{delete, get, patch, post, routes, Route, State};
 use serde::{Deserialize, Serialize};
@@ -8,12 +9,16 @@ use sha2::{Digest, Sha256};
 use sqlx::FromRow;
 use std::collections::HashMap;
 use std::env;
+use std::io::Cursor;
 use std::sync::{OnceLock, RwLock};
 
 use crate::config::CONFIG;
 use crate::error::ArcError;
 use crate::route::common::{success_return, success_return_no_value, EmptyResponse, RouteResult};
-use crate::service::{generate_score_images, OperationManager, ScoreImageMode};
+use crate::service::{
+    generate_score_image_png, generate_score_images, parse_score_image_mode, OperationManager,
+    ScoreImageMode,
+};
 use crate::utils::sql_placeholders;
 use crate::DbPool;
 
@@ -178,7 +183,7 @@ pub struct ScoreImageView {
     mode: String,
     title: String,
     entry_count: usize,
-    data_url: String,
+    url: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -186,6 +191,20 @@ pub struct ScoreImageView {
 pub struct ScoreImagesResponse {
     user: AdminUserSummary,
     images: Vec<ScoreImageView>,
+}
+
+pub struct PngResponse {
+    bytes: Vec<u8>,
+}
+
+impl<'r> Responder<'r, 'static> for PngResponse {
+    fn respond_to(self, _: &'r rocket::Request<'_>) -> rocket::response::Result<'static> {
+        Response::build()
+            .status(Status::Ok)
+            .header(ContentType::PNG)
+            .sized_body(self.bytes.len(), Cursor::new(self.bytes))
+            .ok()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -834,6 +853,20 @@ async fn require_admin_api(cookies: &CookieJar<'_>, pool: &DbPool) -> Result<Web
         Ok(session)
     } else {
         Err(ArcError::no_access("Admin role required", 403))
+    }
+}
+
+async fn resolve_score_image_user(
+    session: &WebSession,
+    user_id: Option<i32>,
+    name: Option<&str>,
+    user_code: Option<&str>,
+    pool: &DbPool,
+) -> Result<AdminUserSummary, ArcError> {
+    if session.role == ADMIN_ROLE && (user_id.is_some() || name.is_some() || user_code.is_some()) {
+        resolve_admin_user(user_id, name, user_code, pool).await
+    } else {
+        Ok(session.user.clone())
     }
 }
 
@@ -2841,19 +2874,14 @@ pub async fn admin_api_score_images(
     cookies: &CookieJar<'_>,
 ) -> RouteResult<ScoreImagesResponse> {
     let session = require_web_session(cookies, pool.inner()).await?;
-    let user = if session.role == ADMIN_ROLE
-        && (user_id.is_some() || name.is_some() || user_code.is_some())
-    {
-        resolve_admin_user(
-            user_id,
-            clean_optional_payload_text(&name),
-            clean_optional_payload_text(&user_code),
-            pool.inner(),
-        )
-        .await?
-    } else {
-        session.user.clone()
-    };
+    let user = resolve_score_image_user(
+        &session,
+        user_id,
+        clean_optional_payload_text(&name),
+        clean_optional_payload_text(&user_code),
+        pool.inner(),
+    )
+    .await?;
 
     let images = generate_score_images(
         pool.inner(),
@@ -2870,11 +2898,36 @@ pub async fn admin_api_score_images(
         mode: image.mode.slug().to_string(),
         title: image.mode.title().to_string(),
         entry_count: image.entry_count,
-        data_url: image.data_url,
+        url: image.url,
     })
     .collect();
 
     Ok(success_return(ScoreImagesResponse { user, images }))
+}
+
+#[get("/api/score-images/<file_name>?<user_id>&<name>&<user_code>")]
+pub async fn admin_api_score_image_png(
+    file_name: &str,
+    user_id: Option<i32>,
+    name: Option<String>,
+    user_code: Option<String>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> Result<PngResponse, ArcError> {
+    let mode_slug = file_name.strip_suffix(".png").unwrap_or(file_name);
+    let mode = parse_score_image_mode(mode_slug)
+        .ok_or_else(|| ArcError::input("Unsupported score image mode"))?;
+    let session = require_web_session(cookies, pool.inner()).await?;
+    let user = resolve_score_image_user(
+        &session,
+        user_id,
+        clean_optional_payload_text(&name),
+        clean_optional_payload_text(&user_code),
+        pool.inner(),
+    )
+    .await?;
+    let bytes = generate_score_image_png(pool.inner(), user.user_id, mode).await?;
+    Ok(PngResponse { bytes })
 }
 
 #[get("/api/chart-top?<sid>&<difficulty>&<limit>")]
@@ -3254,6 +3307,7 @@ pub fn routes() -> Vec<Route> {
         admin_api_purchase_items,
         admin_api_user_scores,
         admin_api_score_images,
+        admin_api_score_image_png,
         admin_api_chart_top,
         admin_api_redeem_users,
         admin_api_user_ticket,

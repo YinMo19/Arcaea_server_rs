@@ -997,14 +997,14 @@ function ScoreImagesView({ isAdmin }: { isAdmin: boolean }) {
                     </div>
                   </div>
                   <Button asChild variant="outline" size="sm">
-                    <a href={image.dataUrl} download={`${image.mode}.png`}>
+                    <a href={image.url} download={`${image.mode}.png`}>
                       下载
                     </a>
                   </Button>
                 </div>
                 <img
                   className="w-full rounded border bg-muted"
-                  src={image.dataUrl}
+                  src={image.url}
                   alt={image.title}
                 />
               </div>

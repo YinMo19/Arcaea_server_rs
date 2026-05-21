@@ -14,3 +14,29 @@ Rocket.toml
 
 bundles
 songs
+
+# Score image renderer: keep only core assets in Git. Character art and covers
+# are deployment data and are loaded dynamically on the server.
+assets/renderer/**
+!assets/renderer/
+!assets/renderer/Exo-Regular.ttf
+!assets/renderer/Exo-SemiBold.ttf
+!assets/renderer/GeosansLight.ttf
+!assets/renderer/yahei.ttf
+!assets/renderer/NotoSansCJKsc-Regular.otf
+!assets/renderer/back.png
+!assets/renderer/title.png
+!assets/renderer/plate.png
+!assets/renderer/pst.png
+!assets/renderer/prs.png
+!assets/renderer/ftr.png
+!assets/renderer/byd.png
+!assets/renderer/etr.png
+!assets/renderer/rating_0.png
+!assets/renderer/rating_1.png
+!assets/renderer/rating_2.png
+!assets/renderer/rating_3.png
+!assets/renderer/rating_4.png
+!assets/renderer/rating_5.png
+!assets/renderer/rating_6.png
+!assets/renderer/rating_7.png

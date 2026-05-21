@@ -37,7 +37,10 @@ pub use operations::OperationManager;
 pub use present::PresentService;
 pub use purchase::PurchaseService;
 pub use score::ScoreService;
-pub use score_image::{generate_score_images, GeneratedScoreImage, ScoreImageMode};
+pub use score_image::{
+    generate_score_image_png, generate_score_images, parse_score_image_mode, GeneratedScoreImage,
+    ScoreImageMode,
+};
 pub use storage::StorageService;
 pub use user::UserService;
 pub use world::WorldService;

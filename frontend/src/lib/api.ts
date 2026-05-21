@@ -155,7 +155,7 @@ export type ScoreImage = {
   mode: string
   title: string
   entryCount: number
-  dataUrl: string
+  url: string
 }
 
 export type ScoreImages = {
