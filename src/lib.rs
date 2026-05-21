@@ -130,6 +130,13 @@ pub mod utils {
     pub fn is_valid_password(password: &str) -> bool {
         password.len() >= 8 && password.len() <= 32
     }
+
+    /// Return a comma-separated placeholder list for dynamic SQL IN clauses.
+    pub fn sql_placeholders(count: usize) -> String {
+        std::iter::repeat_n("?", count)
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
 }
 
 /// Constants used throughout the application

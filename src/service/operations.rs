@@ -6,6 +6,7 @@
 use crate::error::{ArcError, ArcResult};
 use crate::service::asset_manager::AssetManager;
 use crate::service::bundle::BundleService;
+use crate::utils::sql_placeholders;
 
 use async_trait::async_trait;
 use sqlx::MySqlPool;
@@ -126,9 +127,10 @@ impl Operation for RefreshAllScoreRating {
 
         if !song_ids.is_empty() {
             // Reset ratings for songs not in chart table
-            let placeholders = vec!["?"; song_ids.len()].join(",");
-            let query =
-                format!("UPDATE best_score SET rating = 0 WHERE song_id NOT IN ({placeholders})");
+            let song_placeholders = sql_placeholders(song_ids.len());
+            let query = format!(
+                "UPDATE best_score SET rating = 0 WHERE song_id NOT IN ({song_placeholders})"
+            );
 
             let mut query_builder = sqlx::query(&query);
             for song_id in &song_ids {
@@ -147,15 +149,10 @@ impl Operation for RefreshAllScoreRating {
                 ];
 
                 for (difficulty, rating_opt) in ratings.iter().enumerate() {
-                    let def_rating = if let Some(rating) = rating_opt {
-                        if *rating > 0 {
-                            *rating as f64 / 10.0
-                        } else {
-                            -10.0
-                        }
-                    } else {
-                        -10.0
-                    };
+                    let def_rating = rating_opt
+                        .filter(|rating| *rating > 0)
+                        .map(|rating| rating as f64 / 10.0)
+                        .unwrap_or(-10.0);
 
                     // Update best_score ratings and score_v2
                     sqlx::query!(
@@ -296,7 +293,7 @@ impl UnlockUserItem {
     }
 
     pub fn with_item_types(mut self, item_types: Vec<String>) -> Self {
-        self.item_types = item_types;
+        self.item_types = normalize_item_types(item_types);
         self
     }
 }
@@ -338,6 +335,29 @@ impl Operation for UnlockUserItem {
 }
 
 impl UnlockUserItem {
+    fn ensure_item_types(&self) -> ArcResult<()> {
+        (!self.item_types.is_empty())
+            .then_some(())
+            .ok_or_else(|| ArcError::input("At least one item type is required"))
+    }
+
+    async fn load_items_by_type(&self) -> ArcResult<Vec<(String, String)>> {
+        self.ensure_item_types()?;
+
+        let item_type_placeholders = sql_placeholders(self.item_types.len());
+        let query = format!(
+            "SELECT item_id, type
+             FROM item
+             WHERE type IN ({item_type_placeholders})"
+        );
+        let mut query_builder = sqlx::query_as::<_, (String, String)>(&query);
+        for item_type in &self.item_types {
+            query_builder = query_builder.bind(item_type);
+        }
+
+        Ok(query_builder.fetch_all(&self.pool).await?)
+    }
+
     async fn unlock_for_user(&self, user_id: i32) -> ArcResult<()> {
         // Check if user exists
         let user_exists = sqlx::query_scalar!(
@@ -352,15 +372,7 @@ impl UnlockUserItem {
         }
 
         // Get available items of specified types
-        let placeholders = vec!["?"; self.item_types.len()].join(",");
-        let query = format!("SELECT item_id, type FROM item WHERE type IN ({placeholders})");
-
-        let mut query_builder = sqlx::query_as::<_, (String, String)>(&query);
-        for item_type in &self.item_types {
-            query_builder = query_builder.bind(item_type);
-        }
-
-        let items = query_builder.fetch_all(&self.pool).await?;
+        let items = self.load_items_by_type().await?;
 
         // Insert user_item records
         for (item_id, item_type) in items {
@@ -379,9 +391,13 @@ impl UnlockUserItem {
     }
 
     async fn lock_for_user(&self, user_id: i32) -> ArcResult<()> {
-        let placeholders = vec!["?"; self.item_types.len()].join(",");
-        let query = format!("DELETE FROM user_item WHERE user_id = ? AND type IN ({placeholders})");
+        self.ensure_item_types()?;
 
+        let item_type_placeholders = sql_placeholders(self.item_types.len());
+        let query = format!(
+            "DELETE FROM user_item
+             WHERE user_id = ? AND type IN ({item_type_placeholders})"
+        );
         let mut query_builder = sqlx::query(&query).bind(user_id);
         for item_type in &self.item_types {
             query_builder = query_builder.bind(item_type);
@@ -398,15 +414,7 @@ impl UnlockUserItem {
             .await?;
 
         // Get all items of specified types
-        let placeholders = vec!["?"; self.item_types.len()].join(",");
-        let query = format!("SELECT item_id, type FROM item WHERE type IN ({placeholders})");
-
-        let mut query_builder = sqlx::query_as::<_, (String, String)>(&query);
-        for item_type in &self.item_types {
-            query_builder = query_builder.bind(item_type);
-        }
-
-        let items = query_builder.fetch_all(&self.pool).await?;
+        let items = self.load_items_by_type().await?;
 
         // Insert user_item records for all users
         for user_id in users {
@@ -427,9 +435,10 @@ impl UnlockUserItem {
     }
 
     async fn lock_for_all_users(&self) -> ArcResult<()> {
-        let placeholders = vec!["?"; self.item_types.len()].join(",");
-        let query = format!("DELETE FROM user_item WHERE type IN ({placeholders})");
+        self.ensure_item_types()?;
 
+        let item_type_placeholders = sql_placeholders(self.item_types.len());
+        let query = format!("DELETE FROM user_item WHERE type IN ({item_type_placeholders})");
         let mut query_builder = sqlx::query(&query);
         for item_type in &self.item_types {
             query_builder = query_builder.bind(item_type);
@@ -438,6 +447,17 @@ impl UnlockUserItem {
         query_builder.execute(&self.pool).await?;
         Ok(())
     }
+}
+
+fn normalize_item_types(item_types: Vec<String>) -> Vec<String> {
+    let mut item_types = item_types
+        .into_iter()
+        .map(|item_type| item_type.trim().to_owned())
+        .filter(|item_type| !item_type.is_empty())
+        .collect::<Vec<_>>();
+    item_types.sort();
+    item_types.dedup();
+    item_types
 }
 
 /// Operation manager to execute operations

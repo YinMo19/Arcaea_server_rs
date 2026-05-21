@@ -51,7 +51,7 @@ impl ContentBundle {
 
         let prev_version = json_data["previousVersionNumber"]
             .as_str()
-            .map(|s| s.to_string())
+            .map(str::to_owned)
             .or_else(|| Some("0.0.0".to_string()));
 
         let app_version = json_data["applicationVersionNumber"]

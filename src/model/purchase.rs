@@ -113,7 +113,7 @@ impl Purchase {
         let discount_reason = obj
             .get("discount_reason")
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+            .map(str::to_owned);
 
         let items = if let Some(items_val) = obj.get("items") {
             if let Some(items_array) = items_val.as_array() {

@@ -2383,7 +2383,7 @@ fn normalize_unlock(mut unlock: Vec<u8>, unlock_len: usize) -> Vec<u8> {
 }
 
 fn data_get_string(data: &Value, key: &str) -> Option<String> {
-    data.get(key).and_then(Value::as_str).map(|s| s.to_string())
+    data.get(key).and_then(Value::as_str).map(str::to_owned)
 }
 
 fn data_get_bool(data: &Value, key: &str) -> Option<bool> {

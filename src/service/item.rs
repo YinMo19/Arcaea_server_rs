@@ -431,7 +431,7 @@ impl ItemService {
             .get("item_id")
             .or_else(|| data.get("id"))
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
+            .map(str::to_owned)
             .or_else(|| Some(item_type.to_string()));
 
         let amount = data
@@ -551,29 +551,14 @@ impl ItemService {
         table_name: &str,
         _table_primary_key: &str,
     ) -> ArcResult<()> {
-        for item in items {
-            let item_id = item
-                .item_id
-                .as_ref()
-                .ok_or_else(|| ArcError::input("Item ID is required for collection operations"))?;
-            let _amount = item.amount.unwrap_or(1);
+        let items = self.validate_collection_items(items).await?;
+        let sql = format!("INSERT INTO {table_name} VALUES (?, ?, ?, ?)");
 
-            if !self.select_exists(item_id, &item.item_type).await? {
-                return Err(ArcError::no_data(
-                    format!("No such item `{}`: `{}`", item.item_type, item_id),
-                    108,
-                ));
-            }
-        }
-
-        for item in items {
-            let item_id = item.item_id.as_ref().unwrap();
-            let amount = item.amount.unwrap_or(1);
-
-            sqlx::query(&format!("INSERT INTO {table_name} VALUES (?, ?, ?, ?)"))
+        for (item_id, item_type, amount) in items {
+            sqlx::query(&sql)
                 .bind(collection_id)
                 .bind(item_id)
-                .bind(&item.item_type)
+                .bind(item_type)
                 .bind(amount)
                 .execute(&self.pool)
                 .await?;
@@ -590,20 +575,23 @@ impl ItemService {
         table_name: &str,
         table_primary_key: &str,
     ) -> ArcResult<()> {
+        let sql = format!(
+            "DELETE FROM {table_name}
+             WHERE {table_primary_key} = ? AND item_id = ? AND type = ?"
+        );
+
         for item in items {
             let item_id = item
                 .item_id
                 .as_ref()
                 .ok_or_else(|| ArcError::input("Item ID is required for collection operations"))?;
 
-            sqlx::query(&format!(
-                "DELETE FROM {table_name} WHERE {table_primary_key} = ? AND item_id = ? AND type = ?"
-            ))
-            .bind(collection_id)
-            .bind(item_id)
-            .bind(&item.item_type)
-            .execute(&self.pool)
-            .await?;
+            sqlx::query(&sql)
+                .bind(collection_id)
+                .bind(item_id)
+                .bind(&item.item_type)
+                .execute(&self.pool)
+                .await?;
         }
 
         Ok(())
@@ -617,6 +605,12 @@ impl ItemService {
         table_name: &str,
         table_primary_key: &str,
     ) -> ArcResult<()> {
+        let sql = format!(
+            "UPDATE {table_name}
+             SET amount = ?
+             WHERE {table_primary_key} = ? AND item_id = ? AND type = ?"
+        );
+
         for item in items {
             let item_id = item
                 .item_id
@@ -624,18 +618,42 @@ impl ItemService {
                 .ok_or_else(|| ArcError::input("Item ID is required for collection operations"))?;
             let amount = item.amount.unwrap_or(1);
 
-            sqlx::query(&format!(
-                "UPDATE {table_name} SET amount = ? WHERE {table_primary_key} = ? AND item_id = ? AND type = ?"
-            ))
-            .bind(amount)
-            .bind(collection_id)
-            .bind(item_id)
-            .bind(&item.item_type)
-            .execute(&self.pool)
-            .await?;
+            sqlx::query(&sql)
+                .bind(amount)
+                .bind(collection_id)
+                .bind(item_id)
+                .bind(&item.item_type)
+                .execute(&self.pool)
+                .await?;
         }
 
         Ok(())
+    }
+
+    async fn validate_collection_items<'a>(
+        &self,
+        items: &'a [Item],
+    ) -> ArcResult<Vec<(&'a str, &'a str, i32)>> {
+        let mut validated = Vec::with_capacity(items.len());
+
+        for item in items {
+            let item_id = item
+                .item_id
+                .as_deref()
+                .ok_or_else(|| ArcError::input("Item ID is required for collection operations"))?;
+            let amount = item.amount.unwrap_or(1);
+
+            if !self.select_exists(item_id, &item.item_type).await? {
+                return Err(ArcError::no_data(
+                    format!("No such item `{}`: `{}`", item.item_type, item_id),
+                    108,
+                ));
+            }
+
+            validated.push((item_id, item.item_type.as_str(), amount));
+        }
+
+        Ok(validated)
     }
 
     /// Get user positive item amount

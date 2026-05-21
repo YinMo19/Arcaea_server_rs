@@ -17,11 +17,12 @@ use crate::service::character::CharacterService;
 use crate::service::item::ItemService;
 use crate::service::user::UserService;
 use crate::service::world::{get_map_parser, StaminaImpl, WorldService};
+use crate::utils::sql_placeholders;
 use base64::{engine::general_purpose, Engine as _};
 use md5;
 use rand::Rng;
 use serde_json::json;
-use sqlx::{MySql, MySqlPool, QueryBuilder};
+use sqlx::MySqlPool;
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -727,7 +728,13 @@ impl ScoreService {
             return Ok(Vec::new());
         }
 
-        let mut builder = QueryBuilder::<MySql>::new(
+        let user_placeholders = sql_placeholders(user_ids.len());
+        let character_table = if CONFIG.character_full_unlock {
+            "user_char_full"
+        } else {
+            "user_char"
+        };
+        let sql = format!(
             r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
                     bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
                     bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
@@ -735,36 +742,23 @@ impl ScoreService {
                     u.favorite_character, u.is_skill_sealed,
                     uc.is_uncapped as favorite_is_uncapped,
                     uc.is_uncapped_override as favorite_is_uncapped_override
-                 FROM best_score bs
-                 JOIN user u ON bs.user_id = u.user_id
-                 "#,
+               FROM best_score bs
+               JOIN user u ON bs.user_id = u.user_id
+               LEFT JOIN {character_table} uc
+                 ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character
+              WHERE bs.song_id = ?
+                AND bs.difficulty = ?
+                AND bs.user_id IN ({user_placeholders})"#
         );
 
-        if CONFIG.character_full_unlock {
-            builder.push(
-                "LEFT JOIN user_char_full uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character ",
-            );
-        } else {
-            builder.push(
-                "LEFT JOIN user_char uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character ",
-            );
-        }
-
-        builder.push("WHERE bs.song_id = ");
-        builder.push_bind(song_id);
-        builder.push(" AND bs.difficulty = ");
-        builder.push_bind(difficulty);
-        builder.push(" AND bs.user_id IN (");
-        let mut separated = builder.separated(", ");
+        let mut query = sqlx::query_as::<_, RankingScoreRow>(&sql)
+            .bind(song_id)
+            .bind(difficulty);
         for user_id in user_ids {
-            separated.push_bind(user_id);
+            query = query.bind(user_id);
         }
-        separated.push_unseparated(")");
 
-        let rows = builder
-            .build_query_as::<RankingScoreRow>()
-            .fetch_all(&self.pool)
-            .await?;
+        let rows = query.fetch_all(&self.pool).await?;
         Ok(rows)
     }
 
@@ -778,7 +772,13 @@ impl ScoreService {
             return Ok(Vec::new());
         }
 
-        let mut builder = QueryBuilder::<MySql>::new(
+        let user_placeholders = sql_placeholders(user_ids.len());
+        let character_table = if CONFIG.character_full_unlock {
+            "user_char_full"
+        } else {
+            "user_char"
+        };
+        let sql = format!(
             r#"SELECT bs.user_id, bs.song_id, bs.difficulty, bs.score, bs.shiny_perfect_count,
                     bs.perfect_count, bs.near_count, bs.miss_count, bs.health, bs.modifier,
                     bs.time_played, bs.best_clear_type, bs.clear_type, bs.rating, bs.score_v2,
@@ -787,37 +787,24 @@ impl ScoreService {
                     uc.is_uncapped as favorite_is_uncapped,
                     uc.is_uncapped_override as favorite_is_uncapped_override,
                     c.name as song_name
-                 FROM best_score bs
-                 JOIN user u ON bs.user_id = u.user_id
-                 "#,
+               FROM best_score bs
+               JOIN user u ON bs.user_id = u.user_id
+               LEFT JOIN {character_table} uc
+                 ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character
+               LEFT JOIN chart c ON bs.song_id = c.song_id
+              WHERE bs.song_id = ?
+                AND bs.difficulty = ?
+                AND bs.user_id IN ({user_placeholders})"#
         );
 
-        if CONFIG.character_full_unlock {
-            builder.push(
-                "LEFT JOIN user_char_full uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character ",
-            );
-        } else {
-            builder.push(
-                "LEFT JOIN user_char uc ON uc.user_id = u.user_id AND uc.character_id = u.favorite_character ",
-            );
-        }
-
-        builder.push("LEFT JOIN chart c ON bs.song_id = c.song_id ");
-        builder.push("WHERE bs.song_id = ");
-        builder.push_bind(song_id);
-        builder.push(" AND bs.difficulty = ");
-        builder.push_bind(difficulty);
-        builder.push(" AND bs.user_id IN (");
-        let mut separated = builder.separated(", ");
+        let mut query = sqlx::query_as::<_, RankingScoreRowComplete>(&sql)
+            .bind(song_id)
+            .bind(difficulty);
         for user_id in user_ids {
-            separated.push_bind(user_id);
+            query = query.bind(user_id);
         }
-        separated.push_unseparated(")");
 
-        let rows = builder
-            .build_query_as::<RankingScoreRowComplete>()
-            .fetch_all(&self.pool)
-            .await?;
+        let rows = query.fetch_all(&self.pool).await?;
         Ok(rows)
     }
 

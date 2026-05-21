@@ -14,6 +14,7 @@ use crate::config::CONFIG;
 use crate::error::ArcError;
 use crate::route::common::{success_return, success_return_no_value, EmptyResponse, RouteResult};
 use crate::service::OperationManager;
+use crate::utils::sql_placeholders;
 use crate::DbPool;
 
 const ADMIN_COOKIE: &str = "arcaea_admin_session";
@@ -169,6 +170,37 @@ pub struct AdminSongPayload {
     rating_ftr: String,
     rating_byd: String,
     rating_etr: String,
+}
+
+struct AdminSongInput<'a> {
+    sid: &'a str,
+    name_en: &'a str,
+    rating_pst: &'a str,
+    rating_prs: &'a str,
+    rating_ftr: &'a str,
+    rating_byd: &'a str,
+    rating_etr: &'a str,
+}
+
+impl<'a> From<&'a AdminSongPayload> for AdminSongInput<'a> {
+    fn from(payload: &'a AdminSongPayload) -> Self {
+        Self {
+            sid: &payload.sid,
+            name_en: &payload.name_en,
+            rating_pst: &payload.rating_pst,
+            rating_prs: &payload.rating_prs,
+            rating_ftr: &payload.rating_ftr,
+            rating_byd: &payload.rating_byd,
+            rating_etr: &payload.rating_etr,
+        }
+    }
+}
+
+impl<'a> AdminSongInput<'a> {
+    fn with_sid(mut self, sid: &'a str) -> Self {
+        self.sid = sid;
+        self
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -635,7 +667,7 @@ fn clean_query_value(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
+        .map(str::to_owned)
 }
 
 fn normalize_page(page: Option<i64>, page_size: Option<i64>) -> (i64, i64) {
@@ -667,34 +699,20 @@ fn filter_sql(filters: &[&str]) -> String {
     }
 }
 
-fn bind_strings_scalar<'q, O>(
-    mut query: sqlx::query::QueryScalar<'q, sqlx::MySql, O, sqlx::mysql::MySqlArguments>,
-    values: &'q [String],
-) -> sqlx::query::QueryScalar<'q, sqlx::MySql, O, sqlx::mysql::MySqlArguments> {
-    for value in values {
-        query = query.bind(value);
-    }
-    query
-}
+fn like_filter(query: Option<&str>, columns: &[&str]) -> (String, Vec<String>) {
+    let Some(query) = clean_query_value(query) else {
+        return (String::new(), Vec::new());
+    };
 
-fn bind_strings<'q>(
-    mut query: sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments>,
-    values: &'q [String],
-) -> sqlx::query::Query<'q, sqlx::MySql, sqlx::mysql::MySqlArguments> {
-    for value in values {
-        query = query.bind(value);
-    }
-    query
-}
-
-fn bind_strings_as<'q, T>(
-    mut query: sqlx::query::QueryAs<'q, sqlx::MySql, T, sqlx::mysql::MySqlArguments>,
-    values: &'q [String],
-) -> sqlx::query::QueryAs<'q, sqlx::MySql, T, sqlx::mysql::MySqlArguments> {
-    for value in values {
-        query = query.bind(value);
-    }
-    query
+    let filters = columns
+        .iter()
+        .map(|column| format!("{column} LIKE ?"))
+        .collect::<Vec<_>>();
+    let like = format!("%{query}%");
+    (
+        format!(" WHERE {}", filters.join(" OR ")),
+        vec![like; columns.len()],
+    )
 }
 
 fn admin_unauthorized() -> ArcError {
@@ -922,11 +940,11 @@ async fn update_admin_user_purchase(
         });
     }
 
-    let placeholders = vec!["?"; item_types.len()].join(", ");
+    let item_type_placeholders = sql_placeholders(item_types.len());
     let affected_rows = if method == "lock" {
-        let user_placeholders = vec!["?"; users.len()].join(", ");
+        let user_placeholders = sql_placeholders(users.len());
         let sql = format!(
-            "DELETE FROM user_item WHERE user_id IN ({user_placeholders}) AND type IN ({placeholders})"
+            "DELETE FROM user_item WHERE user_id IN ({user_placeholders}) AND type IN ({item_type_placeholders})"
         );
         let mut query = sqlx::query(&sql);
         for user_id in &users {
@@ -941,7 +959,8 @@ async fn update_admin_user_purchase(
             .map_err(|err| ArcError::input(format!("锁定购买失败: {err}")))?
             .rows_affected()
     } else {
-        let item_sql = format!("SELECT item_id, type FROM item WHERE type IN ({placeholders})");
+        let item_sql =
+            format!("SELECT item_id, type FROM item WHERE type IN ({item_type_placeholders})");
         let mut item_query = sqlx::query_as::<_, (String, String)>(&item_sql);
         for item_type in &item_types {
             item_query = item_query.bind(item_type);
@@ -1010,10 +1029,8 @@ async fn delete_admin_scores(
     }
 
     let mut filters = Vec::new();
-    let mut binds = Vec::new();
-    if let Some(song_id) = &song_id {
+    if song_id.is_some() {
         filters.push("song_id = ?");
-        binds.push(song_id.clone());
     }
     if difficulty.is_some() {
         filters.push("difficulty = ?");
@@ -1023,7 +1040,10 @@ async fn delete_admin_scores(
     }
 
     let sql = format!("DELETE FROM best_score{}", filter_sql(&filters));
-    let mut query = bind_strings(sqlx::query(&sql), &binds);
+    let mut query = sqlx::query(&sql);
+    if let Some(song_id) = &song_id {
+        query = query.bind(song_id);
+    }
     if let Some(difficulty) = difficulty {
         query = query.bind(difficulty);
     }
@@ -1755,22 +1775,14 @@ async fn load_admin_songs(
     page_size: i64,
     pool: &DbPool,
 ) -> AdminPageResponse<SongRowView> {
-    let query = clean_query_value(q).unwrap_or_default();
-    let (where_sql, binds) = if query.is_empty() {
-        (String::new(), Vec::new())
-    } else {
-        let like = format!("%{query}%");
-        (
-            " WHERE song_id LIKE ? OR name LIKE ?".to_string(),
-            vec![like.clone(), like],
-        )
-    };
+    let (where_sql, binds) = like_filter(q, &["song_id", "name"]);
 
     let count_sql = format!("SELECT COUNT(*) FROM chart{where_sql}");
-    let total = bind_strings_scalar(sqlx::query_scalar::<_, i64>(&count_sql), &binds)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(0);
+    let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql);
+    for value in &binds {
+        count_query = count_query.bind(value);
+    }
+    let total = count_query.fetch_one(pool).await.unwrap_or(0);
     let (page, offset) = clamp_page(page, page_size, total);
 
     let row_sql = format!(
@@ -1779,7 +1791,11 @@ async fn load_admin_songs(
          ORDER BY song_id ASC
          LIMIT ? OFFSET ?"
     );
-    let rows = bind_strings_as(sqlx::query_as::<_, ChartDbRow>(&row_sql), &binds)
+    let mut rows_query = sqlx::query_as::<_, ChartDbRow>(&row_sql);
+    for value in &binds {
+        rows_query = rows_query.bind(value);
+    }
+    let rows = rows_query
         .bind(page_size)
         .bind(offset)
         .fetch_all(pool)
@@ -1798,22 +1814,14 @@ async fn load_admin_items(
     page_size: i64,
     pool: &DbPool,
 ) -> AdminPageResponse<ItemRowView> {
-    let query = clean_query_value(q).unwrap_or_default();
-    let (where_sql, binds) = if query.is_empty() {
-        (String::new(), Vec::new())
-    } else {
-        let like = format!("%{query}%");
-        (
-            " WHERE item_id LIKE ? OR type LIKE ?".to_string(),
-            vec![like.clone(), like],
-        )
-    };
+    let (where_sql, binds) = like_filter(q, &["item_id", "type"]);
 
     let count_sql = format!("SELECT COUNT(*) FROM item{where_sql}");
-    let total = bind_strings_scalar(sqlx::query_scalar::<_, i64>(&count_sql), &binds)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(0);
+    let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql);
+    for value in &binds {
+        count_query = count_query.bind(value);
+    }
+    let total = count_query.fetch_one(pool).await.unwrap_or(0);
     let (page, offset) = clamp_page(page, page_size, total);
 
     let row_sql = format!(
@@ -1822,7 +1830,11 @@ async fn load_admin_items(
          ORDER BY type, item_id
          LIMIT ? OFFSET ?"
     );
-    let rows = bind_strings_as(sqlx::query_as::<_, ItemDbRow>(&row_sql), &binds)
+    let mut rows_query = sqlx::query_as::<_, ItemDbRow>(&row_sql);
+    for value in &binds {
+        rows_query = rows_query.bind(value);
+    }
+    let rows = rows_query
         .bind(page_size)
         .bind(offset)
         .fetch_all(pool)
@@ -1841,22 +1853,14 @@ async fn load_admin_purchases(
     page_size: i64,
     pool: &DbPool,
 ) -> AdminPageResponse<PurchaseRowView> {
-    let query_purchase = clean_query_value(pq).unwrap_or_default();
-    let (where_sql, binds) = if query_purchase.is_empty() {
-        (String::new(), Vec::new())
-    } else {
-        let like = format!("%{query_purchase}%");
-        (
-            " WHERE purchase_name LIKE ? OR COALESCE(discount_reason, '') LIKE ?".to_string(),
-            vec![like.clone(), like],
-        )
-    };
+    let (where_sql, binds) = like_filter(pq, &["purchase_name", "COALESCE(discount_reason, '')"]);
 
     let count_sql = format!("SELECT COUNT(*) FROM purchase{where_sql}");
-    let total = bind_strings_scalar(sqlx::query_scalar::<_, i64>(&count_sql), &binds)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(0);
+    let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql);
+    for value in &binds {
+        count_query = count_query.bind(value);
+    }
+    let total = count_query.fetch_one(pool).await.unwrap_or(0);
     let (page, offset) = clamp_page(page, page_size, total);
 
     let row_sql = format!(
@@ -1865,7 +1869,11 @@ async fn load_admin_purchases(
          ORDER BY purchase_name ASC
          LIMIT ? OFFSET ?"
     );
-    let purchase_rows = bind_strings_as(sqlx::query_as::<_, PurchaseDbRow>(&row_sql), &binds)
+    let mut purchase_query = sqlx::query_as::<_, PurchaseDbRow>(&row_sql);
+    for value in &binds {
+        purchase_query = purchase_query.bind(value);
+    }
+    let purchase_rows = purchase_query
         .bind(page_size)
         .bind(offset)
         .fetch_all(pool)
@@ -1878,20 +1886,21 @@ async fn load_admin_purchases(
             .iter()
             .map(|row| row.purchase_name.clone())
             .collect::<Vec<_>>();
-        let placeholders = vec!["?"; purchase_names.len()].join(", ");
+        let purchase_placeholders = sql_placeholders(purchase_names.len());
         let item_sql = format!(
             "SELECT purchase_name, item_id, type, amount
              FROM purchase_item
-             WHERE purchase_name IN ({placeholders})
+             WHERE purchase_name IN ({purchase_placeholders})
              ORDER BY purchase_name ASC, item_id ASC, type ASC"
         );
-        let purchase_item_rows = bind_strings_as(
-            sqlx::query_as::<_, PurchaseItemDbRow>(&item_sql),
-            &purchase_names,
-        )
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default();
+        let mut purchase_item_query = sqlx::query_as::<_, PurchaseItemDbRow>(&item_sql);
+        for purchase_name in &purchase_names {
+            purchase_item_query = purchase_item_query.bind(purchase_name);
+        }
+        let purchase_item_rows = purchase_item_query
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
         for item in purchase_item_rows {
             item_summaries
                 .entry(item.purchase_name.clone())
@@ -1925,22 +1934,14 @@ async fn load_admin_purchase_items(
     page_size: i64,
     pool: &DbPool,
 ) -> AdminPageResponse<PurchaseItemRowView> {
-    let query_purchase_item = clean_query_value(iq).unwrap_or_default();
-    let (where_sql, binds) = if query_purchase_item.is_empty() {
-        (String::new(), Vec::new())
-    } else {
-        let like = format!("%{query_purchase_item}%");
-        (
-            " WHERE purchase_name LIKE ? OR item_id LIKE ? OR type LIKE ?".to_string(),
-            vec![like.clone(), like.clone(), like],
-        )
-    };
+    let (where_sql, binds) = like_filter(iq, &["purchase_name", "item_id", "type"]);
 
     let count_sql = format!("SELECT COUNT(*) FROM purchase_item{where_sql}");
-    let total = bind_strings_scalar(sqlx::query_scalar::<_, i64>(&count_sql), &binds)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(0);
+    let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql);
+    for value in &binds {
+        count_query = count_query.bind(value);
+    }
+    let total = count_query.fetch_one(pool).await.unwrap_or(0);
     let (page, offset) = clamp_page(page, page_size, total);
 
     let row_sql = format!(
@@ -1949,7 +1950,11 @@ async fn load_admin_purchase_items(
          ORDER BY purchase_name ASC, item_id ASC, type ASC
          LIMIT ? OFFSET ?"
     );
-    let purchase_items = bind_strings_as(sqlx::query_as::<_, PurchaseItemDbRow>(&row_sql), &binds)
+    let mut purchase_item_query = sqlx::query_as::<_, PurchaseItemDbRow>(&row_sql);
+    for value in &binds {
+        purchase_item_query = purchase_item_query.bind(value);
+    }
+    let purchase_items = purchase_item_query
         .bind(page_size)
         .bind(offset)
         .fetch_all(pool)
@@ -1962,23 +1967,14 @@ async fn load_admin_purchase_items(
     page_response(purchase_items, total, page, page_size)
 }
 
-async fn create_song(
-    pool: &DbPool,
-    sid_raw: &str,
-    name_en_raw: &str,
-    rating_pst_raw: &str,
-    rating_prs_raw: &str,
-    rating_ftr_raw: &str,
-    rating_byd_raw: &str,
-    rating_etr_raw: &str,
-) -> Result<(), String> {
-    let sid = normalize_chart_text(sid_raw, "song_id")?;
-    let name_en = normalize_chart_text(name_en_raw, "name_en")?;
-    let rating_pst = parse_rating_input_tenths(rating_pst_raw, "rating_pst")?;
-    let rating_prs = parse_rating_input_tenths(rating_prs_raw, "rating_prs")?;
-    let rating_ftr = parse_rating_input_tenths(rating_ftr_raw, "rating_ftr")?;
-    let rating_byd = parse_rating_input_tenths(rating_byd_raw, "rating_byd")?;
-    let rating_etr = parse_rating_input_tenths(rating_etr_raw, "rating_etr")?;
+async fn create_song(pool: &DbPool, input: AdminSongInput<'_>) -> Result<(), String> {
+    let sid = normalize_chart_text(input.sid, "song_id")?;
+    let name_en = normalize_chart_text(input.name_en, "name_en")?;
+    let rating_pst = parse_rating_input_tenths(input.rating_pst, "rating_pst")?;
+    let rating_prs = parse_rating_input_tenths(input.rating_prs, "rating_prs")?;
+    let rating_ftr = parse_rating_input_tenths(input.rating_ftr, "rating_ftr")?;
+    let rating_byd = parse_rating_input_tenths(input.rating_byd, "rating_byd")?;
+    let rating_etr = parse_rating_input_tenths(input.rating_etr, "rating_etr")?;
 
     let exists = sqlx::query_scalar!(
         "SELECT COUNT(*) as `count!: i64` FROM chart WHERE song_id = ?",
@@ -2010,23 +2006,14 @@ async fn create_song(
     Ok(())
 }
 
-async fn update_song(
-    pool: &DbPool,
-    sid_raw: &str,
-    name_en_raw: &str,
-    rating_pst_raw: &str,
-    rating_prs_raw: &str,
-    rating_ftr_raw: &str,
-    rating_byd_raw: &str,
-    rating_etr_raw: &str,
-) -> Result<(), String> {
-    let sid = normalize_chart_text(sid_raw, "song_id")?;
-    let name_en = normalize_chart_text(name_en_raw, "name_en")?;
-    let rating_pst = parse_rating_input_tenths(rating_pst_raw, "rating_pst")?;
-    let rating_prs = parse_rating_input_tenths(rating_prs_raw, "rating_prs")?;
-    let rating_ftr = parse_rating_input_tenths(rating_ftr_raw, "rating_ftr")?;
-    let rating_byd = parse_rating_input_tenths(rating_byd_raw, "rating_byd")?;
-    let rating_etr = parse_rating_input_tenths(rating_etr_raw, "rating_etr")?;
+async fn update_song(pool: &DbPool, input: AdminSongInput<'_>) -> Result<(), String> {
+    let sid = normalize_chart_text(input.sid, "song_id")?;
+    let name_en = normalize_chart_text(input.name_en, "name_en")?;
+    let rating_pst = parse_rating_input_tenths(input.rating_pst, "rating_pst")?;
+    let rating_prs = parse_rating_input_tenths(input.rating_prs, "rating_prs")?;
+    let rating_ftr = parse_rating_input_tenths(input.rating_ftr, "rating_ftr")?;
+    let rating_byd = parse_rating_input_tenths(input.rating_byd, "rating_byd")?;
+    let rating_etr = parse_rating_input_tenths(input.rating_etr, "rating_etr")?;
 
     let done = sqlx::query!(
         "UPDATE chart
@@ -2049,7 +2036,7 @@ async fn update_song(
     .await
     .map_err(|err| format!("更新失败: {err}"))?;
 
-    if done.rows_affected() <= 0 {
+    if done.rows_affected() == 0 {
         return Err("歌曲不存在".to_string());
     }
 
@@ -2063,7 +2050,7 @@ async fn delete_song(pool: &DbPool, sid_raw: &str) -> Result<(), String> {
         .await
         .map_err(|err| format!("删除失败: {err}"))?;
 
-    if done.rows_affected() <= 0 {
+    if done.rows_affected() == 0 {
         return Err("歌曲不存在".to_string());
     }
 
@@ -2131,7 +2118,7 @@ async fn update_item(
     .await
     .map_err(|err| format!("更新失败: {err}"))?;
 
-    if done.rows_affected() <= 0 {
+    if done.rows_affected() == 0 {
         return Err("物品不存在".to_string());
     }
 
@@ -2152,7 +2139,7 @@ async fn delete_item(pool: &DbPool, item_id_raw: &str, item_type_raw: &str) -> R
     .await
     .map_err(|err| format!("删除失败: {err}"))?;
 
-    if done.rows_affected() <= 0 {
+    if done.rows_affected() == 0 {
         return Err("物品不存在".to_string());
     }
 
@@ -2241,7 +2228,7 @@ async fn update_purchase(
     .await
     .map_err(|err| format!("更新失败: {err}"))?;
 
-    if done.rows_affected() <= 0 {
+    if done.rows_affected() == 0 {
         return Err("购买项不存在".to_string());
     }
 
@@ -2389,7 +2376,7 @@ async fn update_purchase_item(
     .await
     .map_err(|err| format!("更新失败: {err}"))?;
 
-    if done.rows_affected() <= 0 {
+    if done.rows_affected() == 0 {
         return Err("购买项物品不存在".to_string());
     }
 
@@ -2417,7 +2404,7 @@ async fn delete_purchase_item(
     .await
     .map_err(|err| format!("删除失败: {err}"))?;
 
-    if done.rows_affected() <= 0 {
+    if done.rows_affected() == 0 {
         return Err("购买项物品不存在".to_string());
     }
 
@@ -2749,18 +2736,9 @@ pub async fn admin_api_song_create(
     cookies: &CookieJar<'_>,
 ) -> RouteResult<EmptyResponse> {
     require_admin_api(cookies)?;
-    create_song(
-        pool.inner(),
-        &payload.sid,
-        &payload.name_en,
-        &payload.rating_pst,
-        &payload.rating_prs,
-        &payload.rating_ftr,
-        &payload.rating_byd,
-        &payload.rating_etr,
-    )
-    .await
-    .map_err(admin_api_input_error)?;
+    create_song(pool.inner(), AdminSongInput::from(&*payload))
+        .await
+        .map_err(admin_api_input_error)?;
     Ok(success_return_no_value())
 }
 
@@ -2772,18 +2750,9 @@ pub async fn admin_api_song_update(
     cookies: &CookieJar<'_>,
 ) -> RouteResult<EmptyResponse> {
     require_admin_api(cookies)?;
-    update_song(
-        pool.inner(),
-        sid,
-        &payload.name_en,
-        &payload.rating_pst,
-        &payload.rating_prs,
-        &payload.rating_ftr,
-        &payload.rating_byd,
-        &payload.rating_etr,
-    )
-    .await
-    .map_err(admin_api_input_error)?;
+    update_song(pool.inner(), AdminSongInput::from(&*payload).with_sid(sid))
+        .await
+        .map_err(admin_api_input_error)?;
     Ok(success_return_no_value())
 }
 

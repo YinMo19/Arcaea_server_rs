@@ -26,7 +26,7 @@ impl Present {
         let mut result = serde_json::json!({
             "present_id": self.present_id,
             "expire_ts": self.expire_ts,
-            "description": self.description.as_ref().unwrap_or(&String::new())
+            "description": self.description.as_deref().unwrap_or("")
         });
 
         if has_items {
