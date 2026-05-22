@@ -9,6 +9,7 @@ export type ApiEnvelope<T> = {
 export type AdminSession = {
   loggedIn: boolean
   role: number
+  appTitle: string
   user?: AdminUserSummary
 }
 

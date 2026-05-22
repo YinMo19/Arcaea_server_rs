@@ -398,6 +398,7 @@ pub struct AdminLoginRequest {
 pub struct AdminSessionResponse {
     logged_in: bool,
     role: i8,
+    app_title: String,
     user: Option<AdminUserSummary>,
 }
 
@@ -567,6 +568,15 @@ fn clear_admin_cookie(cookies: &CookieJar<'_>) {
     let mut cookie = Cookie::from(ADMIN_COOKIE);
     cookie.set_path("/web");
     cookies.remove(cookie);
+}
+
+fn web_app_title() -> String {
+    env::var("TITLE")
+        .or_else(|_| env::var("title"))
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "Arcaea Server".to_string())
 }
 
 async fn current_web_session(
@@ -1006,6 +1016,7 @@ fn web_session_response(user: &WebLoginUserRow) -> AdminSessionResponse {
     AdminSessionResponse {
         logged_in: true,
         role: user.web_role(),
+        app_title: web_app_title(),
         user: Some(AdminUserSummary {
             user_id: user.user_id,
             name: user.name.clone().unwrap_or_default(),
@@ -2761,6 +2772,7 @@ pub async fn admin_api_session(
     Ok(success_return(AdminSessionResponse {
         logged_in: session.is_some(),
         role: session.as_ref().map(|session| session.role).unwrap_or(0),
+        app_title: web_app_title(),
         user: session.map(|session| session.user),
     }))
 }

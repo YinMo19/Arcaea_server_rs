@@ -79,6 +79,9 @@ import {
 } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
+const defaultAppTitle = 'Arcaea Server'
+const githubUrl = 'https://github.com/YinMo19/Arcaea_server_rs'
+
 type View =
   | 'dashboard'
   | MaintenanceView
@@ -375,6 +378,7 @@ const purchaseItemTypeOptions = [
 function App() {
   const [session, setSession] = useState<AdminSession>()
   const [checkingSession, setCheckingSession] = useState(true)
+  const [appTitle, setAppTitle] = useState(defaultAppTitle)
   const [view, setView] = useState<View>('dashboard')
   const isAdmin = session?.role === 1
   const visibleNavSections = useMemo(
@@ -396,6 +400,7 @@ function App() {
     adminApi
       .session()
       .then((session) => {
+        setAppTitle(session.appTitle || defaultAppTitle)
         setSession(session.loggedIn ? session : undefined)
         if (session.loggedIn && session.role !== 1) {
           setView('scoreImages')
@@ -416,7 +421,9 @@ function App() {
   if (!session) {
     return (
       <LoginScreen
+        title={appTitle}
         onLoggedIn={(session) => {
+          setAppTitle(session.appTitle || defaultAppTitle)
           setSession(session)
           if (session.role !== 1) {
             setView('scoreImages')
@@ -534,7 +541,13 @@ function App() {
   )
 }
 
-function LoginScreen({ onLoggedIn }: { onLoggedIn: (session: AdminSession) => void }) {
+function LoginScreen({
+  title,
+  onLoggedIn,
+}: {
+  title: string
+  onLoggedIn: (session: AdminSession) => void
+}) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -559,69 +572,93 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (session: AdminSession) => vo
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(15,23,42,0.07),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.85),rgba(226,232,240,0.58))]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.045)_1px,transparent_1px)] bg-[size:40px_40px]" />
 
-      <div className="relative mx-auto flex min-h-[calc(100svh-3rem)] w-full max-w-md items-center">
-        <Card className="w-full border bg-card/95 shadow-lg backdrop-blur">
-          <CardHeader className="gap-5 p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex size-11 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">
-                <KeyRound className="size-5" />
+      <div className="relative mx-auto flex min-h-[calc(100svh-3rem)] w-full max-w-md flex-col">
+        <div className="flex w-full flex-1 items-center">
+          <Card className="w-full border bg-card/95 shadow-lg backdrop-blur">
+            <CardHeader className="gap-5 p-6">
+              <div className="flex items-center gap-3">
+                <div className="flex size-11 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">
+                  <KeyRound className="size-5" />
+                </div>
+                <div className="min-w-0">
+                  <CardTitle className="truncate text-xl">{title}</CardTitle>
+                  <CardDescription className="mt-1">进入 Web 控制台</CardDescription>
+                </div>
               </div>
-              <Badge variant="outline" className="h-7 border-primary/25 bg-primary/5">
-                Secure
-              </Badge>
-            </div>
-            <div className="grid gap-1.5">
-              <CardTitle className="text-xl">用户登录</CardTitle>
-              <CardDescription>进入 Web 控制台</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="p-6 pt-0">
-            <form className="grid gap-4" onSubmit={onSubmit}>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Username
-                <div className="relative">
-                  <UserRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    className="h-11 bg-background pl-10"
-                    value={username}
-                    autoComplete="username"
-                    onChange={(event) => setUsername(event.target.value)}
-                    required
-                  />
-                </div>
-              </label>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Password
-                <div className="relative">
-                  <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    className="h-11 bg-background pl-10"
-                    value={password}
-                    type="password"
-                    autoComplete="current-password"
-                    onChange={(event) => setPassword(event.target.value)}
-                    required
-                  />
-                </div>
-              </label>
-              {error && (
-                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {error}
-                </div>
-              )}
-              <Button className="h-11 w-full" type="submit" disabled={loading}>
-                {loading ? (
-                  <LoaderCircle className="animate-spin" />
-                ) : (
-                  <ShieldCheck />
+            </CardHeader>
+            <CardContent className="p-6 pt-0">
+              <form className="grid gap-4" onSubmit={onSubmit}>
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Username
+                  <div className="relative">
+                    <UserRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="h-11 bg-background pl-10"
+                      value={username}
+                      autoComplete="username"
+                      onChange={(event) => setUsername(event.target.value)}
+                      required
+                    />
+                  </div>
+                </label>
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Password
+                  <div className="relative">
+                    <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="h-11 bg-background pl-10"
+                      value={password}
+                      type="password"
+                      autoComplete="current-password"
+                      onChange={(event) => setPassword(event.target.value)}
+                      required
+                    />
+                  </div>
+                </label>
+                {error && (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {error}
+                  </div>
                 )}
-                登录
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+                <Button className="h-11 w-full" type="submit" disabled={loading}>
+                  {loading ? (
+                    <LoaderCircle className="animate-spin" />
+                  ) : (
+                    <ShieldCheck />
+                  )}
+                  登录
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+        <footer className="flex justify-center pb-1 pt-5">
+          <a
+            className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            href={githubUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <GithubMark className="size-4" />
+            By YinMo19
+          </a>
+        </footer>
       </div>
     </div>
+  )
+}
+
+function GithubMark({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      role="img"
+      aria-hidden="true"
+      fill="currentColor"
+    >
+      <path d="M12 1.85C6.35 1.85 1.78 6.42 1.78 12.07c0 4.52 2.93 8.35 7 9.7.51.09.7-.22.7-.49v-1.8c-2.85.62-3.45-1.22-3.45-1.22-.47-1.18-1.14-1.49-1.14-1.49-.93-.64.07-.63.07-.63 1.03.07 1.57 1.06 1.57 1.06.92 1.57 2.4 1.12 2.98.85.09-.66.36-1.12.65-1.37-2.27-.26-4.66-1.14-4.66-5.06 0-1.12.4-2.03 1.05-2.75-.1-.26-.46-1.3.1-2.71 0 0 .86-.27 2.81 1.05.82-.23 1.69-.34 2.56-.35.87.01 1.75.12 2.56.35 1.95-1.32 2.81-1.05 2.81-1.05.56 1.41.2 2.45.1 2.71.66.72 1.05 1.63 1.05 2.75 0 3.93-2.39 4.79-4.67 5.05.37.32.69.94.69 1.9v2.82c0 .27.18.59.7.49a10.23 10.23 0 0 0 7-9.7C22.22 6.42 17.65 1.85 12 1.85Z" />
+    </svg>
   )
 }
 
