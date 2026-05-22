@@ -1,11 +1,11 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT course_id, item_id, type, amount FROM course_item ORDER BY course_id, item_id, type",
+  "query": "\n            SELECT *\n            FROM present_item\n            WHERE present_id = ?\n            ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "course_id",
+        "name": "present_id",
         "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
@@ -41,7 +41,7 @@
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 1
     },
     "nullable": [
       false,
@@ -50,5 +50,5 @@
       true
     ]
   },
-  "hash": "a1c524cd5303a9323861e0d540759d95e6f9af1aa0e51b45157dd4f042fcb730"
+  "hash": "d0678b653e98619f7961bb001a5aa8a138e228cdbd90d58ff28a0627b9c3c010"
 }

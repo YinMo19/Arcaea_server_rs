@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT user_id, name, user_code, password, ban_flag, COALESCE(role, 0) as `role!: i8`\n         FROM user\n         WHERE name = ?",
+  "query": "\n        SELECT\n            u.user_id,\n            u.name,\n            u.user_code,\n            u.password,\n            u.ban_flag,\n            CAST(\n                CASE\n                    WHEN EXISTS (\n                        SELECT 1\n                        FROM user_role ur\n                        WHERE ur.user_id = u.user_id\n                          AND ur.role_id IN ('admin', 'system')\n                    )\n                    THEN 1\n                    ELSE 0\n                END AS SIGNED\n            ) AS `role!: i64`\n        FROM user u\n        WHERE u.name = ?\n        ",
   "describe": {
     "columns": [
       {
@@ -50,11 +50,11 @@
       },
       {
         "ordinal": 5,
-        "name": "role!: i8",
+        "name": "role!: i64",
         "type_info": {
           "type": "Long",
           "flags": "NOT_NULL | BINARY",
-          "max_size": 4
+          "max_size": 2
         }
       }
     ],
@@ -70,5 +70,5 @@
       false
     ]
   },
-  "hash": "bc0f4c1faa438cd4628ff844b411f46424e63e271bd0b1be9cfc43db8bc74b63"
+  "hash": "a8d3d10166ef316c79834d286319be8a53e17d1954e9807b1de7a2e5ae721775"
 }

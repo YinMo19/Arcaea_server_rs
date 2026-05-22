@@ -436,15 +436,10 @@ async fn load_chart_map(
             continue;
         }
 
-        if let Some(row) = sqlx::query!(
-            "SELECT song_id, name, rating_pst, rating_prs, rating_ftr, rating_byn, rating_etr
-             FROM chart
-             WHERE song_id = ?",
-            entry.song_id
-        )
-        .fetch_optional(pool)
-        .await
-        .map_err(|err| ArcError::input(format!("查询曲目信息失败: {err}")))?
+        if let Some(row) = sqlx::query!("SELECT * FROM chart WHERE song_id = ?", entry.song_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|err| ArcError::input(format!("查询曲目信息失败: {err}")))?
         {
             charts.insert(
                 row.song_id,

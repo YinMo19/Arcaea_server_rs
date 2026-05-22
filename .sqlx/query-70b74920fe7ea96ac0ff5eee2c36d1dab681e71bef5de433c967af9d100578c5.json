@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT user_id as `user_id!: i32` FROM user WHERE name = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id!: i32",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | AUTO_INCREMENT",
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "70b74920fe7ea96ac0ff5eee2c36d1dab681e71bef5de433c967af9d100578c5"
+}

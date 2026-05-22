@@ -1,20 +1,20 @@
 {
   "db_name": "MySQL",
-  "query": "\n            SELECT present_id, item_id, type, amount\n            FROM present_item\n            WHERE present_id = ?\n            ",
+  "query": "SELECT * FROM user_course WHERE user_id = ?",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "present_id",
+        "name": "user_id",
         "type_info": {
-          "type": "VarString",
+          "type": "Long",
           "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
-          "max_size": 1020
+          "max_size": 11
         }
       },
       {
         "ordinal": 1,
-        "name": "item_id",
+        "name": "course_id",
         "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
@@ -23,16 +23,16 @@
       },
       {
         "ordinal": 2,
-        "name": "type",
+        "name": "high_score",
         "type_info": {
-          "type": "VarString",
-          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
-          "max_size": 1020
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
         }
       },
       {
         "ordinal": 3,
-        "name": "amount",
+        "name": "best_clear_type",
         "type_info": {
           "type": "Long",
           "flags": "",
@@ -46,9 +46,9 @@
     "nullable": [
       false,
       false,
-      false,
+      true,
       true
     ]
   },
-  "hash": "19f6be4a7be9374f3507f37e322c7f49d1a8b1b8f7e37a8af019ad851bb94bc0"
+  "hash": "2637b1f2f9469a311c91f78a19493aac0d1040643063c23ed365ad8f8ea91f1c"
 }

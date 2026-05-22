@@ -1651,7 +1651,7 @@ impl ScoreService {
 
     async fn get_play_state(&self, token: &str, user_id: i32) -> ArcResult<Option<SongplayToken>> {
         let result = sqlx::query!(
-            "SELECT token, user_id, song_id, difficulty, course_id, course_state, course_score, course_clear_type, stamina_multiply, fragment_multiply, prog_boost_multiply, beyond_boost_gauge_usage, skill_cytusii_flag, skill_chinatsu_flag, invasion_flag FROM songplay_token WHERE token = ? AND user_id = ?",
+            "SELECT * FROM songplay_token WHERE token = ? AND user_id = ?",
             token,
             user_id
         )
@@ -3061,12 +3061,10 @@ impl ScoreService {
         let mut rewards = Vec::new();
         if user_play.course_play_state == 4 {
             if best_clear_type == 0 {
-                let course_items = sqlx::query!(
-                    "SELECT item_id, type, amount FROM course_item WHERE course_id = ?",
-                    &course_id
-                )
-                .fetch_all(&self.pool)
-                .await?;
+                let course_items =
+                    sqlx::query!("SELECT * FROM course_item WHERE course_id = ?", &course_id)
+                        .fetch_all(&self.pool)
+                        .await?;
 
                 let item_service = ItemService::new(self.pool.clone());
                 for row in course_items {

@@ -525,7 +525,7 @@ impl CharacterService {
         character_id: i32,
     ) -> ArcResult<Vec<CoreItem>> {
         let core_items = sqlx::query!(
-            "SELECT character_id, item_id, type, amount FROM char_item WHERE character_id = ? AND type = 'core'",
+            "SELECT * FROM char_item WHERE character_id = ? AND type = 'core'",
             character_id
         )
         .fetch_all(&self.pool)
@@ -571,17 +571,12 @@ impl CharacterService {
     pub async fn get_character_info(&self, character_id: i32) -> ArcResult<Character> {
         let character = sqlx::query_as!(
             Character,
-            "SELECT character_id, name, max_level, frag1, prog1, overdrive1, frag20, prog20, overdrive20,
-             frag30, prog30, overdrive30, skill_id, skill_unlock_level, skill_requires_uncap,
-             skill_id_uncap, char_type, is_uncapped
-             FROM `character` WHERE character_id = ?",
+            "SELECT * FROM `character` WHERE character_id = ?",
             character_id
         )
         .fetch_optional(&self.pool)
         .await?
-        .ok_or_else(|| {
-            ArcError::no_data(format!("No such character: {character_id}"), 404)
-        })?;
+        .ok_or_else(|| ArcError::no_data(format!("No such character: {character_id}"), 404))?;
 
         Ok(character)
     }
@@ -1080,12 +1075,9 @@ impl CharacterService {
     /// Get all characters owned by a user
     pub async fn get_user_characters(&self, user_id: i32) -> ArcResult<Vec<UserCharacter>> {
         let user_chars = if CONFIG.character_full_unlock {
-            let rows = sqlx::query!(
-                "SELECT user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag FROM user_char_full WHERE user_id = ?",
-                user_id
-            )
-            .fetch_all(&self.pool)
-            .await?;
+            let rows = sqlx::query!("SELECT * FROM user_char_full WHERE user_id = ?", user_id)
+                .fetch_all(&self.pool)
+                .await?;
 
             rows.into_iter()
                 .map(|row| UserCharacter {
@@ -1099,12 +1091,9 @@ impl CharacterService {
                 })
                 .collect()
         } else {
-            let rows = sqlx::query!(
-                "SELECT user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag FROM user_char WHERE user_id = ?",
-                user_id
-            )
-            .fetch_all(&self.pool)
-            .await?;
+            let rows = sqlx::query!("SELECT * FROM user_char WHERE user_id = ?", user_id)
+                .fetch_all(&self.pool)
+                .await?;
 
             rows.into_iter()
                 .map(|row| UserCharacter {
@@ -1124,15 +1113,10 @@ impl CharacterService {
 
     /// Get all available characters
     pub async fn get_all_characters(&self) -> ArcResult<Vec<Character>> {
-        let characters = sqlx::query_as!(
-            Character,
-            "SELECT character_id, name, max_level, frag1, prog1, overdrive1, frag20, prog20, overdrive20,
-             frag30, prog30, overdrive30, skill_id, skill_unlock_level, skill_requires_uncap,
-             skill_id_uncap, char_type, is_uncapped
-             FROM `character` ORDER BY character_id"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let characters =
+            sqlx::query_as!(Character, "SELECT * FROM `character` ORDER BY character_id")
+                .fetch_all(&self.pool)
+                .await?;
 
         Ok(characters)
     }

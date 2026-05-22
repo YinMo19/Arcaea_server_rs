@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT token, user_id, song_id, difficulty, course_id, course_state, course_score, course_clear_type, stamina_multiply, fragment_multiply, prog_boost_multiply, beyond_boost_gauge_usage, skill_cytusii_flag, skill_chinatsu_flag, invasion_flag FROM songplay_token WHERE token = ? AND user_id = ?",
+  "query": "SELECT * FROM songplay_token WHERE token = ? AND user_id = ?",
   "describe": {
     "columns": [
       {
@@ -160,5 +160,5 @@
       true
     ]
   },
-  "hash": "732925142ed70207ff84ee19f3bd5cb8a463106d65614beb213c0fa15591b701"
+  "hash": "00ed8bc81d6d75954842534f39e1b18e40b91fa20783fa1dcee98545a9ef2c2c"
 }

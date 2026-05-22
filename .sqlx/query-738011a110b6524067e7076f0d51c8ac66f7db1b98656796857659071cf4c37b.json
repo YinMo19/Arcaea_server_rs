@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT character_id, name, max_level, frag1, prog1, overdrive1, frag20, prog20, overdrive20,\n             frag30, prog30, overdrive30, skill_id, skill_unlock_level, skill_requires_uncap,\n             skill_id_uncap, char_type, is_uncapped\n             FROM `character` WHERE character_id = ?",
+  "query": "SELECT * FROM `character` ORDER BY character_id",
   "describe": {
     "columns": [
       {
@@ -167,7 +167,7 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 0
     },
     "nullable": [
       false,
@@ -190,5 +190,5 @@
       true
     ]
   },
-  "hash": "85976c5f89c0db2adf9865ec3728c885605ffaa7b189e4bf138cfc8f3571903e"
+  "hash": "738011a110b6524067e7076f0d51c8ac66f7db1b98656796857659071cf4c37b"
 }

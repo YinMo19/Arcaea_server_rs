@@ -117,11 +117,9 @@ impl Operation for RefreshAllScoreRating {
         log::info!("Executing operation: {}", self.name());
 
         // Get all chart constants
-        let charts = sqlx::query!(
-            "SELECT song_id, rating_pst, rating_prs, rating_ftr, rating_byn, rating_etr FROM chart"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let charts = sqlx::query!("SELECT * FROM chart")
+            .fetch_all(&self.pool)
+            .await?;
 
         // Create song_id filter for update
         let song_ids: Vec<String> = charts.iter().map(|c| c.song_id.clone()).collect();

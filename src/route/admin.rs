@@ -24,6 +24,7 @@ use crate::DbPool;
 
 const ADMIN_COOKIE: &str = "arcaea_web_session";
 const ADMIN_ROLE: i8 = 1;
+const USER_ROLE: i8 = 0;
 
 #[derive(Debug, Clone)]
 pub struct AdminConfig {
@@ -486,13 +487,24 @@ struct AdminUserDbSummary {
     user_code: Option<String>,
 }
 
+#[derive(FromRow)]
 struct WebLoginUserRow {
     user_id: i32,
     name: Option<String>,
     user_code: Option<String>,
     password: Option<String>,
     ban_flag: Option<String>,
-    role: i8,
+    role: i64,
+}
+
+impl WebLoginUserRow {
+    fn web_role(&self) -> i8 {
+        if self.role > 0 {
+            ADMIN_ROLE
+        } else {
+            USER_ROLE
+        }
+    }
 }
 
 fn admin_credentials() -> (String, String) {
@@ -569,24 +581,16 @@ async fn current_web_session(
         return Ok(None);
     };
 
-    let user = sqlx::query!(
-        "SELECT user_id, name, user_code, password, COALESCE(role, 0) as `role!: i8`
-         FROM user
-         WHERE user_id = ?",
-        cookie_user_id
-    )
-    .fetch_optional(pool)
-    .await
-    .map_err(|err| ArcError::input(format!("查询登录状态失败: {err}")))?;
-
-    let Some(user) = user else {
+    let Some(user) = load_web_login_user_by_id(pool, cookie_user_id).await? else {
         return Ok(None);
     };
-    let password_hash = user.password.unwrap_or_default();
-    if password_hash.is_empty() || cookie_role != user.role {
+
+    let user_role = user.web_role();
+    let password_hash = user.password.as_deref().unwrap_or_default();
+    if password_hash.is_empty() || cookie_role != user_role {
         return Ok(None);
     }
-    let expected = web_session_signature(user.user_id, user.role, &password_hash);
+    let expected = web_session_signature(user.user_id, user_role, &password_hash);
     if signature != expected {
         return Ok(None);
     }
@@ -597,7 +601,7 @@ async fn current_web_session(
             name: user.name.unwrap_or_default(),
             user_code: user.user_code.unwrap_or_default(),
         },
-        role: user.role,
+        role: user_role,
     }))
 }
 
@@ -880,9 +884,28 @@ async fn load_web_login_user(
 ) -> Result<Option<WebLoginUserRow>, ArcError> {
     sqlx::query_as!(
         WebLoginUserRow,
-        "SELECT user_id, name, user_code, password, ban_flag, COALESCE(role, 0) as `role!: i8`
-         FROM user
-         WHERE name = ?",
+        r#"
+        SELECT
+            u.user_id,
+            u.name,
+            u.user_code,
+            u.password,
+            u.ban_flag,
+            CAST(
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM user_role ur
+                        WHERE ur.user_id = u.user_id
+                          AND ur.role_id IN ('admin', 'system')
+                    )
+                    THEN 1
+                    ELSE 0
+                END AS SIGNED
+            ) AS `role!: i64`
+        FROM user u
+        WHERE u.name = ?
+        "#,
         username
     )
     .fetch_optional(pool)
@@ -890,16 +913,52 @@ async fn load_web_login_user(
     .map_err(|err| ArcError::input(format!("登录查询失败: {err}")))
 }
 
+async fn load_web_login_user_by_id(
+    pool: &DbPool,
+    user_id: i32,
+) -> Result<Option<WebLoginUserRow>, ArcError> {
+    sqlx::query_as!(
+        WebLoginUserRow,
+        r#"
+        SELECT
+            u.user_id,
+            u.name,
+            u.user_code,
+            u.password,
+            u.ban_flag,
+            CAST(
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM user_role ur
+                        WHERE ur.user_id = u.user_id
+                          AND ur.role_id IN ('admin', 'system')
+                    )
+                    THEN 1
+                    ELSE 0
+                END AS SIGNED
+            ) AS `role!: i64`
+        FROM user u
+        WHERE u.user_id = ?
+        "#,
+        user_id
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|err| ArcError::input(format!("查询登录状态失败: {err}")))
+}
+
 async fn bootstrap_config_admin_user(
     pool: &DbPool,
     username: &str,
     password_hash: &str,
 ) -> Result<WebLoginUserRow, ArcError> {
-    let admin_count =
-        sqlx::query_scalar!("SELECT COUNT(*) as `count!: i64` FROM user WHERE role = 1")
-            .fetch_one(pool)
-            .await
-            .map_err(|err| ArcError::input(format!("查询管理员用户失败: {err}")))?;
+    let admin_count = sqlx::query_scalar!(
+        "SELECT COUNT(DISTINCT user_id) as `count!: i64` FROM user_role WHERE role_id IN ('admin', 'system')",
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|err| ArcError::input(format!("查询管理员用户失败: {err}")))?;
     if admin_count > 0 {
         return Err(ArcError::no_access("Incorrect username or password", 401));
     }
@@ -911,8 +970,8 @@ async fn bootstrap_config_admin_user(
             name, password, join_date, user_code, rating_ptt,
             character_id, is_skill_sealed, is_char_uncapped, is_char_uncapped_override,
             is_hide_rating, favorite_character, max_stamina_notification_enabled,
-            current_map, ticket, prog_boost, email, role
-        ) VALUES (?, ?, ?, '123456789', 0, 0, 0, 0, 0, 0, -1, 0, '', 0, 0, 'admin@admin.com', 1)
+            current_map, ticket, prog_boost, email
+        ) VALUES (?, ?, ?, '123456789', 0, 0, 0, 0, 0, 0, -1, 0, '', 0, 0, 'admin@admin.com')
         "#,
         username,
         password_hash,
@@ -922,6 +981,22 @@ async fn bootstrap_config_admin_user(
     .await
     .map_err(|err| ArcError::input(format!("创建管理员用户失败: {err}")))?;
 
+    let user_id = sqlx::query_scalar!(
+        "SELECT user_id as `user_id!: i32` FROM user WHERE name = ?",
+        username
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|err| ArcError::input(format!("查询管理员用户失败: {err}")))?;
+
+    sqlx::query!(
+        "INSERT IGNORE INTO user_role (user_id, role_id) VALUES (?, 'admin')",
+        user_id
+    )
+    .execute(pool)
+    .await
+    .map_err(|err| ArcError::input(format!("授予管理员角色失败: {err}")))?;
+
     load_web_login_user(pool, username)
         .await?
         .ok_or_else(|| ArcError::no_data("管理员用户不存在", -2))
@@ -930,7 +1005,7 @@ async fn bootstrap_config_admin_user(
 fn web_session_response(user: &WebLoginUserRow) -> AdminSessionResponse {
     AdminSessionResponse {
         logged_in: true,
-        role: user.role,
+        role: user.web_role(),
         user: Some(AdminUserSummary {
             user_id: user.user_id,
             name: user.name.clone().unwrap_or_default(),
@@ -2048,7 +2123,7 @@ async fn load_admin_songs(
     let (page, offset) = clamp_page(page, page_size, total);
 
     let row_sql = format!(
-        "SELECT song_id, name, rating_pst, rating_prs, rating_ftr, rating_byn, rating_etr
+        "SELECT *
          FROM chart{where_sql}
          ORDER BY song_id ASC
          LIMIT ? OFFSET ?"
@@ -2087,7 +2162,7 @@ async fn load_admin_items(
     let (page, offset) = clamp_page(page, page_size, total);
 
     let row_sql = format!(
-        "SELECT item_id, type, is_available
+        "SELECT *
          FROM item{where_sql}
          ORDER BY type, item_id
          LIMIT ? OFFSET ?"
@@ -2126,7 +2201,7 @@ async fn load_admin_purchases(
     let (page, offset) = clamp_page(page, page_size, total);
 
     let row_sql = format!(
-        "SELECT purchase_name, price, orig_price, discount_from, discount_to, discount_reason
+        "SELECT *
          FROM purchase{where_sql}
          ORDER BY purchase_name ASC
          LIMIT ? OFFSET ?"
@@ -2150,7 +2225,7 @@ async fn load_admin_purchases(
             .collect::<Vec<_>>();
         let purchase_placeholders = sql_placeholders(purchase_names.len());
         let item_sql = format!(
-            "SELECT purchase_name, item_id, type, amount
+            "SELECT *
              FROM purchase_item
              WHERE purchase_name IN ({purchase_placeholders})
              ORDER BY purchase_name ASC, item_id ASC, type ASC"
@@ -2207,7 +2282,7 @@ async fn load_admin_purchase_items(
     let (page, offset) = clamp_page(page, page_size, total);
 
     let row_sql = format!(
-        "SELECT purchase_name, item_id, type, amount
+        "SELECT *
          FROM purchase_item{where_sql}
          ORDER BY purchase_name ASC, item_id ASC, type ASC
          LIMIT ? OFFSET ?"
@@ -2723,7 +2798,7 @@ pub async fn admin_api_login(
         return Err(ArcError::no_access("Incorrect username or password", 401));
     }
 
-    set_admin_cookie(cookies, user.user_id, user.role, password_hash);
+    set_admin_cookie(cookies, user.user_id, user.web_role(), password_hash);
     Ok(success_return(web_session_response(&user)))
 }
 

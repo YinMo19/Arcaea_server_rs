@@ -389,15 +389,6 @@
           "flags": "",
           "max_size": 4
         }
-      },
-      {
-        "ordinal": 43,
-        "name": "role",
-        "type_info": {
-          "type": "Tiny",
-          "flags": "NOT_NULL",
-          "max_size": 4
-        }
       }
     ],
     "parameters": {
@@ -446,8 +437,7 @@
       true,
       true,
       true,
-      true,
-      false
+      true
     ]
   },
   "hash": "a747bd997f85e81167d8695a9058f356c0867c3d6d7cd8401022c0e3f920e89d"

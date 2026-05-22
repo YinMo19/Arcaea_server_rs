@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT course_id, required_id FROM course_requirement ORDER BY course_id, required_id",
+  "query": "SELECT * FROM course_requirement ORDER BY course_id, required_id",
   "describe": {
     "columns": [
       {
@@ -30,5 +30,5 @@
       false
     ]
   },
-  "hash": "d5a10ba71bd5307915fc166cacb80807297bbd72213838a60c51bf116954eedc"
+  "hash": "5ca8a62ad3ba300b0894447135b89ac4420f105917414a885ead9d6a3aad717a"
 }

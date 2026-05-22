@@ -27,37 +27,27 @@ impl CourseService {
         .and_then(|r| r.amount)
         .unwrap_or(0);
 
-        let mut course_rows = sqlx::query!(
-            "SELECT course_id, course_name, dan_name, style, gauge_requirement, flag_as_hidden_when_requirements_not_met, can_start FROM course ORDER BY course_id"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let mut course_rows = sqlx::query!("SELECT * FROM course ORDER BY course_id")
+            .fetch_all(&self.pool)
+            .await?;
         course_rows.sort_by(|a, b| compare_course_id(&a.course_id, &b.course_id));
 
-        let chart_rows = sqlx::query!(
-            "SELECT course_id, song_id, difficulty, flag_as_hidden, song_index FROM course_chart ORDER BY course_id, song_index"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let chart_rows = sqlx::query!("SELECT * FROM course_chart ORDER BY course_id, song_index")
+            .fetch_all(&self.pool)
+            .await?;
 
-        let requirement_rows = sqlx::query!(
-            "SELECT course_id, required_id FROM course_requirement ORDER BY course_id, required_id"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let requirement_rows =
+            sqlx::query!("SELECT * FROM course_requirement ORDER BY course_id, required_id")
+                .fetch_all(&self.pool)
+                .await?;
 
-        let item_rows = sqlx::query!(
-            "SELECT course_id, item_id, type, amount FROM course_item ORDER BY course_id, item_id, type"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let item_rows = sqlx::query!("SELECT * FROM course_item ORDER BY course_id, item_id, type")
+            .fetch_all(&self.pool)
+            .await?;
 
-        let user_course_rows = sqlx::query!(
-            "SELECT course_id, high_score, best_clear_type FROM user_course WHERE user_id = ?",
-            user_id
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let user_course_rows = sqlx::query!("SELECT * FROM user_course WHERE user_id = ?", user_id)
+            .fetch_all(&self.pool)
+            .await?;
 
         let mut chart_map: HashMap<String, Vec<Value>> = HashMap::new();
         for row in chart_rows {

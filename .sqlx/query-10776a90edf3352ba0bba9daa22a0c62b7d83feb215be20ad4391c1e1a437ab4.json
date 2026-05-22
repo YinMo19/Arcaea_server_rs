@@ -1,0 +1,84 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT * FROM user_char_full WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "character_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "level",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "exp",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "max_size": 22
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "is_uncapped",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "max_size": 4
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "is_uncapped_override",
+        "type_info": {
+          "type": "Tiny",
+          "flags": "",
+          "max_size": 4
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "skill_flag",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "10776a90edf3352ba0bba9daa22a0c62b7d83feb215be20ad4391c1e1a437ab4"
+}

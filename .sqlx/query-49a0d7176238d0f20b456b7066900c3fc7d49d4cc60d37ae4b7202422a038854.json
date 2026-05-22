@@ -1,29 +1,29 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag FROM user_char_full WHERE user_id = ?",
+  "query": "SELECT * FROM chart WHERE song_id = ?",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "user_id",
+        "name": "song_id",
         "type_info": {
-          "type": "Long",
+          "type": "VarString",
           "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
-          "max_size": 11
+          "max_size": 1020
         }
       },
       {
         "ordinal": 1,
-        "name": "character_id",
+        "name": "name",
         "type_info": {
-          "type": "Long",
-          "flags": "NOT_NULL | PRIMARY_KEY | MULTIPLE_KEY | NO_DEFAULT_VALUE",
-          "max_size": 11
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
         }
       },
       {
         "ordinal": 2,
-        "name": "level",
+        "name": "rating_pst",
         "type_info": {
           "type": "Long",
           "flags": "",
@@ -32,34 +32,34 @@
       },
       {
         "ordinal": 3,
-        "name": "exp",
+        "name": "rating_prs",
         "type_info": {
-          "type": "Double",
+          "type": "Long",
           "flags": "",
-          "max_size": 22
+          "max_size": 11
         }
       },
       {
         "ordinal": 4,
-        "name": "is_uncapped",
+        "name": "rating_ftr",
         "type_info": {
-          "type": "Tiny",
+          "type": "Long",
           "flags": "",
-          "max_size": 4
+          "max_size": 11
         }
       },
       {
         "ordinal": 5,
-        "name": "is_uncapped_override",
+        "name": "rating_byn",
         "type_info": {
-          "type": "Tiny",
+          "type": "Long",
           "flags": "",
-          "max_size": 4
+          "max_size": 11
         }
       },
       {
         "ordinal": 6,
-        "name": "skill_flag",
+        "name": "rating_etr",
         "type_info": {
           "type": "Long",
           "flags": "",
@@ -72,7 +72,7 @@
     },
     "nullable": [
       false,
-      false,
+      true,
       true,
       true,
       true,
@@ -80,5 +80,5 @@
       true
     ]
   },
-  "hash": "b3cf04cff21de5a3813eefb377f7f5aeb9fa0bd9fee0e840203229d9451b07be"
+  "hash": "49a0d7176238d0f20b456b7066900c3fc7d49d4cc60d37ae4b7202422a038854"
 }

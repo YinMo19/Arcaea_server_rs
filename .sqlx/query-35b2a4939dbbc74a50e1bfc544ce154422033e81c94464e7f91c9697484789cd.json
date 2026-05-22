@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT course_id, song_id, difficulty, flag_as_hidden, song_index FROM course_chart ORDER BY course_id, song_index",
+  "query": "SELECT * FROM course_chart ORDER BY course_id, song_index",
   "describe": {
     "columns": [
       {
@@ -60,5 +60,5 @@
       false
     ]
   },
-  "hash": "6e19229add58749bdb0ae8eff627800e113cecfc5f61e756a429ad56da30c724"
+  "hash": "35b2a4939dbbc74a50e1bfc544ce154422033e81c94464e7f91c9697484789cd"
 }

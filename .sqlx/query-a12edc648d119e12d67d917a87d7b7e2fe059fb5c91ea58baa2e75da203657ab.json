@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "\n            SELECT p.present_id, p.expire_ts, p.description\n            FROM present p\n            INNER JOIN user_present up ON p.present_id = up.present_id\n            WHERE up.user_id = ? AND (p.expire_ts > ? OR p.expire_ts IS NULL)\n            ",
+  "query": "SELECT * FROM present WHERE present_id = ?",
   "describe": {
     "columns": [
       {
@@ -32,7 +32,7 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 1
     },
     "nullable": [
       false,
@@ -40,5 +40,5 @@
       true
     ]
   },
-  "hash": "89574a48159715f17e9201781cd39252faf61e4b457ceac20378b784ac94f68a"
+  "hash": "a12edc648d119e12d67d917a87d7b7e2fe059fb5c91ea58baa2e75da203657ab"
 }

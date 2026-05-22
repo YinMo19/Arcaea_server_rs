@@ -23,7 +23,7 @@ impl PresentService {
         // Get all presents for the user that haven't expired
         let present_records = sqlx::query!(
             r#"
-            SELECT p.present_id, p.expire_ts, p.description
+            SELECT p.*
             FROM present p
             INNER JOIN user_present up ON p.present_id = up.present_id
             WHERE up.user_id = ? AND (p.expire_ts > ? OR p.expire_ts IS NULL)
@@ -57,7 +57,7 @@ impl PresentService {
     async fn get_present_items(&self, present_id: &str) -> Result<Vec<PresentItem>, ArcError> {
         let item_records = sqlx::query!(
             r#"
-            SELECT present_id, item_id, type, amount
+            SELECT *
             FROM present_item
             WHERE present_id = ?
             "#,
@@ -114,15 +114,12 @@ impl PresentService {
         }
 
         // Get present info to check expiry
-        let present_record = sqlx::query!(
-            "SELECT present_id, expire_ts, description FROM present WHERE present_id = ?",
-            present_id
-        )
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(|e| ArcError::Database {
-            message: format!("Failed to get present info: {e}"),
-        })?;
+        let present_record = sqlx::query!("SELECT * FROM present WHERE present_id = ?", present_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| ArcError::Database {
+                message: format!("Failed to get present info: {e}"),
+            })?;
 
         let present_record = present_record.ok_or_else(|| {
             ArcError::no_data(format!("Present '{present_id}' does not exist"), 108)
@@ -141,7 +138,7 @@ impl PresentService {
         // Get present items
         let item_records = sqlx::query!(
             r#"
-            SELECT present_id, item_id, type, amount
+            SELECT *
             FROM present_item
             WHERE present_id = ?
             "#,

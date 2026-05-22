@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT COUNT(*) as `count!: i64` FROM user WHERE role = 1",
+  "query": "SELECT COUNT(DISTINCT user_id) as `count!: i64` FROM user_role WHERE role_id IN ('admin', 'system')",
   "describe": {
     "columns": [
       {
@@ -20,5 +20,5 @@
       false
     ]
   },
-  "hash": "886c3df0fac311b4543df0814764a196332f7299eaa5598604373cd0207bbd2c"
+  "hash": "2af329e5e8e9742967b1f63b0e13adf0cbd60dd2906a037dbc1f0f698576fd8b"
 }

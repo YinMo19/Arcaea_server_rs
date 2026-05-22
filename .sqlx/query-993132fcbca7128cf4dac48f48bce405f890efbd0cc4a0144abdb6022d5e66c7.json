@@ -1,15 +1,15 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT character_id, item_id, type, amount FROM char_item WHERE character_id = ? AND type = 'core'",
+  "query": "SELECT * FROM course_item WHERE course_id = ?",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "character_id",
+        "name": "course_id",
         "type_info": {
-          "type": "Long",
+          "type": "VarString",
           "flags": "NOT_NULL | PRIMARY_KEY | NO_DEFAULT_VALUE",
-          "max_size": 11
+          "max_size": 1020
         }
       },
       {
@@ -50,5 +50,5 @@
       true
     ]
   },
-  "hash": "f9852fb586cf03c451abd1e99c5c04d7880c43ed8b20658e05b98cdee6644a6d"
+  "hash": "993132fcbca7128cf4dac48f48bce405f890efbd0cc4a0144abdb6022d5e66c7"
 }

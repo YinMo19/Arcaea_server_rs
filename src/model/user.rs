@@ -54,7 +54,6 @@ pub struct User {
     pub custom_banner: Option<String>,
     pub is_allow_marketing_email: Option<i8>,
     pub is_profile_public: Option<i8>,
-    pub role: i8,
 }
 
 /// Login session model representing the login table

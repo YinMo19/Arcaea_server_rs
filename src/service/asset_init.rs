@@ -471,8 +471,8 @@ impl AssetInitService {
                 user_id, name, password, join_date, user_code, rating_ptt,
                 character_id, is_skill_sealed, is_char_uncapped, is_char_uncapped_override,
                 is_hide_rating, favorite_character, max_stamina_notification_enabled,
-                current_map, ticket, prog_boost, email, role
-            ) VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0, -1, 0, '', ?, 0, ?, 1)
+                current_map, ticket, prog_boost, email
+            ) VALUES (?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0, -1, 0, '', ?, 0, ?)
             "#,
             user_id,
             name,
@@ -498,11 +498,6 @@ impl AssetInitService {
         .fetch_one(&self.pool)
         .await
         .map_err(|e| ArcError::input(format!("Failed to load admin user: {e}")))?;
-
-        query!("UPDATE user SET role = 1 WHERE user_id = ?", admin_user_id)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| ArcError::input(format!("Failed to mark admin role: {e}")))?;
 
         // Python parity: regular character ownership starts with Hikari/Tairitsu.
         for character_id in [0, 1] {
