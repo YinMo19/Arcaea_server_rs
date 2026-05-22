@@ -61,6 +61,8 @@ cargo build --release
 ```
 之后去 `target/release/<binary>`找到对应二进制 scp 到服务器上，数据库，配置文件，乐曲数据，热更新包等等都放到对应位置了，用你喜欢的方式持久化运行这个二进制就行了。
 
+数据库迁移由 `sqlx::migrate!("./migrations")` 在编译期内嵌进主服务二进制。部署时只需要上传新的 `Arcaea_server_rs` 二进制并重启服务，启动过程会自动执行尚未应用的迁移；服务器运行目录不需要保留或同步 `migrations/` 文件。开发和构建时仍然需要仓库里的 `migrations/`，因为 sqlx 宏会在编译时读取它们。
+
 ### Redis 缓存
 Redis 是可选依赖，用于降低热点接口对 MySQL 的压力。当前缓存覆盖：
 

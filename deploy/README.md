@@ -20,6 +20,8 @@ The compose file bind-mounts these paths from the repository root:
 
 Put song files and `songlist` under `songs/`, and content bundles under `bundles/`, before starting the stack if you want local downloads to work.
 
+The Rust server embeds SQL migrations into the `Arcaea_server_rs` binary at build time through `sqlx::migrate!("./migrations")`. Runtime containers and systemd deployment directories do not need a `migrations/` directory; pending migrations run when the server starts. The source `migrations/` directory is still required while building the binary.
+
 ## Caddy
 
 Caddy is the public HTTP entrypoint:

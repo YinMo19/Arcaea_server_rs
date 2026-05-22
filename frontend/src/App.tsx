@@ -204,7 +204,14 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
   },
 ]
 
-const userAllowedViews = new Set<View>(['playerScores', 'scoreImages'])
+const userAllowedViews = new Set<View>([
+  'playerScores',
+  'scoreImages',
+  'chartTop',
+  'songs',
+  'items',
+  'purchases',
+])
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error'
 type ActionState = {
@@ -502,7 +509,7 @@ function App() {
           {isAdmin && activeView === 'users' && <UsersView />}
           {activeView === 'playerScores' && <PlayerScoresView isAdmin={isAdmin} />}
           {activeView === 'scoreImages' && <ScoreImagesView isAdmin={isAdmin} />}
-          {isAdmin && activeView === 'chartTop' && <ChartTopView />}
+          {activeView === 'chartTop' && <ChartTopView />}
           {isAdmin && activeView === 'userTicket' && <UserTicketView />}
           {isAdmin && activeView === 'userPassword' && <UserPasswordView />}
           {isAdmin && activeView === 'userBan' && <UserBanView />}
@@ -514,9 +521,9 @@ function App() {
           {isAdmin && activeView === 'redeemCreate' && <RedeemCreateView />}
           {isAdmin && activeView === 'redeemDelete' && <RedeemDeleteView />}
           {isAdmin && activeView === 'redeemUsers' && <RedeemUsersView />}
-          {isAdmin && activeView === 'songs' && <SongsView />}
-          {isAdmin && activeView === 'items' && <ItemsView />}
-          {isAdmin && activeView === 'purchases' && <PurchasesView />}
+          {activeView === 'songs' && <SongsView isAdmin={isAdmin} />}
+          {activeView === 'items' && <ItemsView isAdmin={isAdmin} />}
+          {activeView === 'purchases' && <PurchasesView isAdmin={isAdmin} />}
           {isAdmin && activeView === 'purchaseItems' && <PurchaseItemsView />}
         </main>
       </div>
@@ -1781,7 +1788,7 @@ function DifficultySelect({
   )
 }
 
-function SongsView() {
+function SongsView({ isAdmin }: { isAdmin: boolean }) {
   const [query, setQuery] = useState('')
   const [rows, setRows] = useState<SongRow[]>([])
   const [state, setState] = useState<LoadState>('loading')
@@ -1895,42 +1902,44 @@ function SongsView() {
       searchValue={query}
       onSearchChange={setQuery}
     >
-      <form className="mb-5 grid gap-3 rounded-md border p-3" onSubmit={submitCreate}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-sm font-medium">新增歌曲</div>
-        </div>
-        <div className="grid gap-3 lg:grid-cols-8">
-          <Input
-            value={createForm.sid}
-            onChange={(event) => setCreateForm({ ...createForm, sid: event.target.value })}
-            placeholder="song_id"
-            required
-          />
-          <Input
-            className="lg:col-span-2"
-            value={createForm.name_en}
-            onChange={(event) => setCreateForm({ ...createForm, name_en: event.target.value })}
-            placeholder="name_en"
-            required
-          />
-          {(['rating_pst', 'rating_prs', 'rating_ftr', 'rating_byd', 'rating_etr'] as const).map((field) => (
+      {isAdmin && (
+        <form className="mb-5 grid gap-3 rounded-md border p-3" onSubmit={submitCreate}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-medium">新增歌曲</div>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-8">
             <Input
-              key={field}
-              value={createForm[field]}
-              onChange={(event) => setCreateForm({ ...createForm, [field]: event.target.value })}
-              placeholder={field.replace('rating_', '').toUpperCase()}
+              value={createForm.sid}
+              onChange={(event) => setCreateForm({ ...createForm, sid: event.target.value })}
+              placeholder="song_id"
               required
             />
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" size="sm">
-            <Plus />
-            新增歌曲
-          </Button>
-        </div>
-      </form>
-      <ActionMessage action={action} className="mb-3 block" />
+            <Input
+              className="lg:col-span-2"
+              value={createForm.name_en}
+              onChange={(event) => setCreateForm({ ...createForm, name_en: event.target.value })}
+              placeholder="name_en"
+              required
+            />
+            {(['rating_pst', 'rating_prs', 'rating_ftr', 'rating_byd', 'rating_etr'] as const).map((field) => (
+              <Input
+                key={field}
+                value={createForm[field]}
+                onChange={(event) => setCreateForm({ ...createForm, [field]: event.target.value })}
+                placeholder={field.replace('rating_', '').toUpperCase()}
+                required
+              />
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" size="sm">
+              <Plus />
+              新增歌曲
+            </Button>
+          </div>
+        </form>
+      )}
+      {isAdmin && <ActionMessage action={action} className="mb-3 block" />}
       <TableBlock
         pagination={pagination}
         onPageChange={(page) => load(true, page, pagination.pageSize)}
@@ -1947,13 +1956,13 @@ function SongsView() {
                 <TableHead>FTR</TableHead>
                 <TableHead>BYD</TableHead>
                 <TableHead>ETR</TableHead>
-                <TableHead className="w-0 text-right">操作</TableHead>
+                {isAdmin && <TableHead className="w-0 text-right">操作</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {visibleRows.map((row) => (
                 <Fragment key={row.songId}>
-                  {editingSid === row.songId && (
+                  {isAdmin && editingSid === row.songId && (
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
                       <TableCell colSpan={8} className="p-3">
                         <form className="grid gap-3 rounded-md border bg-background p-3" onSubmit={submitEdit}>
@@ -2001,18 +2010,20 @@ function SongsView() {
                     <TableCell>{row.ratingFtr}</TableCell>
                     <TableCell>{row.ratingByd}</TableCell>
                     <TableCell>{row.ratingEtr}</TableCell>
-                    <TableCell className="w-0 whitespace-nowrap">
-                      <div className="flex justify-end gap-2">
-                        <Button type="button" size="sm" variant="outline" onClick={() => edit(row)}>
-                          <Pencil />
-                          编辑
-                        </Button>
-                        <Button type="button" size="sm" variant="destructive" onClick={() => remove(row)}>
-                          <Trash2 />
-                          删除
-                        </Button>
-                      </div>
-                    </TableCell>
+                    {isAdmin && (
+                      <TableCell className="w-0 whitespace-nowrap">
+                        <div className="flex justify-end gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => edit(row)}>
+                            <Pencil />
+                            编辑
+                          </Button>
+                          <Button type="button" size="sm" variant="destructive" onClick={() => remove(row)}>
+                            <Trash2 />
+                            删除
+                          </Button>
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 </Fragment>
               ))}
@@ -2024,7 +2035,7 @@ function SongsView() {
   )
 }
 
-function ItemsView() {
+function ItemsView({ isAdmin }: { isAdmin: boolean }) {
   const [query, setQuery] = useState('')
   const [rows, setRows] = useState<ItemRow[]>([])
   const [state, setState] = useState<LoadState>('loading')
@@ -2134,42 +2145,44 @@ function ItemsView() {
       searchValue={query}
       onSearchChange={setQuery}
     >
-      <form className="mb-5 grid gap-3 rounded-md border p-3" onSubmit={submitCreate}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-sm font-medium">新增物品</div>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-[1fr_1fr_160px]">
-          <Input
-            value={createForm.item_id}
-            onChange={(event) => setCreateForm({ ...createForm, item_id: event.target.value })}
-            placeholder="item_id"
-            required
-          />
-          <Input
-            value={createForm.item_type}
-            onChange={(event) => setCreateForm({ ...createForm, item_type: event.target.value })}
-            placeholder="type"
-            required
-          />
-          <select
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={createForm.is_available ?? 0}
-            onChange={(event) =>
-              setCreateForm({ ...createForm, is_available: Number(event.target.value) })
-            }
-          >
-            <option value={1}>可用</option>
-            <option value={0}>不可用</option>
-          </select>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" size="sm">
-            <Plus />
-            新增物品
-          </Button>
-        </div>
-      </form>
-      <ActionMessage action={action} className="mb-3 block" />
+      {isAdmin && (
+        <form className="mb-5 grid gap-3 rounded-md border p-3" onSubmit={submitCreate}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-medium">新增物品</div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[1fr_1fr_160px]">
+            <Input
+              value={createForm.item_id}
+              onChange={(event) => setCreateForm({ ...createForm, item_id: event.target.value })}
+              placeholder="item_id"
+              required
+            />
+            <Input
+              value={createForm.item_type}
+              onChange={(event) => setCreateForm({ ...createForm, item_type: event.target.value })}
+              placeholder="type"
+              required
+            />
+            <select
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={createForm.is_available ?? 0}
+              onChange={(event) =>
+                setCreateForm({ ...createForm, is_available: Number(event.target.value) })
+              }
+            >
+              <option value={1}>可用</option>
+              <option value={0}>不可用</option>
+            </select>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" size="sm">
+              <Plus />
+              新增物品
+            </Button>
+          </div>
+        </form>
+      )}
+      {isAdmin && <ActionMessage action={action} className="mb-3 block" />}
       <TableBlock
         pagination={pagination}
         onPageChange={(page) => load(true, page, pagination.pageSize)}
@@ -2182,7 +2195,7 @@ function ItemsView() {
                 <TableHead>Item ID</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>可用</TableHead>
-                <TableHead className="w-0 text-right">操作</TableHead>
+                {isAdmin && <TableHead className="w-0 text-right">操作</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -2190,7 +2203,7 @@ function ItemsView() {
                 const key = `${row.itemId}:${row.itemType}`
                 return (
                   <Fragment key={key}>
-                    {editingKey === key && (
+                    {isAdmin && editingKey === key && (
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableCell colSpan={4} className="p-3">
                           <form className="grid gap-3 rounded-md border bg-background p-3" onSubmit={submitEdit}>
@@ -2233,18 +2246,20 @@ function ItemsView() {
                           {row.isAvailable ? 'Yes' : 'No'}
                         </Badge>
                       </TableCell>
-                      <TableCell className="w-0 whitespace-nowrap">
-                        <div className="flex justify-end gap-2">
-                          <Button type="button" size="sm" variant="outline" onClick={() => edit(row)}>
-                            <Pencil />
-                            编辑
-                          </Button>
-                          <Button type="button" size="sm" variant="destructive" onClick={() => remove(row)}>
-                            <Trash2 />
-                            删除
-                          </Button>
-                        </div>
-                      </TableCell>
+                      {isAdmin && (
+                        <TableCell className="w-0 whitespace-nowrap">
+                          <div className="flex justify-end gap-2">
+                            <Button type="button" size="sm" variant="outline" onClick={() => edit(row)}>
+                              <Pencil />
+                              编辑
+                            </Button>
+                            <Button type="button" size="sm" variant="destructive" onClick={() => remove(row)}>
+                              <Trash2 />
+                              删除
+                            </Button>
+                          </div>
+                        </TableCell>
+                      )}
                     </TableRow>
                   </Fragment>
                 )
@@ -2257,7 +2272,7 @@ function ItemsView() {
   )
 }
 
-function PurchasesView() {
+function PurchasesView({ isAdmin }: { isAdmin: boolean }) {
   const [query, setQuery] = useState('')
   const [rows, setRows] = useState<PurchaseRow[]>([])
   const [state, setState] = useState<LoadState>('loading')
@@ -2371,63 +2386,65 @@ function PurchasesView() {
       onSearchChange={setQuery}
     >
       <div className="grid gap-5">
-        <form className="grid gap-3 rounded-md border p-3" onSubmit={submitCreate}>
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-sm font-medium">新增购买项</div>
-          </div>
-          <div className="grid gap-3 xl:grid-cols-6">
-            <Input
-              value={createForm.purchase_name}
-              onChange={(event) =>
-                setCreateForm({ ...createForm, purchase_name: event.target.value })
-              }
-              placeholder="purchase_name"
-              required
-            />
-            <Input
-              value={createForm.price}
-              onChange={(event) =>
-                setCreateForm({ ...createForm, price: event.target.value })
-              }
-              placeholder="price"
-            />
-            <Input
-              value={createForm.orig_price}
-              onChange={(event) =>
-                setCreateForm({ ...createForm, orig_price: event.target.value })
-              }
-              placeholder="orig_price"
-            />
-            <Input
-              type="datetime-local"
-              value={createForm.discount_from}
-              onChange={(event) =>
-                setCreateForm({ ...createForm, discount_from: event.target.value })
-              }
-            />
-            <Input
-              type="datetime-local"
-              value={createForm.discount_to}
-              onChange={(event) =>
-                setCreateForm({ ...createForm, discount_to: event.target.value })
-              }
-            />
-            <Input
-              value={createForm.discount_reason}
-              onChange={(event) =>
-                setCreateForm({ ...createForm, discount_reason: event.target.value })
-              }
-              placeholder="discount_reason"
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="submit" size="sm">
-              <Plus />
-              新增购买项
-            </Button>
-          </div>
-        </form>
-        <ActionMessage action={action} />
+        {isAdmin && (
+          <form className="grid gap-3 rounded-md border p-3" onSubmit={submitCreate}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-medium">新增购买项</div>
+            </div>
+            <div className="grid gap-3 xl:grid-cols-6">
+              <Input
+                value={createForm.purchase_name}
+                onChange={(event) =>
+                  setCreateForm({ ...createForm, purchase_name: event.target.value })
+                }
+                placeholder="purchase_name"
+                required
+              />
+              <Input
+                value={createForm.price}
+                onChange={(event) =>
+                  setCreateForm({ ...createForm, price: event.target.value })
+                }
+                placeholder="price"
+              />
+              <Input
+                value={createForm.orig_price}
+                onChange={(event) =>
+                  setCreateForm({ ...createForm, orig_price: event.target.value })
+                }
+                placeholder="orig_price"
+              />
+              <Input
+                type="datetime-local"
+                value={createForm.discount_from}
+                onChange={(event) =>
+                  setCreateForm({ ...createForm, discount_from: event.target.value })
+                }
+              />
+              <Input
+                type="datetime-local"
+                value={createForm.discount_to}
+                onChange={(event) =>
+                  setCreateForm({ ...createForm, discount_to: event.target.value })
+                }
+              />
+              <Input
+                value={createForm.discount_reason}
+                onChange={(event) =>
+                  setCreateForm({ ...createForm, discount_reason: event.target.value })
+                }
+                placeholder="discount_reason"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="submit" size="sm">
+                <Plus />
+                新增购买项
+              </Button>
+            </div>
+          </form>
+        )}
+        {isAdmin && <ActionMessage action={action} />}
 
         <TableBlock
           pagination={pagination}
@@ -2443,13 +2460,13 @@ function PurchasesView() {
                   <TableHead>Orig</TableHead>
                   <TableHead>Discount</TableHead>
                   <TableHead>Items</TableHead>
-                  <TableHead className="w-0 text-right">操作</TableHead>
+                  {isAdmin && <TableHead className="w-0 text-right">操作</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {visibleRows.map((row) => (
                   <Fragment key={row.purchaseName}>
-                    {editingPurchase === row.purchaseName && (
+                    {isAdmin && editingPurchase === row.purchaseName && (
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableCell colSpan={6} className="p-3">
                           <form className="grid gap-3 rounded-md border bg-background p-3" onSubmit={submitEdit}>
@@ -2508,18 +2525,20 @@ function PurchasesView() {
                       <TableCell className="max-w-xl truncate" title={row.itemSummary}>
                         {row.itemSummary}
                       </TableCell>
-                      <TableCell className="w-0 whitespace-nowrap">
-                        <div className="flex justify-end gap-2">
-                          <Button type="button" size="sm" variant="outline" onClick={() => editPurchase(row)}>
-                            <Pencil />
-                            编辑
-                          </Button>
-                          <Button type="button" size="sm" variant="destructive" onClick={() => removePurchase(row)}>
-                            <Trash2 />
-                            删除
-                          </Button>
-                        </div>
-                      </TableCell>
+                      {isAdmin && (
+                        <TableCell className="w-0 whitespace-nowrap">
+                          <div className="flex justify-end gap-2">
+                            <Button type="button" size="sm" variant="outline" onClick={() => editPurchase(row)}>
+                              <Pencil />
+                              编辑
+                            </Button>
+                            <Button type="button" size="sm" variant="destructive" onClick={() => removePurchase(row)}>
+                              <Trash2 />
+                              删除
+                            </Button>
+                          </div>
+                        </TableCell>
+                      )}
                     </TableRow>
                   </Fragment>
                 ))}
@@ -3387,11 +3406,11 @@ function viewTitle(view: View) {
     case 'users':
       return '玩家管理'
     case 'songs':
-      return '歌曲管理'
+      return '歌曲表'
     case 'items':
-      return '物品管理'
+      return '物品表'
     case 'purchases':
-      return '购买项配置'
+      return '购买项'
     case 'purchaseItems':
       return '购买物品配置'
   }

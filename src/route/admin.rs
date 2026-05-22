@@ -2861,7 +2861,7 @@ pub async fn admin_api_songs(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminPageResponse<SongRowView>> {
-    require_admin_api(cookies, pool.inner()).await?;
+    require_web_session(cookies, pool.inner()).await?;
     let (page, page_size) = normalize_page(page, page_size);
     Ok(success_return(
         load_admin_songs(q, page, page_size, pool.inner()).await,
@@ -2876,7 +2876,7 @@ pub async fn admin_api_items(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminPageResponse<ItemRowView>> {
-    require_admin_api(cookies, pool.inner()).await?;
+    require_web_session(cookies, pool.inner()).await?;
     let (page, page_size) = normalize_page(page, page_size);
     Ok(success_return(
         load_admin_items(q, page, page_size, pool.inner()).await,
@@ -2891,7 +2891,7 @@ pub async fn admin_api_purchases(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminPageResponse<PurchaseRowView>> {
-    require_admin_api(cookies, pool.inner()).await?;
+    require_web_session(cookies, pool.inner()).await?;
     let (page, page_size) = normalize_page(page, page_size);
     Ok(success_return(
         load_admin_purchases(pq, page, page_size, pool.inner()).await,
@@ -3013,7 +3013,7 @@ pub async fn admin_api_chart_top(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminChartTopResponse> {
-    require_admin_api(cookies, pool.inner()).await?;
+    require_web_session(cookies, pool.inner()).await?;
     Ok(success_return(
         load_admin_chart_top(sid, difficulty.unwrap_or(0), limit, pool.inner()).await?,
     ))
