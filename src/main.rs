@@ -510,12 +510,17 @@ fn multiplayer_trailing_slash_paths(prefixes: &[String]) -> HashSet<String> {
 }
 
 fn account_routes() -> Vec<rocket::Route> {
-    rocket::routes![
-        Arcaea_server_rs::route::user::register,
+    let mut routes = rocket::routes![
         Arcaea_server_rs::route::user::user_delete,
         Arcaea_server_rs::route::user::email_resend_verify,
         Arcaea_server_rs::route::user::email_verify
-    ]
+    ];
+
+    if !config::CONFIG.disable_registration {
+        routes.extend(rocket::routes![Arcaea_server_rs::route::user::register]);
+    }
+
+    routes
 }
 
 fn mount_game_api_routes(mut rocket: Rocket<Build>, prefix: &str) -> Rocket<Build> {

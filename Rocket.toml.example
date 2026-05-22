@@ -41,6 +41,7 @@ game_register_device_rate_limit = "5/minute"
 game_login_rate_limit = "10/minute"
 
 # Login settings
+disable_registration = false
 login_device_number_limit = 1
 allow_login_same_device = false
 allow_ban_multidevice_user_auto = true

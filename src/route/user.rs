@@ -1,3 +1,4 @@
+use crate::config::CONFIG;
 use crate::context::ClientContext;
 use crate::error::ArcError;
 use crate::model::{RegisterResponse, UserLoginDto, UserRegisterDto};
@@ -453,8 +454,7 @@ pub async fn email_verify() -> RouteResult<Value> {
 
 /// Get all user routes
 pub fn routes() -> Vec<Route> {
-    routes![
-        register,
+    let mut routes = routes![
         user_me,
         logout,
         user_by_code,
@@ -471,5 +471,11 @@ pub fn routes() -> Vec<Route> {
         user_delete,
         email_resend_verify,
         email_verify
-    ]
+    ];
+
+    if !CONFIG.disable_registration {
+        routes.extend(routes![register]);
+    }
+
+    routes
 }

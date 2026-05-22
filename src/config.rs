@@ -73,6 +73,7 @@ pub struct Config {
     pub bundle_download_time_gap_limit: i64,
 
     // Login settings
+    pub disable_registration: bool,
     pub login_device_number_limit: i32,
     pub allow_login_same_device: bool,
     pub allow_ban_multidevice_user_auto: bool,
@@ -142,6 +143,7 @@ impl Default for Config {
             bundle_download_times_limit: "100/60 minutes".to_string(),
             bundle_download_time_gap_limit: 3000,
 
+            disable_registration: false,
             login_device_number_limit: 1,
             allow_login_same_device: false,
             allow_ban_multidevice_user_auto: true,
@@ -295,6 +297,13 @@ impl Config {
         set_from_figment!(
             self,
             figment,
+            disable_registration,
+            "disable_registration",
+            bool
+        );
+        set_from_figment!(
+            self,
+            figment,
             login_device_number_limit,
             "login_device_number_limit",
             i32
@@ -441,6 +450,7 @@ impl Config {
         set_from_env!(self, download_forbid_when_no_item, bool);
         set_from_env!(self, bundle_download_times_limit, String);
         set_from_env!(self, bundle_download_time_gap_limit, i64);
+        set_from_env!(self, disable_registration, bool);
         set_from_env!(self, login_device_number_limit, i32);
         set_from_env!(self, allow_login_same_device, bool);
         set_from_env!(self, allow_ban_multidevice_user_auto, bool);
