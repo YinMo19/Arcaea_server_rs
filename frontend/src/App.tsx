@@ -13,6 +13,7 @@ import {
   KeyRound,
   Link2,
   LoaderCircle,
+  LockKeyhole,
   LogOut,
   Music2,
   PackagePlus,
@@ -21,8 +22,10 @@ import {
   RefreshCcw,
   Search,
   ShieldAlert,
+  ShieldCheck,
   ShoppingBag,
   Trash2,
+  UserRound,
   Users,
   X,
 } from 'lucide-react'
@@ -552,48 +555,72 @@ function LoginScreen({ onLoggedIn }: { onLoggedIn: (session: AdminSession) => vo
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <div className="mb-2 flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <KeyRound className="size-5" />
-          </div>
-          <CardTitle>用户登录</CardTitle>
-          <CardDescription>进入 Web 控制台</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="grid gap-4" onSubmit={onSubmit}>
-            <label className="grid gap-1.5 text-sm font-medium">
-              Username
-              <Input
-                value={username}
-                autoComplete="username"
-                onChange={(event) => setUsername(event.target.value)}
-                required
-              />
-            </label>
-            <label className="grid gap-1.5 text-sm font-medium">
-              Password
-              <Input
-                value={password}
-                type="password"
-                autoComplete="current-password"
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </label>
-            {error && (
-              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {error}
+    <div className="relative min-h-svh overflow-hidden bg-background px-4 py-6 text-foreground sm:px-6">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(15,23,42,0.07),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.85),rgba(226,232,240,0.58))]" />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.045)_1px,transparent_1px)] bg-[size:40px_40px]" />
+
+      <div className="relative mx-auto flex min-h-[calc(100svh-3rem)] w-full max-w-md items-center">
+        <Card className="w-full border bg-card/95 shadow-lg backdrop-blur">
+          <CardHeader className="gap-5 p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex size-11 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">
+                <KeyRound className="size-5" />
               </div>
-            )}
-            <Button type="submit" disabled={loading}>
-              {loading && <LoaderCircle className="animate-spin" />}
-              登录
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              <Badge variant="outline" className="h-7 border-primary/25 bg-primary/5">
+                Secure
+              </Badge>
+            </div>
+            <div className="grid gap-1.5">
+              <CardTitle className="text-xl">用户登录</CardTitle>
+              <CardDescription>进入 Web 控制台</CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="p-6 pt-0">
+            <form className="grid gap-4" onSubmit={onSubmit}>
+              <label className="grid gap-1.5 text-sm font-medium">
+                Username
+                <div className="relative">
+                  <UserRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="h-11 bg-background pl-10"
+                    value={username}
+                    autoComplete="username"
+                    onChange={(event) => setUsername(event.target.value)}
+                    required
+                  />
+                </div>
+              </label>
+              <label className="grid gap-1.5 text-sm font-medium">
+                Password
+                <div className="relative">
+                  <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="h-11 bg-background pl-10"
+                    value={password}
+                    type="password"
+                    autoComplete="current-password"
+                    onChange={(event) => setPassword(event.target.value)}
+                    required
+                  />
+                </div>
+              </label>
+              {error && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
+              <Button className="h-11 w-full" type="submit" disabled={loading}>
+                {loading ? (
+                  <LoaderCircle className="animate-spin" />
+                ) : (
+                  <ShieldCheck />
+                )}
+                登录
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
