@@ -399,6 +399,8 @@ pub struct AdminSessionResponse {
     logged_in: bool,
     role: i8,
     app_title: String,
+    login_background: Option<String>,
+    login_position: String,
     user: Option<AdminUserSummary>,
 }
 
@@ -577,6 +579,25 @@ fn web_app_title() -> String {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "Arcaea Server".to_string())
+}
+
+fn web_login_background() -> Option<String> {
+    env::var("LOGIN_BACKGROUND_URL")
+        .or_else(|_| env::var("login_background_url"))
+        .or_else(|_| env::var("LOGIN_BACKGROUND"))
+        .or_else(|_| env::var("login_background"))
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn web_login_position() -> String {
+    env::var("LOGIN_CARD_POSITION")
+        .or_else(|_| env::var("login_card_position"))
+        .ok()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| matches!(value.as_str(), "left" | "center" | "right"))
+        .unwrap_or_else(|| "center".to_string())
 }
 
 async fn current_web_session(
@@ -1017,6 +1038,8 @@ fn web_session_response(user: &WebLoginUserRow) -> AdminSessionResponse {
         logged_in: true,
         role: user.web_role(),
         app_title: web_app_title(),
+        login_background: web_login_background(),
+        login_position: web_login_position(),
         user: Some(AdminUserSummary {
             user_id: user.user_id,
             name: user.name.clone().unwrap_or_default(),
@@ -2773,6 +2796,8 @@ pub async fn admin_api_session(
         logged_in: session.is_some(),
         role: session.as_ref().map(|session| session.role).unwrap_or(0),
         app_title: web_app_title(),
+        login_background: web_login_background(),
+        login_position: web_login_position(),
         user: session.map(|session| session.user),
     }))
 }

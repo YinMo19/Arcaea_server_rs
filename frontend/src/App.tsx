@@ -82,6 +82,33 @@ import { cn } from '@/lib/utils'
 const defaultAppTitle = 'Arcaea Server'
 const githubUrl = 'https://github.com/YinMo19/Arcaea_server_rs'
 
+type LoginPosition = 'left' | 'center' | 'right'
+type LoginConfig = {
+  title: string
+  backgroundUrl?: string
+  position: LoginPosition
+}
+
+const defaultLoginConfig: LoginConfig = {
+  title: defaultAppTitle,
+  position: 'center',
+}
+
+function normalizeLoginPosition(value?: string): LoginPosition {
+  return value === 'left' || value === 'right' ? value : 'center'
+}
+
+function loginConfigFromSession(session: AdminSession): LoginConfig {
+  const title = session.appTitle?.trim() || defaultAppTitle
+  const backgroundUrl = session.loginBackground?.trim() || undefined
+
+  return {
+    title,
+    backgroundUrl,
+    position: normalizeLoginPosition(session.loginPosition),
+  }
+}
+
 type View =
   | 'dashboard'
   | MaintenanceView
@@ -378,7 +405,8 @@ const purchaseItemTypeOptions = [
 function App() {
   const [session, setSession] = useState<AdminSession>()
   const [checkingSession, setCheckingSession] = useState(true)
-  const [appTitle, setAppTitle] = useState(defaultAppTitle)
+  const [loginConfig, setLoginConfig] =
+    useState<LoginConfig>(defaultLoginConfig)
   const [view, setView] = useState<View>('dashboard')
   const isAdmin = session?.role === 1
   const visibleNavSections = useMemo(
@@ -400,7 +428,7 @@ function App() {
     adminApi
       .session()
       .then((session) => {
-        setAppTitle(session.appTitle || defaultAppTitle)
+        setLoginConfig(loginConfigFromSession(session))
         setSession(session.loggedIn ? session : undefined)
         if (session.loggedIn && session.role !== 1) {
           setView('scoreImages')
@@ -421,9 +449,9 @@ function App() {
   if (!session) {
     return (
       <LoginScreen
-        title={appTitle}
+        config={loginConfig}
         onLoggedIn={(session) => {
-          setAppTitle(session.appTitle || defaultAppTitle)
+          setLoginConfig(loginConfigFromSession(session))
           setSession(session)
           if (session.role !== 1) {
             setView('scoreImages')
@@ -542,10 +570,10 @@ function App() {
 }
 
 function LoginScreen({
-  title,
+  config,
   onLoggedIn,
 }: {
-  title: string
+  config: LoginConfig
   onLoggedIn: (session: AdminSession) => void
 }) {
   const [username, setUsername] = useState('')
@@ -567,21 +595,47 @@ function LoginScreen({
     }
   }
 
+  const cardPositionClass = {
+    left: 'justify-center lg:justify-start',
+    center: 'justify-center',
+    right: 'justify-center lg:justify-end',
+  }[config.position]
+  const shellWidthClass = config.position === 'center' ? 'max-w-md' : 'max-w-6xl'
+
   return (
     <div className="relative min-h-svh overflow-hidden bg-background px-4 py-6 text-foreground sm:px-6">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(15,23,42,0.07),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.85),rgba(226,232,240,0.58))]" />
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.045)_1px,transparent_1px)] bg-[size:40px_40px]" />
+      {config.backgroundUrl ? (
+        <>
+          <div
+            className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
+            style={{
+              backgroundImage: `url(${JSON.stringify(config.backgroundUrl)})`,
+            }}
+          />
+          <div className="pointer-events-none absolute inset-0 bg-background/25" />
+        </>
+      ) : (
+        <>
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(15,23,42,0.07),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.85),rgba(226,232,240,0.58))]" />
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.045)_1px,transparent_1px)] bg-[size:40px_40px]" />
+        </>
+      )}
 
-      <div className="relative mx-auto flex min-h-[calc(100svh-3rem)] w-full max-w-md flex-col">
-        <div className="flex w-full flex-1 items-center">
-          <Card className="w-full border bg-card/95 shadow-lg backdrop-blur">
+      <div
+        className={cn(
+          'relative mx-auto flex min-h-[calc(100svh-3rem)] w-full flex-col',
+          shellWidthClass,
+        )}
+      >
+        <div className={cn('flex w-full flex-1 items-center', cardPositionClass)}>
+          <Card className="w-full max-w-md border bg-card/95 shadow-lg backdrop-blur">
             <CardHeader className="gap-5 p-6">
               <div className="flex items-center gap-3">
                 <div className="flex size-11 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">
                   <KeyRound className="size-5" />
                 </div>
                 <div className="min-w-0">
-                  <CardTitle className="truncate text-xl">{title}</CardTitle>
+                  <CardTitle className="truncate text-xl">{config.title}</CardTitle>
                   <CardDescription className="mt-1">进入 Web 控制台</CardDescription>
                 </div>
               </div>
