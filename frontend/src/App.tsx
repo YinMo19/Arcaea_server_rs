@@ -606,10 +606,11 @@ function LoginScreen({
     }
   }
 
-  const cardPositionClass = {
-    left: 'justify-center lg:justify-start',
-    center: 'justify-center',
-    right: 'justify-center lg:justify-end',
+  const cardAnchorClass = {
+    left: 'lg:absolute lg:left-1/4 lg:top-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2',
+    center: '',
+    right:
+      'lg:absolute lg:left-3/4 lg:top-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2',
   }[config.position]
   const shellWidthClass = config.position === 'center' ? 'max-w-md' : 'max-w-none'
   const cardBackgroundOpacity = Math.round(config.cardOpacity * 1000) / 10
@@ -639,9 +640,9 @@ function LoginScreen({
           shellWidthClass,
         )}
       >
-        <div className={cn('flex w-full flex-1 items-center', cardPositionClass)}>
+        <div className="relative flex w-full flex-1 items-center justify-center">
           <Card
-            className="w-full max-w-md border shadow-lg backdrop-blur"
+            className={cn('w-full max-w-md border shadow-lg backdrop-blur', cardAnchorClass)}
             style={{
               backgroundColor: `color-mix(in oklab, var(--card) ${cardBackgroundOpacity}%, transparent)`,
             }}
