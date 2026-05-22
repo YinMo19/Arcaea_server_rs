@@ -402,6 +402,7 @@ pub struct AdminSessionResponse {
     login_background: Option<String>,
     login_position: String,
     login_card_opacity: f64,
+    web_surface_opacity: f64,
     user: Option<AdminUserSummary>,
 }
 
@@ -604,6 +605,18 @@ fn web_login_position() -> String {
 fn web_login_card_opacity() -> f64 {
     env::var("LOGIN_CARD_OPACITY")
         .or_else(|_| env::var("login_card_opacity"))
+        .ok()
+        .and_then(|value| value.trim().parse::<f64>().ok())
+        .filter(|value| value.is_finite())
+        .map(|value| value.clamp(0.0, 1.0))
+        .unwrap_or(1.0)
+}
+
+fn web_surface_opacity() -> f64 {
+    env::var("WEB_SURFACE_OPACITY")
+        .or_else(|_| env::var("web_surface_opacity"))
+        .or_else(|_| env::var("MAIN_SURFACE_OPACITY"))
+        .or_else(|_| env::var("main_surface_opacity"))
         .ok()
         .and_then(|value| value.trim().parse::<f64>().ok())
         .filter(|value| value.is_finite())
@@ -1052,6 +1065,7 @@ fn web_session_response(user: &WebLoginUserRow) -> AdminSessionResponse {
         login_background: web_login_background(),
         login_position: web_login_position(),
         login_card_opacity: web_login_card_opacity(),
+        web_surface_opacity: web_surface_opacity(),
         user: Some(AdminUserSummary {
             user_id: user.user_id,
             name: user.name.clone().unwrap_or_default(),
@@ -2811,6 +2825,7 @@ pub async fn admin_api_session(
         login_background: web_login_background(),
         login_position: web_login_position(),
         login_card_opacity: web_login_card_opacity(),
+        web_surface_opacity: web_surface_opacity(),
         user: session.map(|session| session.user),
     }))
 }

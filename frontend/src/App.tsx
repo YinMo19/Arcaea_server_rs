@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import type { FormEvent, ReactNode } from 'react'
+import type { CSSProperties, FormEvent, ReactNode } from 'react'
 import {
   Activity,
   Boxes,
@@ -88,12 +88,14 @@ type LoginConfig = {
   backgroundUrl?: string
   position: LoginPosition
   cardOpacity: number
+  surfaceOpacity: number
 }
 
 const defaultLoginConfig: LoginConfig = {
   title: defaultAppTitle,
   position: 'center',
   cardOpacity: 1,
+  surfaceOpacity: 1,
 }
 
 function normalizeLoginPosition(value?: string): LoginPosition {
@@ -108,6 +110,10 @@ function normalizeLoginCardOpacity(value?: number): number {
   return Math.min(1, Math.max(0, value))
 }
 
+function opacityPercent(value: number): number {
+  return Math.round(value * 1000) / 10
+}
+
 function loginConfigFromSession(session: AdminSession): LoginConfig {
   const title = session.appTitle?.trim() || defaultAppTitle
   const backgroundUrl = session.loginBackground?.trim() || undefined
@@ -117,6 +123,7 @@ function loginConfigFromSession(session: AdminSession): LoginConfig {
     backgroundUrl,
     position: normalizeLoginPosition(session.loginPosition),
     cardOpacity: normalizeLoginCardOpacity(session.loginCardOpacity),
+    surfaceOpacity: normalizeLoginCardOpacity(session.webSurfaceOpacity),
   }
 }
 
@@ -420,6 +427,15 @@ function App() {
     useState<LoginConfig>(defaultLoginConfig)
   const [view, setView] = useState<View>('dashboard')
   const isAdmin = session?.role === 1
+  const hasPageBackground = Boolean(loginConfig.backgroundUrl)
+  const shellStyle = hasPageBackground
+    ? ({
+        '--web-surface-bg': `color-mix(in oklab, var(--card) ${opacityPercent(loginConfig.surfaceOpacity)}%, transparent)`,
+        '--web-sidebar-bg': `color-mix(in oklab, var(--sidebar) ${opacityPercent(loginConfig.surfaceOpacity)}%, transparent)`,
+        '--web-header-bg': `color-mix(in oklab, var(--background) ${opacityPercent(loginConfig.surfaceOpacity)}%, transparent)`,
+        '--web-control-bg': `color-mix(in oklab, var(--background) ${opacityPercent(Math.min(1, loginConfig.surfaceOpacity + 0.15))}%, transparent)`,
+      } as CSSProperties)
+    : undefined
   const visibleNavSections = useMemo(
     () =>
       isAdmin
@@ -473,8 +489,25 @@ function App() {
   }
 
   return (
-    <div className="min-h-svh bg-background text-foreground">
-      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r bg-sidebar px-4 py-5 lg:block">
+    <div
+      className={cn(
+        'web-shell min-h-svh bg-background text-foreground',
+        hasPageBackground && 'web-shell-with-bg relative',
+      )}
+      style={shellStyle}
+    >
+      {loginConfig.backgroundUrl && (
+        <>
+          <div
+            className="pointer-events-none fixed inset-0 bg-cover bg-center bg-no-repeat"
+            style={{
+              backgroundImage: `url(${JSON.stringify(loginConfig.backgroundUrl)})`,
+            }}
+          />
+          <div className="pointer-events-none fixed inset-0 bg-background/25" />
+        </>
+      )}
+      <aside className="web-shell-sidebar fixed inset-y-0 left-0 z-20 hidden w-64 border-r bg-sidebar px-4 py-5 lg:block">
         <div className="flex items-center gap-3 px-2">
           <div className="flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Database className="size-5" />
@@ -510,8 +543,8 @@ function App() {
         </nav>
       </aside>
 
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
+      <div className="relative z-10 lg:pl-64">
+        <header className="web-shell-header sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
           <div className="flex min-h-16 items-center justify-between gap-4 px-4 sm:px-6">
             <div>
               <h1 className="text-lg font-semibold">{viewTitle(activeView)}</h1>
@@ -613,7 +646,7 @@ function LoginScreen({
       'lg:absolute lg:left-3/4 lg:top-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2',
   }[config.position]
   const shellWidthClass = config.position === 'center' ? 'max-w-md' : 'max-w-none'
-  const cardBackgroundOpacity = Math.round(config.cardOpacity * 1000) / 10
+  const cardBackgroundOpacity = opacityPercent(config.cardOpacity)
 
   return (
     <div className="relative min-h-svh overflow-hidden bg-background px-4 py-6 text-foreground sm:px-6">

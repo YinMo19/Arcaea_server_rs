@@ -13,6 +13,7 @@ export type AdminSession = {
   loginBackground?: string
   loginPosition?: string
   loginCardOpacity?: number
+  webSurfaceOpacity?: number
   user?: AdminUserSummary
 }
 

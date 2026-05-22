@@ -85,3 +85,22 @@ select {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
+
+.web-shell-with-bg [data-slot="card"] {
+  background-color: var(--web-surface-bg);
+  backdrop-filter: blur(14px);
+}
+
+.web-shell-with-bg .web-shell-sidebar {
+  background-color: var(--web-sidebar-bg);
+  backdrop-filter: blur(14px);
+}
+
+.web-shell-with-bg .web-shell-header {
+  background-color: var(--web-header-bg);
+}
+
+.web-shell-with-bg [data-slot="input"],
+.web-shell-with-bg select {
+  background-color: var(--web-control-bg);
+}
