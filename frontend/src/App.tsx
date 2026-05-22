@@ -87,15 +87,25 @@ type LoginConfig = {
   title: string
   backgroundUrl?: string
   position: LoginPosition
+  cardOpacity: number
 }
 
 const defaultLoginConfig: LoginConfig = {
   title: defaultAppTitle,
   position: 'center',
+  cardOpacity: 1,
 }
 
 function normalizeLoginPosition(value?: string): LoginPosition {
   return value === 'left' || value === 'right' ? value : 'center'
+}
+
+function normalizeLoginCardOpacity(value?: number): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return 1
+  }
+
+  return Math.min(1, Math.max(0, value))
 }
 
 function loginConfigFromSession(session: AdminSession): LoginConfig {
@@ -106,6 +116,7 @@ function loginConfigFromSession(session: AdminSession): LoginConfig {
     title,
     backgroundUrl,
     position: normalizeLoginPosition(session.loginPosition),
+    cardOpacity: normalizeLoginCardOpacity(session.loginCardOpacity),
   }
 }
 
@@ -600,7 +611,8 @@ function LoginScreen({
     center: 'justify-center',
     right: 'justify-center lg:justify-end',
   }[config.position]
-  const shellWidthClass = config.position === 'center' ? 'max-w-md' : 'max-w-6xl'
+  const shellWidthClass = config.position === 'center' ? 'max-w-md' : 'max-w-none'
+  const cardBackgroundOpacity = Math.round(config.cardOpacity * 1000) / 10
 
   return (
     <div className="relative min-h-svh overflow-hidden bg-background px-4 py-6 text-foreground sm:px-6">
@@ -628,7 +640,12 @@ function LoginScreen({
         )}
       >
         <div className={cn('flex w-full flex-1 items-center', cardPositionClass)}>
-          <Card className="w-full max-w-md border bg-card/95 shadow-lg backdrop-blur">
+          <Card
+            className="w-full max-w-md border shadow-lg backdrop-blur"
+            style={{
+              backgroundColor: `color-mix(in oklab, var(--card) ${cardBackgroundOpacity}%, transparent)`,
+            }}
+          >
             <CardHeader className="gap-5 p-6">
               <div className="flex items-center gap-3">
                 <div className="flex size-11 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">

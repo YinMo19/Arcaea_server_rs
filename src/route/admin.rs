@@ -401,6 +401,7 @@ pub struct AdminSessionResponse {
     app_title: String,
     login_background: Option<String>,
     login_position: String,
+    login_card_opacity: f64,
     user: Option<AdminUserSummary>,
 }
 
@@ -598,6 +599,16 @@ fn web_login_position() -> String {
         .map(|value| value.trim().to_ascii_lowercase())
         .filter(|value| matches!(value.as_str(), "left" | "center" | "right"))
         .unwrap_or_else(|| "center".to_string())
+}
+
+fn web_login_card_opacity() -> f64 {
+    env::var("LOGIN_CARD_OPACITY")
+        .or_else(|_| env::var("login_card_opacity"))
+        .ok()
+        .and_then(|value| value.trim().parse::<f64>().ok())
+        .filter(|value| value.is_finite())
+        .map(|value| value.clamp(0.0, 1.0))
+        .unwrap_or(1.0)
 }
 
 async fn current_web_session(
@@ -1040,6 +1051,7 @@ fn web_session_response(user: &WebLoginUserRow) -> AdminSessionResponse {
         app_title: web_app_title(),
         login_background: web_login_background(),
         login_position: web_login_position(),
+        login_card_opacity: web_login_card_opacity(),
         user: Some(AdminUserSummary {
             user_id: user.user_id,
             name: user.name.clone().unwrap_or_default(),
@@ -2798,6 +2810,7 @@ pub async fn admin_api_session(
         app_title: web_app_title(),
         login_background: web_login_background(),
         login_position: web_login_position(),
+        login_card_opacity: web_login_card_opacity(),
         user: session.map(|session| session.user),
     }))
 }

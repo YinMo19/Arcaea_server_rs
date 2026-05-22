@@ -12,6 +12,7 @@ export type AdminSession = {
   appTitle?: string
   loginBackground?: string
   loginPosition?: string
+  loginCardOpacity?: number
   user?: AdminUserSummary
 }
 
