@@ -1,6 +1,8 @@
 use crate::error::ArcError;
+use crate::model::item::ItemTypes;
 use crate::model::{Present, PresentItem};
-use sqlx::MySqlPool;
+use crate::service::world::StaminaImpl;
+use sqlx::{MySql, MySqlPool, Transaction};
 
 /// Present service for handling user present/gift system
 pub struct PresentService {
@@ -194,29 +196,228 @@ impl PresentService {
     /// Grant an item to a user
     async fn grant_item_to_user(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
+        tx: &mut Transaction<'_, MySql>,
         user_id: i32,
         item_id: &str,
         item_type: &str,
         amount: i32,
     ) -> Result<(), ArcError> {
-        // Insert or update user item
+        match item_type {
+            ItemTypes::CORE => {
+                self.grant_positive_item_to_user(tx, user_id, item_id, ItemTypes::CORE, amount)
+                    .await
+            }
+            ItemTypes::CHARACTER => {
+                self.grant_character_item_to_user(tx, user_id, item_id)
+                    .await
+            }
+            ItemTypes::MEMORY => self.grant_memory_item_to_user(tx, user_id, amount).await,
+            ItemTypes::FRAGMENT => Ok(()),
+            ItemTypes::ANNI5TIX | ItemTypes::PICK_TICKET => {
+                self.grant_positive_item_to_user(tx, user_id, item_id, item_type, amount)
+                    .await
+            }
+            ItemTypes::WORLD_SONG
+            | ItemTypes::WORLD_UNLOCK
+            | ItemTypes::COURSE_BANNER
+            | ItemTypes::ONLINE_BANNER
+            | ItemTypes::SINGLE
+            | ItemTypes::PACK => {
+                self.grant_normal_item_to_user(tx, user_id, item_id, item_type)
+                    .await
+            }
+            ItemTypes::PROG_BOOST_300 => {
+                sqlx::query!(
+                    "UPDATE user SET prog_boost = ? WHERE user_id = ?",
+                    300,
+                    user_id
+                )
+                .execute(&mut **tx)
+                .await?;
+                Ok(())
+            }
+            ItemTypes::STAMINA6 => {
+                self.grant_stamina_item_to_user(tx, user_id, 6).await?;
+                sqlx::query!(
+                    "UPDATE user SET world_mode_locked_end_ts = ? WHERE user_id = ?",
+                    -1i64,
+                    user_id
+                )
+                .execute(&mut **tx)
+                .await?;
+                Ok(())
+            }
+            ItemTypes::STAMINA => self.grant_stamina_item_to_user(tx, user_id, amount).await,
+            _ => Err(ArcError::input(format!(
+                "The item type `{item_type}` is invalid."
+            ))),
+        }
+    }
+
+    async fn grant_normal_item_to_user(
+        &self,
+        tx: &mut Transaction<'_, MySql>,
+        user_id: i32,
+        item_id: &str,
+        item_type: &str,
+    ) -> Result<(), ArcError> {
         sqlx::query!(
-            r#"
-            INSERT INTO user_item (user_id, item_id, type, amount)
-            VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE amount = amount + VALUES(amount)
-            "#,
+            "INSERT IGNORE INTO user_item (user_id, item_id, type, amount) VALUES (?, ?, ?, 1)",
             user_id,
             item_id,
-            item_type,
-            amount
+            item_type
         )
         .execute(&mut **tx)
-        .await
-        .map_err(|e| ArcError::Database {
-            message: format!("Failed to grant item to user: {e}"),
-        })?;
+        .await?;
+
+        Ok(())
+    }
+
+    async fn grant_positive_item_to_user(
+        &self,
+        tx: &mut Transaction<'_, MySql>,
+        user_id: i32,
+        item_id: &str,
+        item_type: &str,
+        amount: i32,
+    ) -> Result<(), ArcError> {
+        let current_amount = sqlx::query!(
+            "SELECT amount FROM user_item WHERE user_id = ? AND item_id = ? AND type = ?",
+            user_id,
+            item_id,
+            item_type
+        )
+        .fetch_optional(&mut **tx)
+        .await?;
+
+        if let Some(row) = current_amount {
+            let current_amount = row.amount.unwrap_or(0);
+            if current_amount + amount < 0 {
+                return Err(ArcError::ItemNotEnough {
+                    message: format!("The user does not have enough `{item_id}`."),
+                    error_code: 108,
+                    api_error_code: -122,
+                    extra_data: None,
+                    status: 200,
+                });
+            }
+
+            sqlx::query!(
+                "UPDATE user_item SET amount = ? WHERE user_id = ? AND item_id = ? AND type = ?",
+                current_amount + amount,
+                user_id,
+                item_id,
+                item_type
+            )
+            .execute(&mut **tx)
+            .await?;
+        } else {
+            if amount < 0 {
+                return Err(ArcError::input(format!(
+                    "The amount of `{item_id}` is wrong."
+                )));
+            }
+
+            sqlx::query!(
+                "INSERT INTO user_item (user_id, item_id, type, amount) VALUES (?, ?, ?, ?)",
+                user_id,
+                item_id,
+                item_type,
+                amount
+            )
+            .execute(&mut **tx)
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn grant_character_item_to_user(
+        &self,
+        tx: &mut Transaction<'_, MySql>,
+        user_id: i32,
+        character_id: &str,
+    ) -> Result<(), ArcError> {
+        let character_id = if character_id.chars().all(|c| c.is_ascii_digit()) {
+            character_id.parse::<i32>().unwrap_or(0)
+        } else {
+            sqlx::query_scalar!(
+                "SELECT character_id FROM `character` WHERE name = ?",
+                character_id
+            )
+            .fetch_optional(&mut **tx)
+            .await?
+            .ok_or_else(|| ArcError::no_data(format!("No character `{character_id}`."), 108))?
+        };
+
+        sqlx::query!(
+            "INSERT IGNORE INTO user_char
+             (user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag)
+             VALUES (?, ?, 1, 0, 0, 0, 0)",
+            user_id,
+            character_id
+        )
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn grant_memory_item_to_user(
+        &self,
+        tx: &mut Transaction<'_, MySql>,
+        user_id: i32,
+        amount: i32,
+    ) -> Result<(), ArcError> {
+        let current_ticket = sqlx::query!("SELECT ticket FROM user WHERE user_id = ?", user_id)
+            .fetch_optional(&mut **tx)
+            .await?
+            .ok_or_else(|| ArcError::no_data("The ticket of the user is null.".to_string(), 108))?
+            .ticket
+            .unwrap_or(0);
+
+        sqlx::query!(
+            "UPDATE user SET ticket = ? WHERE user_id = ?",
+            current_ticket + amount,
+            user_id
+        )
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn grant_stamina_item_to_user(
+        &self,
+        tx: &mut Transaction<'_, MySql>,
+        user_id: i32,
+        amount: i32,
+    ) -> Result<(), ArcError> {
+        let Some(row) = sqlx::query!(
+            "SELECT max_stamina_ts, stamina FROM user WHERE user_id = ?",
+            user_id
+        )
+        .fetch_optional(&mut **tx)
+        .await?
+        else {
+            return Err(ArcError::no_data(
+                "User not found for stamina update".to_string(),
+                108,
+            ));
+        };
+
+        let mut stamina =
+            StaminaImpl::new(row.stamina.unwrap_or(0), row.max_stamina_ts.unwrap_or(0));
+        stamina.set_stamina(stamina.get_current_stamina() + amount);
+
+        sqlx::query!(
+            "UPDATE user SET stamina = ?, max_stamina_ts = ? WHERE user_id = ?",
+            stamina.get_current_stamina(),
+            stamina.max_stamina_ts(),
+            user_id
+        )
+        .execute(&mut **tx)
+        .await?;
 
         Ok(())
     }
