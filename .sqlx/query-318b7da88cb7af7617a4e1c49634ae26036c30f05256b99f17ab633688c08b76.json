@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT IGNORE INTO user_char\n             (user_id, character_id, level, exp, is_uncapped, is_uncapped_override, skill_flag)\n             VALUES (?, ?, 1, 0, 0, 0, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "318b7da88cb7af7617a4e1c49634ae26036c30f05256b99f17ab633688c08b76"
+}

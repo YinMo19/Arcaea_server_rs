@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT IGNORE INTO user_item (user_id, item_id, type, amount) VALUES (?, ?, ?, 1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "2abb6ce027d7bde2d971ae36012cebb233aed81bed14362fbf213ad0f42c0186"
+}

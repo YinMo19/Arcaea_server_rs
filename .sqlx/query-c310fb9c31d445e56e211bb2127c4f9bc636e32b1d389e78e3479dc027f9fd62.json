@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "\n        SELECT user_id, name, user_code, rating_ptt, ticket, time_played, password, ban_flag\n        FROM user\n        WHERE (? = 0 OR CAST(user_id AS CHAR) = ? OR name LIKE ? OR user_code LIKE ?)\n          AND (? = 0 OR COALESCE(password, '') = '' OR COALESCE(CAST(SUBSTRING_INDEX(NULLIF(ban_flag, ''), ':', -1) AS SIGNED), 0) > UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000)\n          AND (? = 0 OR (COALESCE(password, '') <> '' AND NOT (COALESCE(CAST(SUBSTRING_INDEX(NULLIF(ban_flag, ''), ':', -1) AS SIGNED), 0) > UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000)))\n        ORDER BY rating_ptt DESC, user_id ASC\n        LIMIT ? OFFSET ?\n        ",
+  "query": "\n        SELECT user_id, name, user_code, rating_ptt, ticket, time_played, password, ban_flag\n        FROM user\n        WHERE (? = 0 OR CAST(user_id AS CHAR) LIKE ? OR name LIKE ? OR user_code LIKE ?)\n          AND (? = 0 OR COALESCE(password, '') = '' OR COALESCE(CAST(SUBSTRING_INDEX(NULLIF(ban_flag, ''), ':', -1) AS SIGNED), 0) > UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000)\n          AND (? = 0 OR (COALESCE(password, '') <> '' AND NOT (COALESCE(CAST(SUBSTRING_INDEX(NULLIF(ban_flag, ''), ':', -1) AS SIGNED), 0) > UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000)))\n        ORDER BY rating_ptt DESC, user_id ASC\n        LIMIT ? OFFSET ?\n        ",
   "describe": {
     "columns": [
       {
@@ -90,5 +90,5 @@
       true
     ]
   },
-  "hash": "87993c5e2469d25088b67dde108fab0038bc8ab89d8315ba50b5201a365f8ee5"
+  "hash": "c310fb9c31d445e56e211bb2127c4f9bc636e32b1d389e78e3479dc027f9fd62"
 }

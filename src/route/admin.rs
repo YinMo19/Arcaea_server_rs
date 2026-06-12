@@ -2114,12 +2114,12 @@ async fn load_admin_users(
         r#"
         SELECT COUNT(*) as `count!: i64`
         FROM user
-        WHERE (? = 0 OR CAST(user_id AS CHAR) = ? OR name LIKE ? OR user_code LIKE ?)
+        WHERE (? = 0 OR CAST(user_id AS CHAR) LIKE ? OR name LIKE ? OR user_code LIKE ?)
           AND (? = 0 OR COALESCE(password, '') = '' OR COALESCE(CAST(SUBSTRING_INDEX(NULLIF(ban_flag, ''), ':', -1) AS SIGNED), 0) > UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000)
           AND (? = 0 OR (COALESCE(password, '') <> '' AND NOT (COALESCE(CAST(SUBSTRING_INDEX(NULLIF(ban_flag, ''), ':', -1) AS SIGNED), 0) > UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000)))
         "#,
         has_keyword,
-        keyword,
+        like,
         like,
         like,
         is_banned_filter,
@@ -2134,14 +2134,14 @@ async fn load_admin_users(
         r#"
         SELECT user_id, name, user_code, rating_ptt, ticket, time_played, password, ban_flag
         FROM user
-        WHERE (? = 0 OR CAST(user_id AS CHAR) = ? OR name LIKE ? OR user_code LIKE ?)
+        WHERE (? = 0 OR CAST(user_id AS CHAR) LIKE ? OR name LIKE ? OR user_code LIKE ?)
           AND (? = 0 OR COALESCE(password, '') = '' OR COALESCE(CAST(SUBSTRING_INDEX(NULLIF(ban_flag, ''), ':', -1) AS SIGNED), 0) > UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000)
           AND (? = 0 OR (COALESCE(password, '') <> '' AND NOT (COALESCE(CAST(SUBSTRING_INDEX(NULLIF(ban_flag, ''), ':', -1) AS SIGNED), 0) > UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000)))
         ORDER BY rating_ptt DESC, user_id ASC
         LIMIT ? OFFSET ?
         "#,
         has_keyword,
-        keyword,
+        like,
         like,
         like,
         is_banned_filter,

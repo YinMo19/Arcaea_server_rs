@@ -1275,20 +1275,76 @@ function ChartTopView() {
 
 function UserTicketView() {
   const [form, setForm] = useState<UserTicketForm>(emptyUserTicketForm)
+  const [userSearch, setUserSearch] = useState('')
+  const [searchRows, setSearchRows] = useState<UserRow[]>([])
+  const [searchState, setSearchState] = useState<LoadState>('idle')
+  const [selectedUser, setSelectedUser] = useState<UserRow>()
   const [action, setAction] = useState<ActionState>(emptyAction)
   const [loading, setLoading] = useState(false)
+  const ticketPreview = useMemo(
+    () => previewUserTicketInput(form.ticket, selectedUser?.ticket),
+    [form.ticket, selectedUser?.ticket],
+  )
+
+  function selectUser(row: UserRow) {
+    setSelectedUser(row)
+    setForm((current) => ({
+      ...current,
+      allUsers: false,
+      userId: String(row.userId),
+      name: row.name,
+      userCode: row.userCode,
+    }))
+  }
+
+  async function searchUsers() {
+    setAction(emptyAction)
+    setSearchState('loading')
+    try {
+      const q = requireTrimmed(userSearch, '搜索内容')
+      const result = await adminApi.users({
+        q,
+        page: 1,
+        pageSize: 10,
+      })
+      setSearchRows(result.rows)
+      setSearchState('ready')
+      if (result.rows.length === 1) {
+        selectUser(result.rows[0])
+      } else {
+        setSelectedUser(undefined)
+      }
+    } catch (error) {
+      setSearchState('error')
+      setSearchRows([])
+      setSelectedUser(undefined)
+      setAction({ kind: 'error', message: errorMessage(error) })
+    }
+  }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
     setLoading(true)
     setAction(emptyAction)
     try {
+      const ticket = parseUserTicketInput(
+        form.ticket,
+        form.allUsers ? undefined : selectedUser?.ticket,
+      )
       const payload: UserTicketPayload = {
         ...(form.allUsers ? {} : buildUserSelectorPayload(form)),
-        ticket: parseRequiredInt(form.ticket, 'ticket'),
+        ticket,
         all_users: form.allUsers,
       }
       const result = await adminApi.updateUserTicket(payload)
+      if (!form.allUsers && selectedUser) {
+        const nextUser = { ...selectedUser, ticket }
+        setSelectedUser(nextUser)
+        setSearchRows((rows) =>
+          rows.map((row) => (row.userId === nextUser.userId ? nextUser : row)),
+        )
+        setForm((current) => ({ ...current, ticket: String(ticket) }))
+      }
       setAction({ kind: 'success', message: formatActionResult(result) })
     } catch (error) {
       setAction({ kind: 'error', message: errorMessage(error) })
@@ -1299,25 +1355,154 @@ function UserTicketView() {
 
   return (
     <ActionCard title="记忆源点" description="changeuser">
+      <div className="grid gap-3">
+        <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              value={userSearch}
+              disabled={form.allUsers}
+              onChange={(event) => setUserSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  searchUsers()
+                }
+              }}
+              placeholder="搜索 user_id / name / user_code"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={form.allUsers || searchState === 'loading'}
+            onClick={searchUsers}
+          >
+            {searchState === 'loading' ? (
+              <LoaderCircle className="animate-spin" />
+            ) : (
+              <Search />
+            )}
+            搜索
+          </Button>
+        </div>
+
+        {searchState === 'loading' && (
+          <div className="flex min-h-24 items-center justify-center rounded-md border border-dashed text-muted-foreground">
+            <LoaderCircle className="size-5 animate-spin" />
+          </div>
+        )}
+
+        {searchState === 'ready' && searchRows.length === 0 && (
+          <div className="flex min-h-24 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
+            没有匹配玩家
+          </div>
+        )}
+
+        {searchState === 'ready' && searchRows.length > 0 && (
+          <div className="overflow-hidden rounded-md border">
+            <Table className="min-w-[720px] table-fixed">
+              <colgroup>
+                <col className="w-[18%]" />
+                <col className="w-[22%]" />
+                <col className="w-[22%]" />
+                <col className="w-[18%]" />
+                <col className="w-[20%]" />
+              </colgroup>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>名称</TableHead>
+                  <TableHead>User Code</TableHead>
+                  <TableHead>当前源点</TableHead>
+                  <TableHead className="text-right">操作</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {searchRows.map((row) => {
+                  const selected = selectedUser?.userId === row.userId
+                  return (
+                    <TableRow
+                      key={row.userId}
+                      data-state={selected ? 'selected' : undefined}
+                    >
+                      <TableCell className="font-mono">{row.userId}</TableCell>
+                      <TableCell className="font-medium">{row.name || '-'}</TableCell>
+                      <TableCell className="font-mono">{row.userCode || '-'}</TableCell>
+                      <TableCell className="font-mono">{row.ticket}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={selected ? 'secondary' : 'outline'}
+                          onClick={() => selectUser(row)}
+                        >
+                          {selected ? '已选择' : '选择'}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+
+        {selectedUser && (
+          <div className="grid gap-3 rounded-md border bg-muted/40 p-3 text-sm sm:grid-cols-4">
+            <div>
+              <div className="text-xs text-muted-foreground">ID</div>
+              <div className="font-mono">{selectedUser.userId}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">名称</div>
+              <div className="font-medium">{selectedUser.name || '-'}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">User Code</div>
+              <div className="font-mono">{selectedUser.userCode || '-'}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">当前源点</div>
+              <div className="font-mono text-base font-semibold">
+                {selectedUser.ticket}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       <form className="grid gap-3" onSubmit={onSubmit}>
         <ToggleLabel
           checked={form.allUsers}
-          onChange={(checked) => setForm({ ...form, allUsers: checked })}
+          onChange={(checked) => {
+            if (checked) {
+              setSelectedUser(undefined)
+            }
+            setForm({ ...form, allUsers: checked })
+          }}
           label="全部用户"
         />
         <UserSelectorFields
           value={form}
           disabled={form.allUsers}
-          onChange={(value) => setForm({ ...form, ...value })}
+          onChange={(value) => {
+            setSelectedUser(undefined)
+            setForm({ ...form, ...value })
+          }}
         />
         <div className="flex flex-wrap items-center gap-2">
           <Input
             className="w-32"
             value={form.ticket}
             onChange={(event) => setForm({ ...form, ticket: event.target.value })}
-            placeholder="ticket"
+            placeholder={selectedUser ? '目标值 / +增量' : 'ticket'}
             required
           />
+          {ticketPreview !== undefined && (
+            <Badge variant="secondary">更新后 {ticketPreview}</Badge>
+          )}
           <Button type="submit" size="sm" disabled={loading}>
             {loading ? <LoaderCircle className="animate-spin" /> : <Pencil />}
             更新
@@ -3473,6 +3658,39 @@ function parseRequiredInt(value: string, label: string) {
     throw new Error(`${label} 必须是整数`)
   }
   return parsed
+}
+
+function parseUserTicketInput(value: string, currentTicket?: number) {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    throw new Error('ticket 不能为空')
+  }
+  if (trimmed.startsWith('+')) {
+    if (currentTicket === undefined) {
+      throw new Error('使用 +增量 需要先选择玩家')
+    }
+    const deltaText = trimmed.slice(1).trim()
+    if (!/^\d+$/.test(deltaText)) {
+      throw new Error('ticket 增量必须是整数')
+    }
+    return currentTicket + Number.parseInt(deltaText, 10)
+  }
+  return parseRequiredInt(trimmed, 'ticket')
+}
+
+function previewUserTicketInput(value: string, currentTicket?: number) {
+  if (currentTicket === undefined) {
+    return undefined
+  }
+  const trimmed = value.trim()
+  if (!trimmed.startsWith('+')) {
+    return undefined
+  }
+  const deltaText = trimmed.slice(1).trim()
+  if (!/^\d+$/.test(deltaText)) {
+    return undefined
+  }
+  return currentTicket + Number.parseInt(deltaText, 10)
 }
 
 function parseOptionalPositiveInt(value: string, label: string) {
