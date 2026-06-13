@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "\n        SELECT reward_ticket as `reward_ticket!: i32`\n        FROM user_checkin\n        WHERE user_id = ? AND checkin_date = ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reward_ticket!: i32",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "10cce1c15c3cf5b83dca7f2efb0ce210b2476db918dadc7a02391d0bdb23e46a"
+}

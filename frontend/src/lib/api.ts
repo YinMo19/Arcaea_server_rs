@@ -185,6 +185,15 @@ export type AdminRedeemUsers = {
   users: AdminUserSummary[]
 }
 
+export type UserCheckinStatus = {
+  user: AdminUserSummary
+  today: string
+  checkedInToday: boolean
+  claimed: boolean
+  reward?: number
+  currentTicket: number
+}
+
 export type UserSelectorPayload = {
   user_id?: number
   name?: string
@@ -283,6 +292,11 @@ export const adminApi = {
       method: 'POST',
     }),
   dashboard: () => request<DashboardData>('/web/api/dashboard'),
+  checkinStatus: () => request<UserCheckinStatus>('/web/api/checkin'),
+  claimCheckin: () =>
+    request<UserCheckinStatus>('/web/api/checkin', {
+      method: 'POST',
+    }),
   operation: (operation: AdminOperation) =>
     request<void>(`/web/api/operations/${operation}`, {
       method: 'POST',

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user SET ticket = COALESCE(ticket, 0) + ? WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "1cc10709fb99694174e05bfe08dd6298a9164632f36369f4c3e67a7f85dd4338"
+}

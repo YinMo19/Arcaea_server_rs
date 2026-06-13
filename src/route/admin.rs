@@ -1,4 +1,4 @@
-use chrono::{Local, NaiveDateTime, TimeZone, Utc};
+use chrono::{Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
 use rand::Rng;
 use rocket::http::{ContentType, Cookie, CookieJar, SameSite, Status};
 use rocket::response::{Responder, Response};
@@ -176,6 +176,17 @@ pub struct AdminActionResponse {
 pub struct AdminRedeemUsersResponse {
     code: String,
     users: Vec<AdminUserSummary>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserCheckinResponse {
+    user: AdminUserSummary,
+    today: String,
+    checked_in_today: bool,
+    claimed: bool,
+    reward: Option<i32>,
+    current_ticket: i32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2091,6 +2102,127 @@ async fn load_dashboard_api(pool: &DbPool) -> AdminDashboardApiResponse {
     }
 }
 
+fn checkin_today() -> NaiveDate {
+    Local::now().date_naive()
+}
+
+fn format_checkin_date(date: NaiveDate) -> String {
+    date.format("%Y-%m-%d").to_string()
+}
+
+async fn load_user_checkin_status(
+    session: &WebSession,
+    pool: &DbPool,
+) -> Result<UserCheckinResponse, ArcError> {
+    let today = checkin_today();
+    let record = sqlx::query!(
+        r#"
+        SELECT reward_ticket as `reward_ticket!: i32`
+        FROM user_checkin
+        WHERE user_id = ? AND checkin_date = ?
+        "#,
+        session.user.user_id,
+        today
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(|err| ArcError::input(format!("查询签到状态失败: {err}")))?;
+
+    let user = sqlx::query!(
+        "SELECT ticket FROM user WHERE user_id = ?",
+        session.user.user_id
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|err| ArcError::input(format!("查询记忆源点失败: {err}")))?;
+
+    Ok(UserCheckinResponse {
+        user: session.user.clone(),
+        today: format_checkin_date(today),
+        checked_in_today: record.is_some(),
+        claimed: false,
+        reward: record.map(|row| row.reward_ticket),
+        current_ticket: user.ticket.unwrap_or(0),
+    })
+}
+
+async fn claim_user_checkin(
+    session: &WebSession,
+    pool: &DbPool,
+) -> Result<UserCheckinResponse, ArcError> {
+    let today = checkin_today();
+    let reward = rand::thread_rng().gen_range(200..=500);
+    let created_at = Utc::now().timestamp_millis();
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|err| ArcError::input(format!("开始签到事务失败: {err}")))?;
+
+    let inserted = sqlx::query!(
+        r#"
+        INSERT IGNORE INTO user_checkin (user_id, checkin_date, reward_ticket, created_at)
+        VALUES (?, ?, ?, ?)
+        "#,
+        session.user.user_id,
+        today,
+        reward,
+        created_at
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|err| ArcError::input(format!("写入签到记录失败: {err}")))?;
+
+    let claimed = inserted.rows_affected() > 0;
+    if claimed {
+        let updated = sqlx::query!(
+            "UPDATE user SET ticket = COALESCE(ticket, 0) + ? WHERE user_id = ?",
+            reward,
+            session.user.user_id
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| ArcError::input(format!("发放签到源点失败: {err}")))?;
+
+        if updated.rows_affected() == 0 {
+            return Err(ArcError::no_data("玩家不存在", -2));
+        }
+    }
+
+    let record = sqlx::query!(
+        r#"
+        SELECT reward_ticket as `reward_ticket!: i32`
+        FROM user_checkin
+        WHERE user_id = ? AND checkin_date = ?
+        "#,
+        session.user.user_id,
+        today
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|err| ArcError::input(format!("读取签到记录失败: {err}")))?;
+
+    let user = sqlx::query!(
+        "SELECT ticket FROM user WHERE user_id = ?",
+        session.user.user_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|err| ArcError::input(format!("查询记忆源点失败: {err}")))?;
+
+    tx.commit()
+        .await
+        .map_err(|err| ArcError::input(format!("提交签到事务失败: {err}")))?;
+
+    Ok(UserCheckinResponse {
+        user: session.user.clone(),
+        today: format_checkin_date(today),
+        checked_in_today: true,
+        claimed,
+        reward: Some(record.reward_ticket),
+        current_ticket: user.ticket.unwrap_or(0),
+    })
+}
+
 async fn load_admin_users(
     q: Option<&str>,
     status: Option<&str>,
@@ -2882,6 +3014,28 @@ pub async fn admin_api_dashboard(
     Ok(success_return(load_dashboard_api(pool.inner()).await))
 }
 
+#[get("/api/checkin")]
+pub async fn admin_api_checkin_status(
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> RouteResult<UserCheckinResponse> {
+    let session = require_web_session(cookies, pool.inner()).await?;
+    Ok(success_return(
+        load_user_checkin_status(&session, pool.inner()).await?,
+    ))
+}
+
+#[post("/api/checkin")]
+pub async fn admin_api_checkin_claim(
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> RouteResult<UserCheckinResponse> {
+    let session = require_web_session(cookies, pool.inner()).await?;
+    Ok(success_return(
+        claim_user_checkin(&session, pool.inner()).await?,
+    ))
+}
+
 #[post("/api/operations/<operation_name>")]
 pub async fn admin_api_operation(
     operation_name: &str,
@@ -3439,6 +3593,8 @@ pub fn routes() -> Vec<Route> {
         admin_api_login,
         admin_api_logout,
         admin_api_dashboard,
+        admin_api_checkin_status,
+        admin_api_checkin_claim,
         admin_api_operation,
         admin_api_users,
         admin_api_songs,

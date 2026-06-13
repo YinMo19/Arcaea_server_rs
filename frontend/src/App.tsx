@@ -9,6 +9,7 @@ import {
   ChevronsRight,
   ChartSpline,
   Database,
+  Gift,
   Images,
   KeyRound,
   Link2,
@@ -73,6 +74,7 @@ import {
   type SongPayload,
   type SongRow,
   type UserPurchasePayload,
+  type UserCheckinStatus,
   type UserRow,
   type UserSelectorPayload,
   type UserTicketPayload,
@@ -130,6 +132,7 @@ function loginConfigFromSession(session: AdminSession): LoginConfig {
 type View =
   | 'dashboard'
   | MaintenanceView
+  | 'checkin'
   | 'users'
   | 'playerScores'
   | 'scoreImages'
@@ -208,6 +211,7 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
   {
     label: '账号',
     items: [
+      { id: 'checkin', label: '签到', icon: Gift },
       { id: 'userTicket', label: '记忆源点', icon: Pencil },
       { id: 'userPassword', label: '重置密码', icon: KeyRound },
       { id: 'userBan', label: '封禁用户', icon: ShieldAlert },
@@ -256,6 +260,7 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
 ]
 
 const userAllowedViews = new Set<View>([
+  'checkin',
   'playerScores',
   'scoreImages',
   'chartTop',
@@ -449,7 +454,7 @@ function App() {
     [isAdmin],
   )
   const activeView =
-    isAdmin || userAllowedViews.has(view) ? view : 'scoreImages'
+    isAdmin || userAllowedViews.has(view) ? view : 'checkin'
 
   useEffect(() => {
     adminApi
@@ -458,7 +463,7 @@ function App() {
         setLoginConfig(loginConfigFromSession(session))
         setSession(session.loggedIn ? session : undefined)
         if (session.loggedIn && session.role !== 1) {
-          setView('scoreImages')
+          setView('checkin')
         }
       })
       .catch(() => setSession(undefined))
@@ -481,7 +486,7 @@ function App() {
           setLoginConfig(loginConfigFromSession(session))
           setSession(session)
           if (session.role !== 1) {
-            setView('scoreImages')
+            setView('checkin')
           }
         }}
       />
@@ -589,6 +594,7 @@ function App() {
             <MaintenanceOperationView config={maintenanceOperations[activeView]} />
           )}
           {isAdmin && activeView === 'users' && <UsersView />}
+          {activeView === 'checkin' && <CheckinView />}
           {activeView === 'playerScores' && <PlayerScoresView isAdmin={isAdmin} />}
           {activeView === 'scoreImages' && <ScoreImagesView isAdmin={isAdmin} />}
           {activeView === 'chartTop' && <ChartTopView />}
@@ -1005,6 +1011,138 @@ function MaintenanceOperationView({
         </Button>
         <ActionMessage action={action} />
       </div>
+    </ActionCard>
+  )
+}
+
+function CheckinView() {
+  const [data, setData] = useState<UserCheckinStatus>()
+  const [state, setState] = useState<LoadState>('loading')
+  const [action, setAction] = useState<ActionState>(emptyAction)
+  const [loading, setLoading] = useState(false)
+
+  const load = useCallback((showLoading = true) => {
+    if (showLoading) {
+      setState('loading')
+    }
+    adminApi
+      .checkinStatus()
+      .then((value) => {
+        setData(value)
+        setState('ready')
+      })
+      .catch((error) => {
+        setState('error')
+        setAction({ kind: 'error', message: errorMessage(error) })
+      })
+  }, [])
+
+  useEffect(() => {
+    let ignore = false
+    adminApi
+      .checkinStatus()
+      .then((value) => {
+        if (ignore) {
+          return
+        }
+        setData(value)
+        setState('ready')
+      })
+      .catch((error) => {
+        if (ignore) {
+          return
+        }
+        setState('error')
+        setAction({ kind: 'error', message: errorMessage(error) })
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [])
+
+  async function claim() {
+    setLoading(true)
+    setAction(emptyAction)
+    try {
+      const result = await adminApi.claimCheckin()
+      setData(result)
+      setState('ready')
+      const rewardText = result.reward ? `+${result.reward}` : ''
+      setAction({
+        kind: 'success',
+        message: result.claimed
+          ? `签到成功 ${rewardText}`
+          : `今日已签到 ${rewardText}`,
+      })
+    } catch (error) {
+      setAction({ kind: 'error', message: errorMessage(error) })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <ActionCard title="每日签到" description="每天领取一次记忆源点">
+      {state === 'error' ? (
+        <LoadPanel state={state} onRetry={() => load(true)} />
+      ) : state === 'loading' && !data ? (
+        <LoadPanel state={state} onRetry={() => load(true)} />
+      ) : data ? (
+        <div className="grid gap-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-md border bg-muted/30 p-4">
+              <div className="text-xs text-muted-foreground">玩家</div>
+              <div className="mt-1 font-medium">{data.user.name || '-'}</div>
+              <div className="font-mono text-xs text-muted-foreground">
+                {data.user.userId}
+              </div>
+            </div>
+            <div className="rounded-md border bg-muted/30 p-4">
+              <div className="text-xs text-muted-foreground">当前源点</div>
+              <div className="mt-1 font-mono text-2xl font-semibold">
+                {data.currentTicket.toLocaleString()}
+              </div>
+            </div>
+            <div className="rounded-md border bg-muted/30 p-4">
+              <div className="text-xs text-muted-foreground">{data.today}</div>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="font-mono text-2xl font-semibold">
+                  {data.reward ? `+${data.reward}` : '200-500'}
+                </span>
+                <Badge variant={data.checkedInToday ? 'secondary' : 'outline'}>
+                  {data.checkedInToday ? '已签到' : '待签到'}
+                </Badge>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              disabled={loading || data.checkedInToday}
+              onClick={claim}
+            >
+              {loading ? <LoaderCircle className="animate-spin" /> : <Gift />}
+              {data.checkedInToday ? '已签到' : '签到'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={loading || state === 'loading'}
+              onClick={() => load(true)}
+            >
+              {state === 'loading' ? (
+                <LoaderCircle className="animate-spin" />
+              ) : (
+                <RefreshCcw />
+              )}
+              刷新
+            </Button>
+            <ActionMessage action={action} />
+          </div>
+        </div>
+      ) : null}
     </ActionCard>
   )
 }
@@ -3762,6 +3900,8 @@ function viewTitle(view: View) {
   switch (view) {
     case 'dashboard':
       return '总览'
+    case 'checkin':
+      return '每日签到'
     case 'playerScores':
       return '玩家成绩'
     case 'scoreImages':
@@ -3811,6 +3951,8 @@ function viewSubtitle(view: View) {
   switch (view) {
     case 'dashboard':
       return '服务状态与运营数据'
+    case 'checkin':
+      return '领取每日记忆源点'
     case 'playerScores':
       return '查询单个玩家的成绩记录'
     case 'scoreImages':

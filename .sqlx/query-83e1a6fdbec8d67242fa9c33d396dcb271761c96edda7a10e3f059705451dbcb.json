@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n        INSERT IGNORE INTO user_checkin (user_id, checkin_date, reward_ticket, created_at)\n        VALUES (?, ?, ?, ?)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "83e1a6fdbec8d67242fa9c33d396dcb271761c96edda7a10e3f059705451dbcb"
+}
