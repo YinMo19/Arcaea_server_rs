@@ -15,6 +15,9 @@ Rocket.toml
 bundles
 songs
 
+# Frontend build output (also covered by frontend/.gitignore)
+frontend/dist
+
 # Score image renderer: keep only core assets in Git. Character art and covers
 # are deployment data and are loaded dynamically on the server.
 assets/renderer/**
