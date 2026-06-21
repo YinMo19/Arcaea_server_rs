@@ -309,8 +309,11 @@ impl UserService {
         format!("{:x}", md5::compute(value.as_bytes()))
     }
 
-    /// Hash password using SHA-256
-    fn hash_password(password: &str) -> String {
+    /// Hash password using SHA-256.
+    ///
+    /// Shared between the game auth path and the web admin auth path so both
+    /// sides agree on how `user.password` is hashed.
+    pub(crate) fn hash_password(password: &str) -> String {
         let mut hasher = Sha256::new();
         hasher.update(password.as_bytes());
         format!("{:x}", hasher.finalize())

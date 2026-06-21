@@ -26,6 +26,7 @@ import {
   ShieldCheck,
   ShoppingBag,
   Trash2,
+  UserPlus,
   UserRound,
   Users,
   X,
@@ -139,6 +140,7 @@ type View =
   | 'chartTop'
   | 'userTicket'
   | 'userPassword'
+  | 'userCreate'
   | 'userBan'
   | 'userPurchase'
   | 'scoreDelete'
@@ -212,6 +214,7 @@ const navSections: Array<{ label: string; items: NavItem[] }> = [
     label: '账号',
     items: [
       { id: 'checkin', label: '签到', icon: Gift },
+      { id: 'userCreate', label: '注册账号', icon: UserPlus },
       { id: 'userTicket', label: '记忆源点', icon: Pencil },
       { id: 'userPassword', label: '重置密码', icon: KeyRound },
       { id: 'userBan', label: '封禁用户', icon: ShieldAlert },
@@ -341,6 +344,18 @@ type UserPasswordForm = UserSelectorForm & {
 const emptyUserPasswordForm: UserPasswordForm = {
   ...emptyUserSelectorForm,
   password: '',
+}
+
+type UserCreateForm = {
+  name: string
+  password: string
+  email: string
+}
+
+const emptyUserCreateForm: UserCreateForm = {
+  name: '',
+  password: '',
+  email: '',
 }
 
 type UserPurchaseForm = UserSelectorForm & {
@@ -600,6 +615,7 @@ function App() {
           {activeView === 'chartTop' && <ChartTopView />}
           {isAdmin && activeView === 'userTicket' && <UserTicketView />}
           {isAdmin && activeView === 'userPassword' && <UserPasswordView />}
+          {isAdmin && activeView === 'userCreate' && <UserCreateView />}
           {isAdmin && activeView === 'userBan' && <UserBanView />}
           {isAdmin && activeView === 'userPurchase' && <UserPurchaseView />}
           {isAdmin && activeView === 'scoreDelete' && <ScoreDeleteView />}
@@ -1695,6 +1711,71 @@ function UserPasswordView() {
           <Button type="submit" size="sm" disabled={loading}>
             {loading ? <LoaderCircle className="animate-spin" /> : <KeyRound />}
             重置
+          </Button>
+          <ActionMessage action={action} />
+        </div>
+      </form>
+    </ActionCard>
+  )
+}
+
+function UserCreateView() {
+  const [form, setForm] = useState<UserCreateForm>(emptyUserCreateForm)
+  const [action, setAction] = useState<ActionState>(emptyAction)
+  const [loading, setLoading] = useState(false)
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault()
+    setLoading(true)
+    setAction(emptyAction)
+    try {
+      const result = await adminApi.createUser({
+        name: form.name.trim(),
+        password: form.password,
+        email: form.email.trim(),
+      })
+      setForm(emptyUserCreateForm)
+      setAction({
+        kind: 'success',
+        message: `注册成功 · user_id=${result.userId} · user_code=${result.userCode}`,
+      })
+    } catch (error) {
+      setAction({ kind: 'error', message: errorMessage(error) })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <ActionCard title="注册账号" description="createuser">
+      <form className="grid gap-3" onSubmit={onSubmit}>
+        <div className="grid gap-3 lg:grid-cols-3">
+          <Input
+            value={form.name}
+            onChange={(event) => setForm({ ...form, name: event.target.value })}
+            placeholder="name"
+            required
+          />
+          <Input
+            value={form.password}
+            type="password"
+            autoComplete="new-password"
+            onChange={(event) => setForm({ ...form, password: event.target.value })}
+            placeholder="password"
+            required
+          />
+          <Input
+            value={form.email}
+            type="email"
+            onChange={(event) => setForm({ ...form, email: event.target.value })}
+            placeholder="email"
+            required
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="submit" size="sm" disabled={loading}>
+            {loading ? <LoaderCircle className="animate-spin" /> : <UserPlus />}
+            注册
           </Button>
           <ActionMessage action={action} />
         </div>
@@ -3912,6 +3993,8 @@ function viewTitle(view: View) {
       return '记忆源点'
     case 'userPassword':
       return '重置密码'
+    case 'userCreate':
+      return '注册账号'
     case 'userBan':
       return '封禁用户'
     case 'userPurchase':
@@ -3963,6 +4046,8 @@ function viewSubtitle(view: View) {
       return '更新玩家记忆源点'
     case 'userPassword':
       return '重置玩家登录密码'
+    case 'userCreate':
+      return '创建新的玩家账号'
     case 'userBan':
       return '封禁指定玩家账号'
     case 'userPurchase':

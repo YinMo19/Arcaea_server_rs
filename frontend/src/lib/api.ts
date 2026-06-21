@@ -209,6 +209,12 @@ export type UserPasswordPayload = UserSelectorPayload & {
   password: string
 }
 
+export type UserCreatePayload = {
+  name: string
+  password: string
+  email: string
+}
+
 export type UserPurchasePayload = UserSelectorPayload & {
   method: 'unlock' | 'lock'
   all_users?: boolean
@@ -437,6 +443,11 @@ export const adminApi = {
     }),
   resetUserPassword: (payload: UserPasswordPayload) =>
     request<AdminActionResult>('/web/api/admin-actions/user-password', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  createUser: (payload: UserCreatePayload) =>
+    request<AdminUserSummary>('/web/api/admin-actions/user-create', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
