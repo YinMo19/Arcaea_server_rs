@@ -141,7 +141,12 @@ pub(super) fn clamp_page(page: i64, page_size: i64, total: i64) -> (i64, i64) {
     (page, (page - 1) * page_size)
 }
 
-pub(super) fn page_response<T>(rows: Vec<T>, total: i64, page: i64, page_size: i64) -> AdminPageResponse<T> {
+pub(super) fn page_response<T>(
+    rows: Vec<T>,
+    total: i64,
+    page: i64,
+    page_size: i64,
+) -> AdminPageResponse<T> {
     AdminPageResponse {
         rows,
         total,

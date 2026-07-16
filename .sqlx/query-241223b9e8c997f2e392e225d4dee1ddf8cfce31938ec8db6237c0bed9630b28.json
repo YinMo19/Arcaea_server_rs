@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM user_role WHERE user_id = ? AND role_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "241223b9e8c997f2e392e225d4dee1ddf8cfce31938ec8db6237c0bed9630b28"
+}

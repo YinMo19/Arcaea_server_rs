@@ -31,6 +31,8 @@ pub(super) const ADMIN_COOKIE: &str = "arcaea_web_session";
 pub(super) const ADMIN_ROLE: i8 = 1;
 /// Default role id for regular players.
 pub(super) const USER_ROLE: i8 = 0;
+pub(super) const CHART_EDITOR_ROLE: &str = "chart_editor";
+pub(super) const CHART_CONSTANT_EDIT_POWER: &str = "web_chart_constant_edit";
 
 /// Credentials used for first-time admin bootstrap and as a fallback.
 #[derive(Debug, Clone)]
@@ -72,6 +74,7 @@ pub fn routes() -> Vec<Route> {
         dashboard::admin_api_operation,
         // listings
         users::admin_api_users,
+        users::admin_api_chart_editor_permission,
         catalog::admin_api_songs,
         catalog::admin_api_items,
         catalog::admin_api_purchases,
@@ -98,6 +101,7 @@ pub fn routes() -> Vec<Route> {
         // catalog CRUD
         catalog::admin_api_song_create,
         catalog::admin_api_song_update,
+        catalog::admin_api_chart_constants_update,
         catalog::admin_api_song_delete,
         catalog::admin_api_item_create,
         catalog::admin_api_item_update,

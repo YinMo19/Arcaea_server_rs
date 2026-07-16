@@ -732,6 +732,7 @@ impl AssetInitService {
             ("admin", "管理员"),
             ("user", "用户"),
             ("selecter", "查询接口"),
+            ("chart_editor", "曲目定数编辑员"),
         ]
     }
 
@@ -748,6 +749,7 @@ impl AssetInitService {
             ("select_song_rank", "歌曲排行榜查询权限"),
             ("select_song_info", "歌曲信息查询权限"),
             ("select_song_rank_top", "歌曲排行榜有限查询权限"),
+            ("web_chart_constant_edit", "Web 曲目定数编辑权限"),
         ]
     }
 
@@ -767,6 +769,7 @@ impl AssetInitService {
                     "select_song_rank",
                     "select_song_info",
                     "select_song_rank_top",
+                    "web_chart_constant_edit",
                 ],
             ),
             (
@@ -778,6 +781,7 @@ impl AssetInitService {
                     "grant_inf",
                     "select_song_rank_top",
                     "select_song_info",
+                    "web_chart_constant_edit",
                 ],
             ),
             (
@@ -789,6 +793,7 @@ impl AssetInitService {
                     "select_song_info",
                 ],
             ),
+            ("chart_editor", vec!["web_chart_constant_edit"]),
             ("selecter", vec!["select"]),
         ]
     }

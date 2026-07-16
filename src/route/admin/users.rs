@@ -3,7 +3,7 @@
 
 use rocket::http::CookieJar;
 use rocket::serde::json::Json;
-use rocket::{get, post, State};
+use rocket::{get, patch, post, State};
 
 use crate::config::CONFIG;
 use crate::error::ArcError;
@@ -14,17 +14,18 @@ use crate::utils::sql_placeholders;
 use crate::DbPool;
 
 use super::helpers::{
-    clean_optional_payload_text, clean_query_value, clamp_page, filter_sql, format_timestamp,
+    clamp_page, clean_optional_payload_text, clean_query_value, filter_sql, format_timestamp,
     is_admin_user_banned, page_response, resolve_admin_user,
 };
 use super::models::{
     AdminActionResponse, AdminPageResponse, AdminScoreDeletePayload, AdminScoreRowView,
-    AdminUserCreatePayload, AdminUserPasswordPayload, AdminUserPurchasePayload, AdminUserScoreQuery,
-    AdminUserScoresResponse, AdminUserScoreStats, AdminUserSelectorPayload, AdminUserSummary,
-    AdminUserTicketPayload, UserListDbRow, UserListView,
+    AdminUserCreatePayload, AdminUserPasswordPayload, AdminUserPurchasePayload,
+    AdminUserScoreQuery, AdminUserScoreStats, AdminUserScoresResponse, AdminUserSelectorPayload,
+    AdminUserSummary, AdminUserTicketPayload, ChartEditorPermissionPayload, UserListDbRow,
+    UserListView,
 };
 use super::session::{require_admin_api, require_web_session};
-use super::ADMIN_ROLE;
+use super::{ADMIN_ROLE, CHART_EDITOR_ROLE};
 
 async fn update_admin_user_ticket(
     payload: &AdminUserTicketPayload,
@@ -378,8 +379,20 @@ async fn load_admin_users(
     let rows = sqlx::query_as!(
         UserListDbRow,
         r#"
-        SELECT user_id, name, user_code, rating_ptt, ticket, time_played, password, ban_flag
-        FROM user
+        SELECT u.user_id, u.name, u.user_code, u.rating_ptt, u.ticket, u.time_played, u.password, u.ban_flag,
+               CAST(CASE WHEN EXISTS (
+                   SELECT 1 FROM user_role admin_role
+                   WHERE admin_role.user_id = u.user_id
+                     AND admin_role.role_id IN ('admin', 'system')
+               ) THEN 1 ELSE 0 END AS SIGNED) AS `is_admin!: i64`,
+               CAST(CASE WHEN EXISTS (
+                   SELECT 1
+                   FROM user_role ur
+                   JOIN role_power rp ON rp.role_id = ur.role_id
+                   WHERE ur.user_id = u.user_id
+                     AND rp.power_id = 'web_chart_constant_edit'
+               ) THEN 1 ELSE 0 END AS SIGNED) AS `can_edit_chart_constants!: i64`
+        FROM user u
         WHERE (? = 0 OR CAST(user_id AS CHAR) LIKE ? OR name LIKE ? OR user_code LIKE ?)
           AND (? = 0 OR COALESCE(password, '') = '' OR COALESCE(CAST(SUBSTRING_INDEX(NULLIF(ban_flag, ''), ':', -1) AS SIGNED), 0) > UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000)
           AND (? = 0 OR (COALESCE(password, '') <> '' AND NOT (COALESCE(CAST(SUBSTRING_INDEX(NULLIF(ban_flag, ''), ':', -1) AS SIGNED), 0) > UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000)))
@@ -406,10 +419,77 @@ async fn load_admin_users(
             ticket: row.ticket.unwrap_or(0),
             last_play: format_timestamp(row.time_played),
             banned: is_admin_user_banned(row.password.as_deref(), row.ban_flag.as_deref()),
+            is_admin: row.is_admin > 0,
+            can_edit_chart_constants: row.is_admin > 0 || row.can_edit_chart_constants > 0,
         })
         .collect();
 
     Ok(page_response(rows, total, page, page_size))
+}
+
+async fn set_chart_editor_permission(
+    user_id: i32,
+    enabled: bool,
+    pool: &DbPool,
+) -> Result<AdminActionResponse, ArcError> {
+    let user_exists = sqlx::query_scalar!(
+        "SELECT COUNT(*) as `count!: i64` FROM user WHERE user_id = ?",
+        user_id
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|err| ArcError::input(format!("查询用户失败: {err}")))?;
+    if user_exists == 0 {
+        return Err(ArcError::no_data("玩家不存在", -2));
+    }
+
+    let is_admin = sqlx::query_scalar!(
+        "SELECT COUNT(*) as `count!: i64`
+         FROM user_role
+         WHERE user_id = ? AND role_id IN ('admin', 'system')",
+        user_id
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|err| ArcError::input(format!("查询用户角色失败: {err}")))?
+        > 0;
+    if is_admin {
+        return Ok(AdminActionResponse {
+            message: "管理员默认拥有曲目定数编辑权限".to_string(),
+            affected_rows: 0,
+        });
+    }
+
+    let affected_rows = if enabled {
+        sqlx::query!(
+            "INSERT IGNORE INTO user_role (user_id, role_id) VALUES (?, ?)",
+            user_id,
+            CHART_EDITOR_ROLE
+        )
+        .execute(pool)
+        .await
+        .map_err(|err| ArcError::input(format!("授予曲目定数编辑权限失败: {err}")))?
+        .rows_affected()
+    } else {
+        sqlx::query!(
+            "DELETE FROM user_role WHERE user_id = ? AND role_id = ?",
+            user_id,
+            CHART_EDITOR_ROLE
+        )
+        .execute(pool)
+        .await
+        .map_err(|err| ArcError::input(format!("撤销曲目定数编辑权限失败: {err}")))?
+        .rows_affected()
+    };
+
+    Ok(AdminActionResponse {
+        message: if enabled {
+            "已授予曲目定数编辑权限".to_string()
+        } else {
+            "已撤销曲目定数编辑权限".to_string()
+        },
+        affected_rows,
+    })
 }
 
 async fn load_admin_user_scores(
@@ -528,6 +608,23 @@ pub(super) async fn admin_api_users(
     ))
 }
 
+#[patch(
+    "/api/users/<user_id>/chart-constant-permission",
+    format = "json",
+    data = "<payload>"
+)]
+pub(super) async fn admin_api_chart_editor_permission(
+    user_id: i32,
+    payload: Json<ChartEditorPermissionPayload>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> RouteResult<AdminActionResponse> {
+    require_admin_api(cookies, pool.inner()).await?;
+    Ok(success_return(
+        set_chart_editor_permission(user_id, payload.enabled, pool.inner()).await?,
+    ))
+}
+
 #[post("/api/admin-actions/user-ticket", format = "json", data = "<payload>")]
 pub(super) async fn admin_api_user_ticket(
     payload: Json<AdminUserTicketPayload>,
@@ -556,11 +653,7 @@ pub(super) async fn admin_api_user_password(
     ))
 }
 
-#[post(
-    "/api/admin-actions/user-create",
-    format = "json",
-    data = "<payload>"
-)]
+#[post("/api/admin-actions/user-create", format = "json", data = "<payload>")]
 pub(super) async fn admin_api_user_create(
     payload: Json<AdminUserCreatePayload>,
     pool: &State<DbPool>,

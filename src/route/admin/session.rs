@@ -14,8 +14,10 @@ use crate::service::UserService;
 use crate::DbPool;
 
 use super::helpers::resolve_admin_user;
-use super::models::{AdminLoginRequest, AdminSessionResponse, AdminUserSummary, WebLoginUserRow, WebSession};
-use super::{AdminConfig, ADMIN_CONFIG, ADMIN_COOKIE, ADMIN_ROLE};
+use super::models::{
+    AdminLoginRequest, AdminSessionResponse, AdminUserSummary, WebLoginUserRow, WebSession,
+};
+use super::{AdminConfig, ADMIN_CONFIG, ADMIN_COOKIE, ADMIN_ROLE, CHART_CONSTANT_EDIT_POWER};
 
 fn admin_credentials() -> (String, String) {
     let configured = ADMIN_CONFIG
@@ -129,6 +131,14 @@ fn web_surface_opacity() -> f64 {
         .unwrap_or(1.0)
 }
 
+fn web_permissions(can_edit_chart_constants: bool) -> Vec<String> {
+    if can_edit_chart_constants {
+        vec![CHART_CONSTANT_EDIT_POWER.to_string()]
+    } else {
+        Vec::new()
+    }
+}
+
 pub(super) async fn current_web_session(
     cookies: &CookieJar<'_>,
     pool: &DbPool,
@@ -154,6 +164,7 @@ pub(super) async fn current_web_session(
     if signature != expected {
         return Ok(None);
     }
+    let can_edit_chart_constants = user.can_edit_chart_constants();
 
     Ok(Some(WebSession {
         user: AdminUserSummary {
@@ -162,6 +173,7 @@ pub(super) async fn current_web_session(
             user_code: user.user_code.unwrap_or_default(),
         },
         role: user_role,
+        can_edit_chart_constants,
     }))
 }
 
@@ -187,6 +199,21 @@ pub(super) async fn require_admin_api(
         Ok(session)
     } else {
         Err(ArcError::no_access("Admin role required", 403))
+    }
+}
+
+pub(super) async fn require_chart_constant_edit_api(
+    cookies: &CookieJar<'_>,
+    pool: &DbPool,
+) -> Result<WebSession, ArcError> {
+    let session = require_web_session(cookies, pool).await?;
+    if session.role == ADMIN_ROLE || session.can_edit_chart_constants {
+        Ok(session)
+    } else {
+        Err(ArcError::no_access(
+            "Chart constant edit permission required",
+            403,
+        ))
     }
 }
 
@@ -230,7 +257,20 @@ async fn load_web_login_user(
                     THEN 1
                     ELSE 0
                 END AS SIGNED
-            ) AS `role!: i64`
+            ) AS `role!: i64`,
+            CAST(
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM user_role ur
+                        JOIN role_power rp ON rp.role_id = ur.role_id
+                        WHERE ur.user_id = u.user_id
+                          AND rp.power_id = 'web_chart_constant_edit'
+                    )
+                    THEN 1
+                    ELSE 0
+                END AS SIGNED
+            ) AS `can_edit_chart_constants!: i64`
         FROM user u
         WHERE u.name = ?
         "#,
@@ -265,7 +305,20 @@ async fn load_web_login_user_by_id(
                     THEN 1
                     ELSE 0
                 END AS SIGNED
-            ) AS `role!: i64`
+            ) AS `role!: i64`,
+            CAST(
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM user_role ur
+                        JOIN role_power rp ON rp.role_id = ur.role_id
+                        WHERE ur.user_id = u.user_id
+                          AND rp.power_id = 'web_chart_constant_edit'
+                    )
+                    THEN 1
+                    ELSE 0
+                END AS SIGNED
+            ) AS `can_edit_chart_constants!: i64`
         FROM user u
         WHERE u.user_id = ?
         "#,
@@ -336,6 +389,7 @@ fn web_session_response(user: &WebLoginUserRow) -> AdminSessionResponse {
     AdminSessionResponse {
         logged_in: true,
         role: user.web_role(),
+        permissions: web_permissions(user.can_edit_chart_constants()),
         app_title: web_app_title(),
         login_background: web_login_background(),
         login_position: web_login_position(),
@@ -355,9 +409,14 @@ pub(super) async fn admin_api_session(
     pool: &State<DbPool>,
 ) -> RouteResult<AdminSessionResponse> {
     let session = current_web_session(cookies, pool.inner()).await?;
+    let permissions = session
+        .as_ref()
+        .map(|session| web_permissions(session.can_edit_chart_constants))
+        .unwrap_or_default();
     Ok(success_return(AdminSessionResponse {
         logged_in: session.is_some(),
         role: session.as_ref().map(|session| session.role).unwrap_or(0),
+        permissions,
         app_title: web_app_title(),
         login_background: web_login_background(),
         login_position: web_login_position(),

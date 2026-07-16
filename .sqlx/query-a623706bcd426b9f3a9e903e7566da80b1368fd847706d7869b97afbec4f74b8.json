@@ -1,0 +1,114 @@
+{
+  "db_name": "MySQL",
+  "query": "\n        SELECT u.user_id, u.name, u.user_code, u.rating_ptt, u.ticket, u.time_played, u.password, u.ban_flag,\n               CAST(CASE WHEN EXISTS (\n                   SELECT 1 FROM user_role admin_role\n                   WHERE admin_role.user_id = u.user_id\n                     AND admin_role.role_id IN ('admin', 'system')\n               ) THEN 1 ELSE 0 END AS SIGNED) AS `is_admin!: i64`,\n               CAST(CASE WHEN EXISTS (\n                   SELECT 1\n                   FROM user_role ur\n                   JOIN role_power rp ON rp.role_id = ur.role_id\n                   WHERE ur.user_id = u.user_id\n                     AND rp.power_id = 'web_chart_constant_edit'\n               ) THEN 1 ELSE 0 END AS SIGNED) AS `can_edit_chart_constants!: i64`\n        FROM user u\n        WHERE (? = 0 OR CAST(user_id AS CHAR) LIKE ? OR name LIKE ? OR user_code LIKE ?)\n          AND (? = 0 OR COALESCE(password, '') = '' OR COALESCE(CAST(SUBSTRING_INDEX(NULLIF(ban_flag, ''), ':', -1) AS SIGNED), 0) > UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000)\n          AND (? = 0 OR (COALESCE(password, '') <> '' AND NOT (COALESCE(CAST(SUBSTRING_INDEX(NULLIF(ban_flag, ''), ':', -1) AS SIGNED), 0) > UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000)))\n        ORDER BY rating_ptt DESC, user_id ASC\n        LIMIT ? OFFSET ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | AUTO_INCREMENT",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "UNIQUE_KEY",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "user_code",
+        "type_info": {
+          "type": "VarString",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "rating_ptt",
+        "type_info": {
+          "type": "Long",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "ticket",
+        "type_info": {
+          "type": "Long",
+          "flags": "",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "time_played",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 20
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "password",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "ban_flag",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "is_admin!: i64",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 2
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "can_edit_chart_constants!: i64",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 2
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "a623706bcd426b9f3a9e903e7566da80b1368fd847706d7869b97afbec4f74b8"
+}

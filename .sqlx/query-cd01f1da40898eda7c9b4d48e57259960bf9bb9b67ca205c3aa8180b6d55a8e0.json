@@ -1,0 +1,84 @@
+{
+  "db_name": "MySQL",
+  "query": "\n        SELECT\n            u.user_id,\n            u.name,\n            u.user_code,\n            u.password,\n            u.ban_flag,\n            CAST(\n                CASE\n                    WHEN EXISTS (\n                        SELECT 1\n                        FROM user_role ur\n                        WHERE ur.user_id = u.user_id\n                          AND ur.role_id IN ('admin', 'system')\n                    )\n                    THEN 1\n                    ELSE 0\n                END AS SIGNED\n            ) AS `role!: i64`,\n            CAST(\n                CASE\n                    WHEN EXISTS (\n                        SELECT 1\n                        FROM user_role ur\n                        JOIN role_power rp ON rp.role_id = ur.role_id\n                        WHERE ur.user_id = u.user_id\n                          AND rp.power_id = 'web_chart_constant_edit'\n                    )\n                    THEN 1\n                    ELSE 0\n                END AS SIGNED\n            ) AS `can_edit_chart_constants!: i64`\n        FROM user u\n        WHERE u.name = ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | AUTO_INCREMENT",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": {
+          "type": "VarString",
+          "flags": "UNIQUE_KEY",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "user_code",
+        "type_info": {
+          "type": "VarString",
+          "flags": "MULTIPLE_KEY",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "password",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "ban_flag",
+        "type_info": {
+          "type": "Blob",
+          "flags": "BLOB",
+          "max_size": 262140
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "role!: i64",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 2
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "can_edit_chart_constants!: i64",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 2
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "cd01f1da40898eda7c9b4d48e57259960bf9bb9b67ca205c3aa8180b6d55a8e0"
+}

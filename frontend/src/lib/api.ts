@@ -9,6 +9,7 @@ export type ApiEnvelope<T> = {
 export type AdminSession = {
   loggedIn: boolean
   role: number
+  permissions: string[]
   appTitle?: string
   loginBackground?: string
   loginPosition?: string
@@ -54,6 +55,8 @@ export type UserRow = {
   ticket: number
   lastPlay: string
   banned: boolean
+  isAdmin: boolean
+  canEditChartConstants: boolean
 }
 
 export type SongRow = {
@@ -75,6 +78,11 @@ export type SongPayload = {
   rating_byd: string
   rating_etr: string
 }
+
+export type ChartConstantsPayload = Pick<
+  SongPayload,
+  'rating_pst' | 'rating_prs' | 'rating_ftr' | 'rating_byd' | 'rating_etr'
+>
 
 export type ItemRow = {
   itemId: string
@@ -316,6 +324,14 @@ export const adminApi = {
         page_size: params.pageSize,
       })}`,
     ),
+  setChartEditorPermission: (userId: number, enabled: boolean) =>
+    request<AdminActionResult>(
+      `/web/api/users/${userId}/chart-constant-permission`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ enabled }),
+      },
+    ),
   songs: (params: PageParams & { q?: string }) =>
     request<PageData<SongRow>>(
       `/web/api/songs${query({
@@ -331,6 +347,11 @@ export const adminApi = {
     }),
   updateSong: (sid: string, payload: SongPayload) =>
     request<void>(`/web/api/songs/${encodeURIComponent(sid)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  updateChartConstants: (sid: string, payload: ChartConstantsPayload) =>
+    request<void>(`/web/api/songs/${encodeURIComponent(sid)}/constants`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
     }),

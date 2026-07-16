@@ -267,7 +267,6 @@ const userAllowedViews = new Set<View>([
   'playerScores',
   'scoreImages',
   'chartTop',
-  'songs',
   'items',
   'purchases',
 ])
@@ -447,6 +446,9 @@ function App() {
     useState<LoginConfig>(defaultLoginConfig)
   const [view, setView] = useState<View>('dashboard')
   const isAdmin = session?.role === 1
+  const canEditChartConstants =
+    isAdmin ||
+    Boolean(session?.permissions?.includes('web_chart_constant_edit'))
   const hasPageBackground = Boolean(loginConfig.backgroundUrl)
   const shellStyle = hasPageBackground
     ? ({
@@ -456,6 +458,13 @@ function App() {
         '--web-control-bg': `color-mix(in oklab, var(--background) ${opacityPercent(Math.min(1, loginConfig.surfaceOpacity + 0.15))}%, transparent)`,
       } as CSSProperties)
     : undefined
+  const allowedViews = useMemo(() => {
+    const allowed = new Set(userAllowedViews)
+    if (canEditChartConstants) {
+      allowed.add('songs')
+    }
+    return allowed
+  }, [canEditChartConstants])
   const visibleNavSections = useMemo(
     () =>
       isAdmin
@@ -463,13 +472,13 @@ function App() {
         : navSections
             .map((section) => ({
               ...section,
-              items: section.items.filter((item) => userAllowedViews.has(item.id)),
+              items: section.items.filter((item) => allowedViews.has(item.id)),
             }))
             .filter((section) => section.items.length > 0),
-    [isAdmin],
+    [allowedViews, isAdmin],
   )
   const activeView =
-    isAdmin || userAllowedViews.has(view) ? view : 'checkin'
+    isAdmin || allowedViews.has(view) ? view : 'checkin'
 
   useEffect(() => {
     adminApi
@@ -625,7 +634,12 @@ function App() {
           {isAdmin && activeView === 'redeemCreate' && <RedeemCreateView />}
           {isAdmin && activeView === 'redeemDelete' && <RedeemDeleteView />}
           {isAdmin && activeView === 'redeemUsers' && <RedeemUsersView />}
-          {activeView === 'songs' && <SongsView isAdmin={isAdmin} />}
+          {activeView === 'songs' && (
+            <SongsView
+              isAdmin={isAdmin}
+              canEditConstants={canEditChartConstants}
+            />
+          )}
           {activeView === 'items' && <ItemsView isAdmin={isAdmin} />}
           {activeView === 'purchases' && <PurchasesView isAdmin={isAdmin} />}
           {isAdmin && activeView === 'purchaseItems' && <PurchaseItemsView />}
@@ -894,6 +908,8 @@ function UsersView() {
   const [status, setStatus] = useState('')
   const [rows, setRows] = useState<UserRow[]>([])
   const [state, setState] = useState<LoadState>('loading')
+  const [action, setAction] = useState<ActionState>(emptyAction)
+  const [updatingUserId, setUpdatingUserId] = useState<number>()
   const pagination = useServerPagination(rows, defaultTablePageSize)
   const { setMeta } = pagination
 
@@ -913,6 +929,29 @@ function UsersView() {
 
   function search() {
     load(true, 1, pagination.pageSize)
+  }
+
+  async function toggleChartEditor(row: UserRow) {
+    if (row.isAdmin) {
+      return
+    }
+    const enabled = !row.canEditChartConstants
+    const verb = enabled ? '授予' : '撤销'
+    if (!confirm(`${verb} ${row.name || row.userId} 的曲目定数编辑权限？`)) {
+      return
+    }
+
+    setUpdatingUserId(row.userId)
+    setAction(emptyAction)
+    try {
+      const result = await adminApi.setChartEditorPermission(row.userId, enabled)
+      setAction({ kind: 'success', message: result.message })
+      load(false)
+    } catch (error) {
+      setAction({ kind: 'error', message: errorMessage(error) })
+    } finally {
+      setUpdatingUserId(undefined)
+    }
   }
 
   useEffect(() => {
@@ -946,6 +985,7 @@ function UsersView() {
         </select>
       }
     >
+      <ActionMessage action={action} className="mb-3 block" />
       <TableBlock
         pagination={pagination}
         onPageChange={(page) => load(true, page, pagination.pageSize)}
@@ -962,6 +1002,7 @@ function UsersView() {
                 <TableHead>Ticket</TableHead>
                 <TableHead>最近游玩</TableHead>
                 <TableHead>状态</TableHead>
+                <TableHead>曲目定数权限</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -977,6 +1018,33 @@ function UsersView() {
                     <Badge variant={row.banned ? 'destructive' : 'secondary'}>
                       {row.banned ? '封禁' : '正常'}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={row.canEditChartConstants ? 'secondary' : 'outline'}
+                      >
+                        {row.canEditChartConstants ? '已授权' : '未授权'}
+                      </Badge>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={row.isAdmin || updatingUserId === row.userId}
+                        onClick={() => toggleChartEditor(row)}
+                      >
+                        {updatingUserId === row.userId ? (
+                          <LoaderCircle className="animate-spin" />
+                        ) : (
+                          <ShieldCheck />
+                        )}
+                        {row.isAdmin
+                          ? '管理员默认拥有'
+                          : row.canEditChartConstants
+                            ? '撤销'
+                            : '授予'}
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -2361,7 +2429,13 @@ function DifficultySelect({
   )
 }
 
-function SongsView({ isAdmin }: { isAdmin: boolean }) {
+function SongsView({
+  isAdmin,
+  canEditConstants,
+}: {
+  isAdmin: boolean
+  canEditConstants: boolean
+}) {
   const [query, setQuery] = useState('')
   const [rows, setRows] = useState<SongRow[]>([])
   const [state, setState] = useState<LoadState>('loading')
@@ -2432,7 +2506,11 @@ function SongsView({ isAdmin }: { isAdmin: boolean }) {
     }
     setAction(emptyAction)
     try {
-      await adminApi.updateSong(editingSid, editForm)
+      if (isAdmin) {
+        await adminApi.updateSong(editingSid, editForm)
+      } else {
+        await adminApi.updateChartConstants(editingSid, editForm)
+      }
       resetEdit(false)
       setAction({ kind: 'success', message: '歌曲已更新' })
       load(false)
@@ -2512,7 +2590,9 @@ function SongsView({ isAdmin }: { isAdmin: boolean }) {
           </div>
         </form>
       )}
-      {isAdmin && <ActionMessage action={action} className="mb-3 block" />}
+      {canEditConstants && (
+        <ActionMessage action={action} className="mb-3 block" />
+      )}
       <TableBlock
         pagination={pagination}
         onPageChange={(page) => load(true, page, pagination.pageSize)}
@@ -2529,13 +2609,15 @@ function SongsView({ isAdmin }: { isAdmin: boolean }) {
                 <TableHead>FTR</TableHead>
                 <TableHead>BYD</TableHead>
                 <TableHead>ETR</TableHead>
-                {isAdmin && <TableHead className="w-0 text-right">操作</TableHead>}
+                {canEditConstants && (
+                  <TableHead className="w-0 text-right">操作</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
               {visibleRows.map((row) => (
                 <Fragment key={row.songId}>
-                  {isAdmin && editingSid === row.songId && (
+                  {canEditConstants && editingSid === row.songId && (
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
                       <TableCell colSpan={8} className="p-3">
                         <form className="grid gap-3 rounded-md border bg-background p-3" onSubmit={submitEdit}>
@@ -2553,6 +2635,7 @@ function SongsView({ isAdmin }: { isAdmin: boolean }) {
                               value={editForm.name_en}
                               onChange={(event) => setEditForm({ ...editForm, name_en: event.target.value })}
                               placeholder="name_en"
+                              disabled={!isAdmin}
                               required
                             />
                             {(['rating_pst', 'rating_prs', 'rating_ftr', 'rating_byd', 'rating_etr'] as const).map((field) => (
@@ -2583,17 +2666,19 @@ function SongsView({ isAdmin }: { isAdmin: boolean }) {
                     <TableCell>{row.ratingFtr}</TableCell>
                     <TableCell>{row.ratingByd}</TableCell>
                     <TableCell>{row.ratingEtr}</TableCell>
-                    {isAdmin && (
+                    {canEditConstants && (
                       <TableCell className="w-0 whitespace-nowrap">
                         <div className="flex justify-end gap-2">
                           <Button type="button" size="sm" variant="outline" onClick={() => edit(row)}>
                             <Pencil />
                             编辑
                           </Button>
-                          <Button type="button" size="sm" variant="destructive" onClick={() => remove(row)}>
-                            <Trash2 />
-                            删除
-                          </Button>
+                          {isAdmin && (
+                            <Button type="button" size="sm" variant="destructive" onClick={() => remove(row)}>
+                              <Trash2 />
+                              删除
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     )}

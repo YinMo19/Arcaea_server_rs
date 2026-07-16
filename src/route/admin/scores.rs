@@ -6,12 +6,16 @@ use rocket::{get, State};
 
 use crate::error::ArcError;
 use crate::route::common::{success_return, RouteResult};
-use crate::service::{generate_score_image_png, generate_score_images, parse_score_image_mode, ScoreImageMode};
+use crate::service::{
+    generate_score_image_png, generate_score_images, parse_score_image_mode, ScoreImageMode,
+};
 use crate::DbPool;
 
 use super::helpers::clean_optional_payload_text;
 use super::helpers::format_timestamp;
-use super::models::{AdminChartTopResponse, AdminScoreRowView, PngResponse, ScoreImageView, ScoreImagesResponse};
+use super::models::{
+    AdminChartTopResponse, AdminScoreRowView, PngResponse, ScoreImageView, ScoreImagesResponse,
+};
 use super::session::{require_web_session, resolve_score_image_user};
 
 async fn load_admin_chart_top(

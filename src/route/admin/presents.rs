@@ -13,13 +13,17 @@ use crate::DbPool;
 
 use super::helpers::{clean_optional_payload_text, resolve_admin_user};
 use super::models::{
-    AdminActionResponse, AdminPresentDeletePayload, AdminPresentDeliverPayload, AdminPresentPayload,
-    AdminRedeemDeletePayload, AdminRedeemPayload, AdminRedeemUsersResponse, AdminUserDbSummary,
-    AdminUserSummary,
+    AdminActionResponse, AdminPresentDeletePayload, AdminPresentDeliverPayload,
+    AdminPresentPayload, AdminRedeemDeletePayload, AdminRedeemPayload, AdminRedeemUsersResponse,
+    AdminUserDbSummary, AdminUserSummary,
 };
 use super::session::require_admin_api;
 
-fn normalize_admin_required_text(raw: &str, field: &str, max_len: usize) -> Result<String, ArcError> {
+fn normalize_admin_required_text(
+    raw: &str,
+    field: &str,
+    max_len: usize,
+) -> Result<String, ArcError> {
     let value = raw.trim();
     if value.is_empty() {
         return Err(ArcError::input(format!("{field} 不能为空")));

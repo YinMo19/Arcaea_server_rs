@@ -33,6 +33,8 @@ pub(super) struct UserListView {
     pub(super) ticket: i32,
     pub(super) last_play: String,
     pub(super) banned: bool,
+    pub(super) is_admin: bool,
+    pub(super) can_edit_chart_constants: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -196,6 +198,15 @@ pub(super) struct AdminSongPayload {
     pub(super) rating_etr: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub(super) struct ChartConstantsPayload {
+    pub(super) rating_pst: String,
+    pub(super) rating_prs: String,
+    pub(super) rating_ftr: String,
+    pub(super) rating_byd: String,
+    pub(super) rating_etr: String,
+}
+
 pub(super) struct AdminSongInput<'a> {
     pub(super) sid: &'a str,
     pub(super) name_en: &'a str,
@@ -280,6 +291,11 @@ pub(super) struct AdminUserSelectorPayload {
     pub(super) user_id: Option<i32>,
     pub(super) name: Option<String>,
     pub(super) user_code: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct ChartEditorPermissionPayload {
+    pub(super) enabled: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -382,6 +398,7 @@ pub(super) struct AdminLoginRequest {
 pub(super) struct AdminSessionResponse {
     pub(super) logged_in: bool,
     pub(super) role: i8,
+    pub(super) permissions: Vec<String>,
     pub(super) app_title: String,
     pub(super) login_background: Option<String>,
     pub(super) login_position: String,
@@ -394,6 +411,7 @@ pub(super) struct AdminSessionResponse {
 pub(super) struct WebSession {
     pub(super) user: AdminUserSummary,
     pub(super) role: i8,
+    pub(super) can_edit_chart_constants: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -434,6 +452,8 @@ pub(super) struct UserListDbRow {
     pub(super) time_played: Option<i64>,
     pub(super) password: Option<String>,
     pub(super) ban_flag: Option<String>,
+    pub(super) is_admin: i64,
+    pub(super) can_edit_chart_constants: i64,
 }
 
 #[derive(FromRow)]
@@ -486,6 +506,7 @@ pub(super) struct WebLoginUserRow {
     pub(super) password: Option<String>,
     pub(super) ban_flag: Option<String>,
     pub(super) role: i64,
+    pub(super) can_edit_chart_constants: i64,
 }
 
 impl WebLoginUserRow {
@@ -495,5 +516,9 @@ impl WebLoginUserRow {
         } else {
             USER_ROLE
         }
+    }
+
+    pub(super) fn can_edit_chart_constants(&self) -> bool {
+        self.web_role() == ADMIN_ROLE || self.can_edit_chart_constants > 0
     }
 }

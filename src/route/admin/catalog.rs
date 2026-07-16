@@ -16,11 +16,12 @@ use super::helpers::{
 };
 use super::models::{
     AdminItemDeletePayload, AdminItemPayload, AdminPageResponse, AdminPurchaseDeletePayload,
-    AdminPurchaseItemDeletePayload, AdminPurchaseItemPayload, AdminPurchasePayload, AdminSongDeletePayload,
-    AdminSongInput, AdminSongPayload, ChartDbRow, ItemDbRow, ItemRowView, PurchaseDbRow,
-    PurchaseItemDbRow, PurchaseItemRowView, PurchaseRowView, SongRowView,
+    AdminPurchaseItemDeletePayload, AdminPurchaseItemPayload, AdminPurchasePayload,
+    AdminSongDeletePayload, AdminSongInput, AdminSongPayload, ChartConstantsPayload, ChartDbRow,
+    ItemDbRow, ItemRowView, PurchaseDbRow, PurchaseItemDbRow, PurchaseItemRowView, PurchaseRowView,
+    SongRowView,
 };
-use super::session::{require_admin_api, require_web_session};
+use super::session::{require_admin_api, require_chart_constant_edit_api, require_web_session};
 
 // Parsing helpers local to the catalog
 
@@ -446,6 +447,47 @@ async fn update_song(pool: &DbPool, input: AdminSongInput<'_>) -> Result<(), Str
     Ok(())
 }
 
+async fn update_chart_constants(
+    pool: &DbPool,
+    sid_raw: &str,
+    payload: &ChartConstantsPayload,
+) -> Result<(), String> {
+    let sid = normalize_chart_text(sid_raw, "song_id")?;
+    let rating_pst = parse_rating_input_tenths(&payload.rating_pst, "rating_pst")?;
+    let rating_prs = parse_rating_input_tenths(&payload.rating_prs, "rating_prs")?;
+    let rating_ftr = parse_rating_input_tenths(&payload.rating_ftr, "rating_ftr")?;
+    let rating_byd = parse_rating_input_tenths(&payload.rating_byd, "rating_byd")?;
+    let rating_etr = parse_rating_input_tenths(&payload.rating_etr, "rating_etr")?;
+
+    let exists = sqlx::query_scalar!(
+        "SELECT COUNT(*) as `count!: i64` FROM chart WHERE song_id = ?",
+        sid
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|err| format!("查询失败: {err}"))?;
+    if exists == 0 {
+        return Err("歌曲不存在".to_string());
+    }
+
+    sqlx::query!(
+        "UPDATE chart
+         SET rating_pst = ?, rating_prs = ?, rating_ftr = ?, rating_byn = ?, rating_etr = ?
+         WHERE song_id = ?",
+        rating_pst,
+        rating_prs,
+        rating_ftr,
+        rating_byd,
+        rating_etr,
+        sid
+    )
+    .execute(pool)
+    .await
+    .map_err(|err| format!("更新失败: {err}"))?;
+
+    Ok(())
+}
+
 async fn delete_song(pool: &DbPool, sid_raw: &str) -> Result<(), String> {
     let sid = normalize_chart_text(sid_raw, "song_id")?;
     let done = sqlx::query!("DELETE FROM chart WHERE song_id = ?", sid)
@@ -824,7 +866,7 @@ pub(super) async fn admin_api_songs(
     pool: &State<DbPool>,
     cookies: &CookieJar<'_>,
 ) -> RouteResult<AdminPageResponse<SongRowView>> {
-    require_web_session(cookies, pool.inner()).await?;
+    require_chart_constant_edit_api(cookies, pool.inner()).await?;
     let (page, page_size) = normalize_page(page, page_size);
     Ok(success_return(
         load_admin_songs(q, page, page_size, pool.inner()).await,
@@ -898,6 +940,20 @@ pub(super) async fn admin_api_song_update(
 ) -> RouteResult<EmptyResponse> {
     require_admin_api(cookies, pool.inner()).await?;
     update_song(pool.inner(), AdminSongInput::from(&*payload).with_sid(sid))
+        .await
+        .map_err(admin_api_input_error)?;
+    Ok(success_return_no_value())
+}
+
+#[patch("/api/songs/<sid>/constants", format = "json", data = "<payload>")]
+pub(super) async fn admin_api_chart_constants_update(
+    sid: &str,
+    payload: Json<ChartConstantsPayload>,
+    pool: &State<DbPool>,
+    cookies: &CookieJar<'_>,
+) -> RouteResult<EmptyResponse> {
+    require_chart_constant_edit_api(cookies, pool.inner()).await?;
+    update_chart_constants(pool.inner(), sid, &payload)
         .await
         .map_err(admin_api_input_error)?;
     Ok(success_return_no_value())
