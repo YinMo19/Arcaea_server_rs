@@ -36,6 +36,46 @@ type SongEntry = (usize, i32, f64);
 type SongEntryMap = HashMap<SongKey, Vec<SongEntry>>;
 type JsonMap = HashMap<String, Value>;
 
+const TRACE_COMPLETE_BASE_TICKET_REWARD: i64 = 20;
+
+fn calculate_trace_complete_ticket_reward(
+    clear_type: i32,
+    score: i32,
+    chart_constant_tenths: i32,
+) -> i32 {
+    if Score::get_song_state(clear_type) == 0 || chart_constant_tenths <= 0 {
+        return 0;
+    }
+
+    // Displayed levels use the usual Arcaea split: x.0-x.6 is the base level,
+    // while x.7-x.9 is the corresponding "+" level.
+    let chart_multiplier_tenths = match chart_constant_tenths {
+        value if value >= 120 => 30, // 12: 3.0x
+        value if value >= 117 => 20, // 11+: 2.0x
+        value if value >= 110 => 14, // 11: 1.4x
+        value if value >= 107 => 12, // 10+: 1.2x
+        _ => 10,                     // <= 10: 1.0x
+    };
+    let hard_clear_multiplier_halves = if clear_type == 5 { 3 } else { 2 };
+    let result_multiplier = if clear_type == 3 {
+        10 // PM
+    } else {
+        match Score::get_song_grade(score) {
+            6 => 4, // EX+
+            5 => 2, // EX
+            _ => 1,
+        }
+    };
+
+    // Divide by 10 for the chart multiplier and by 2 for the hard-clear
+    // multiplier. A base reward of 20 keeps every configured result integral.
+    ((TRACE_COMPLETE_BASE_TICKET_REWARD
+        * chart_multiplier_tenths
+        * hard_clear_multiplier_halves
+        * result_multiplier)
+        / 20) as i32
+}
+
 /// Score service for handling score submission, validation, and calculations
 pub struct ScoreService {
     pool: MySqlPool,
@@ -921,7 +961,7 @@ impl ScoreService {
             return Ok(false);
         }
 
-        Ok(self.get_chart_constant(song_id, difficulty).await? > 0.0)
+        Ok(self.get_chart_constant_tenths(song_id, difficulty).await? > 0)
     }
 
     async fn calculate_user_world_rank_score_raw(&self, user_id: i32) -> ArcResult<f64> {
@@ -1681,7 +1721,7 @@ impl ScoreService {
         }))
     }
 
-    async fn get_chart_constant(&self, song_id: &str, difficulty: i32) -> ArcResult<f64> {
+    async fn get_chart_constant_tenths(&self, song_id: &str, difficulty: i32) -> ArcResult<i32> {
         let chart = sqlx::query!(
             "SELECT rating_pst, rating_prs, rating_ftr, rating_byn, rating_etr FROM chart WHERE song_id = ?",
             song_id
@@ -1699,9 +1739,9 @@ impl ScoreService {
                 _ => None,
             };
 
-            Ok(rating.unwrap_or(-1) as f64 / 10.0)
+            Ok(rating.unwrap_or(-1))
         } else {
-            Ok(-1.0)
+            Ok(-1)
         }
     }
 
@@ -1883,13 +1923,26 @@ impl ScoreService {
         }
 
         // Get rating by calc (like Python version)
-        let chart_const = self
-            .get_chart_constant(
+        let chart_constant_tenths = self
+            .get_chart_constant_tenths(
                 &user_play.user_score.score.song_id,
                 user_play.user_score.score.difficulty,
             )
             .await?;
-        user_play.user_score.score.get_rating_by_calc(chart_const);
+        user_play
+            .user_score
+            .score
+            .get_rating_by_calc(chart_constant_tenths as f64 / 10.0);
+
+        let ticket_reward = if CONFIG.trace_complete_ticket_reward_enabled {
+            calculate_trace_complete_ticket_reward(
+                user_play.user_score.score.clear_type,
+                user_play.user_score.score.score,
+                chart_constant_tenths,
+            )
+        } else {
+            0
+        };
 
         // Handle unranked scores
         if user_play.user_score.score.rating < 0.0 {
@@ -1909,7 +1962,8 @@ impl ScoreService {
         sqlx::query!(
             "UPDATE user SET song_id = ?, difficulty = ?, score = ?, shiny_perfect_count = ?,
              perfect_count = ?, near_count = ?, miss_count = ?, health = ?, modifier = ?,
-             clear_type = ?, rating = ?, time_played = ? WHERE user_id = ?",
+             clear_type = ?, rating = ?, time_played = ?,
+             ticket = COALESCE(ticket, 0) + ? WHERE user_id = ?",
             user_play.user_score.score.song_id,
             user_play.user_score.score.difficulty,
             user_play.user_score.score.score,
@@ -1922,6 +1976,7 @@ impl ScoreService {
             user_play.user_score.score.clear_type,
             user_play.user_score.score.rating,
             user_play.user_score.score.time_played * 1000,
+            ticket_reward,
             user_id
         )
         .execute(&self.pool)
@@ -3333,4 +3388,80 @@ fn today_timestamp_seconds() -> i64 {
 /// Calculate MD5 hash of a string
 pub fn md5_hash(input: &str) -> String {
     format!("{:x}", md5::compute(input.as_bytes()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::calculate_trace_complete_ticket_reward;
+
+    #[test]
+    fn trace_complete_ticket_reward_requires_a_clear_and_chart_constant() {
+        assert_eq!(calculate_trace_complete_ticket_reward(0, 9_900_000, 120), 0);
+        assert_eq!(calculate_trace_complete_ticket_reward(1, 9_900_000, -1), 0);
+        assert_eq!(
+            calculate_trace_complete_ticket_reward(99, 9_900_000, 120),
+            0
+        );
+    }
+
+    #[test]
+    fn trace_complete_ticket_reward_applies_chart_level_boundaries() {
+        assert_eq!(calculate_trace_complete_ticket_reward(1, 9_700_000, 99), 20);
+        assert_eq!(
+            calculate_trace_complete_ticket_reward(1, 9_700_000, 106),
+            20
+        );
+        assert_eq!(
+            calculate_trace_complete_ticket_reward(1, 9_700_000, 107),
+            24
+        );
+        assert_eq!(
+            calculate_trace_complete_ticket_reward(1, 9_700_000, 109),
+            24
+        );
+        assert_eq!(
+            calculate_trace_complete_ticket_reward(1, 9_700_000, 110),
+            28
+        );
+        assert_eq!(
+            calculate_trace_complete_ticket_reward(1, 9_700_000, 116),
+            28
+        );
+        assert_eq!(
+            calculate_trace_complete_ticket_reward(1, 9_700_000, 117),
+            40
+        );
+        assert_eq!(
+            calculate_trace_complete_ticket_reward(1, 9_700_000, 119),
+            40
+        );
+        assert_eq!(
+            calculate_trace_complete_ticket_reward(1, 9_700_000, 120),
+            60
+        );
+    }
+
+    #[test]
+    fn trace_complete_ticket_reward_applies_result_and_hard_clear_multipliers() {
+        assert_eq!(
+            calculate_trace_complete_ticket_reward(1, 9_800_000, 100),
+            40
+        );
+        assert_eq!(
+            calculate_trace_complete_ticket_reward(2, 9_900_000, 107),
+            96
+        );
+        assert_eq!(
+            calculate_trace_complete_ticket_reward(5, 9_800_000, 110),
+            84
+        );
+        assert_eq!(
+            calculate_trace_complete_ticket_reward(5, 9_900_000, 120),
+            360
+        );
+        assert_eq!(
+            calculate_trace_complete_ticket_reward(3, 10_000_000, 120),
+            600
+        );
+    }
 }

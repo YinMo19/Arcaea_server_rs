@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE user SET song_id = ?, difficulty = ?, score = ?, shiny_perfect_count = ?,\n             perfect_count = ?, near_count = ?, miss_count = ?, health = ?, modifier = ?,\n             clear_type = ?, rating = ?, time_played = ?,\n             ticket = COALESCE(ticket, 0) + ? WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 14
+    },
+    "nullable": []
+  },
+  "hash": "daaf44590660a6ff297033ca07cb3a0ccf293ae4474ab326c1d3f8821b5a82f1"
+}

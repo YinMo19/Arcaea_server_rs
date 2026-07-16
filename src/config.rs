@@ -80,6 +80,7 @@ pub struct Config {
 
     // Game settings
     pub allow_score_with_no_song: bool,
+    pub trace_complete_ticket_reward_enabled: bool,
     pub default_memories: i32,
     pub update_with_new_character_data: bool,
     pub character_full_unlock: bool,
@@ -149,6 +150,7 @@ impl Default for Config {
             allow_ban_multidevice_user_auto: true,
 
             allow_score_with_no_song: true,
+            trace_complete_ticket_reward_enabled: false,
             default_memories: 0,
             update_with_new_character_data: true,
             character_full_unlock: true,
@@ -329,6 +331,13 @@ impl Config {
             "allow_score_with_no_song",
             bool
         );
+        set_from_figment!(
+            self,
+            figment,
+            trace_complete_ticket_reward_enabled,
+            "trace_complete_ticket_reward_enabled",
+            bool
+        );
         set_from_figment!(self, figment, default_memories, "default_memories", i32);
         set_from_figment!(
             self,
@@ -455,6 +464,7 @@ impl Config {
         set_from_env!(self, allow_login_same_device, bool);
         set_from_env!(self, allow_ban_multidevice_user_auto, bool);
         set_from_env!(self, allow_score_with_no_song, bool);
+        set_from_env!(self, trace_complete_ticket_reward_enabled, bool);
         set_from_env!(self, default_memories, i32);
         set_from_env!(self, update_with_new_character_data, bool);
         set_from_env!(self, character_full_unlock, bool);

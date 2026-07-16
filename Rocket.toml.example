@@ -48,6 +48,7 @@ allow_ban_multidevice_user_auto = true
 
 # Game settings
 allow_score_with_no_song = true
+trace_complete_ticket_reward_enabled = false
 default_memories = 0
 update_with_new_character_data = true
 character_full_unlock = true
