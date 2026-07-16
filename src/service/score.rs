@@ -56,7 +56,13 @@ fn calculate_trace_complete_ticket_reward(
         value if value >= 107 => 12, // 10+: 1.2x
         _ => 10,                     // <= 10: 1.0x
     };
-    let hard_clear_multiplier_halves = if clear_type == 5 { 3 } else { 2 };
+    // FR and PM replace the gauge-specific clear type in score submissions, so
+    // treat all three high clear states as qualifying for the hard-clear bonus.
+    let hard_clear_multiplier_halves = if matches!(clear_type, 2 | 3 | 5) {
+        3
+    } else {
+        2
+    };
     let result_multiplier = if clear_type == 3 {
         10 // PM
     } else {
@@ -3449,7 +3455,7 @@ mod tests {
         );
         assert_eq!(
             calculate_trace_complete_ticket_reward(2, 9_900_000, 107),
-            96
+            144
         );
         assert_eq!(
             calculate_trace_complete_ticket_reward(5, 9_800_000, 110),
@@ -3461,7 +3467,7 @@ mod tests {
         );
         assert_eq!(
             calculate_trace_complete_ticket_reward(3, 10_000_000, 120),
-            600
+            900
         );
     }
 }
